@@ -1,0 +1,89 @@
+{
+  "products": {
+    "ps5-hero": {
+      "slug": "ps5-hero",
+      "title": "PlayStation 5 and DualSense with transparent background.png",
+      "author": "Soberian (this retouched file)Osh33m (original photograph)",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlayStation%205%20and%20DualSense%20with%20transparent%20background.png"
+    },
+    "ps5-pro": {
+      "slug": "ps5-pro",
+      "title": "PlayStation 5 Pro no disc drive.jpg",
+      "author": "BeatEmUps",
+      "license": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlayStation%205%20Pro%20no%20disc%20drive.jpg"
+    },
+    "ps4-slim": {
+      "slug": "ps4-slim",
+      "title": "Sony-PlayStation-4-PS4-DualShock-4.png",
+      "author": "Evan-Amos",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3ASony-PlayStation-4-PS4-DualShock-4.png"
+    },
+    "dualsense-white": {
+      "slug": "dualsense-white",
+      "title": "Playstation Dualsense controller.jpg",
+      "author": "Sergey Galyonkin",
+      "license": "CC BY-SA 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlaystation%20Dualsense%20controller.jpg"
+    },
+    "dualsense-midnight": {
+      "slug": "dualsense-midnight",
+      "title": "Playstation Dualsense controller.jpg",
+      "author": "Sergey Galyonkin",
+      "license": "CC BY-SA 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlaystation%20Dualsense%20controller.jpg"
+    },
+    "dualsense-edge": {
+      "slug": "dualsense-edge",
+      "title": "Playstation DualSense Controller.png",
+      "author": "Alex Cochrane",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlaystation%20DualSense%20Controller.png"
+    },
+    "portal": {
+      "slug": "portal",
+      "title": "PlayStation Portal.jpg",
+      "author": "ArlindoPereira",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlayStation%20Portal.jpg"
+    },
+    "psvr2": {
+      "slug": "psvr2",
+      "title": "PSVR2.png",
+      "author": "This image is a work by Wikipedia and Wikimedia Commons user C.Suthorn. When reusing, credit me as described in the Licensing information below.  I would appreciate being notified (wikimail, talk page, email, Social Media) if you use my work outside Wikimedia.\nDo not copy this image illegally by ignoring the terms of the license below, as it is not in the public domain. If you would like special permission to use, license, or purchase the image please contact me to negotiate terms.\n\nMore of my work can be found in my personal gallery or at my Peertube channel.\n\n\n\n\nA prepared attribution especially for use in Social Media and Print (newspapers, flyers, books, murals, mousepads, mugs, posters, t-shirts) can be copied here",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APSVR2.png"
+    },
+    "charging-station": {
+      "slug": "charging-station",
+      "title": "Playstatioin 5 Black game controller - 2.jpg",
+      "author": "KKPCW（Kyu3）",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APlaystatioin%205%20Black%20game%20controller%20-%202.jpg"
+    },
+    "mouse": {
+      "slug": "mouse",
+      "title": "Logitech Mini Optical Mouse with Seo Ji-hun's signature 20210313a.jpg",
+      "author": "Solomon203",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3ALogitech%20Mini%20Optical%20Mouse%20with%20Seo%20Ji-hun's%20signature%2020210313a.jpg"
+    },
+    "mic": {
+      "slug": "mic",
+      "title": "Studio microphone with pop shield.jpg",
+      "author": "Galak76",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3AStudio%20microphone%20with%20pop%20shield.jpg"
+    },
+    "powerbank": {
+      "slug": "powerbank",
+      "title": "Power bank.JPG",
+      "author": "Ilya Plekhanov",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File%3APower%20bank.JPG"
+    }
+  },
+  "hero": {}
+}

@@ -1,0 +1,48 @@
+{
+  "name": "consoleseller",
+  "version": "1.0.0",
+  "description": "ConsoleSeller — Consoles & Gaming Accessories e-commerce store with return, replacement & refund management system",
+  "private": true,
+  "author": "ConsoleSeller <piyushtaank210@gmail.com>",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "seed": "node scripts/seed.mjs",
+    "sync-hero": "node scripts/sync-hero.mjs",
+    "sync-categories": "node scripts/sync-categories.mjs",
+    "sync-variants": "node scripts/sync-variants.mjs",
+    "schema": "node scripts/write-schema.mjs",
+    "staff": "node scripts/create-staff.mjs",
+    "set-role": "node scripts/set-role.mjs",
+    "images": "node scripts/fetch-images.mjs",
+    "setup": "npm run images && npm run seed",
+    "e2e": "node scripts/e2e.mjs",
+    "check:admin": "node scripts/check-admin.mjs",
+    "check:catalogue": "node scripts/check-catalogue.mjs",
+    "check:inventory": "node scripts/check-inventory.mjs",
+    "check:variations": "node scripts/check-variations.mjs",
+    "check:taxonomy": "node scripts/check-taxonomy.mjs",
+    "check:import": "node scripts/check-import.mjs",
+    "check:pages": "node scripts/check-pages.mjs",
+    "check:product": "node scripts/check-product-form.mjs",
+    "shot": "node scripts/screenshot.mjs"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.63.0",
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

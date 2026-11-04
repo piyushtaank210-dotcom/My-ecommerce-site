@@ -1,0 +1,465 @@
+@import "tailwindcss";
+
+/*
+  Three colours only:
+    --color-brand  #0071C5  PlayStation blue — buttons, links, active states
+    --color-ink    #0B1220  near-black — text, dark panels
+    --color-paper  #FFFFFF  white — page background
+  Everything else is a neutral grey.
+*/
+@theme {
+  --color-brand: #0071c5;
+  --color-brand-dark: #005a9e;
+  --color-brand-tint: #e8f3fb;
+  --color-ink: #0b1220;
+  --color-ink-soft: #1f2937;
+  --color-paper: #ffffff;
+
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(11 18 32 / 0.04), 0 8px 24px -12px rgb(11 18 32 / 0.12);
+  --shadow-pop: 0 12px 40px -12px rgb(11 18 32 / 0.22);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    border-color: #e5e7eb;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--color-ink);
+    letter-spacing: -0.021em;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236b7280'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    background-size: 1.05rem;
+    appearance: none;
+    padding-right: 2.1rem;
+  }
+}
+
+@layer components {
+  /* The site spans the full width of the screen, up to the site's own width
+     of 1600px. Past that the frame is centred, so every page lines up with
+     the header and the footer — including the hero, whose photograph stays
+     full-bleed while its copy sits in the same frame. The gutters scale
+     with the viewport, so the margin stays in proportion on a phone and on
+     a wide desktop alike. */
+  .container-x {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 1600px;
+    padding-inline: clamp(1.25rem, 3.5vw, 4rem);
+  }
+
+  /* Buttons ---------------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1;
+    padding: 0.7rem 1.1rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--color-brand);
+    color: #fff;
+  }
+
+  .btn-primary:not(:disabled):hover {
+    background-color: var(--color-brand-dark);
+  }
+
+  .btn-outline {
+    background-color: #fff;
+    border-color: #d1d5db;
+    color: var(--color-ink);
+  }
+
+  .btn-outline:not(:disabled):hover {
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: #4b5563;
+  }
+
+  .btn-ghost:not(:disabled):hover {
+    background-color: #f3f4f6;
+    color: var(--color-ink);
+  }
+
+  .btn-lg {
+    padding: 0.85rem 1.5rem;
+    font-size: 0.9375rem;
+  }
+
+  .btn-sm {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  /* The hero sits on top of a photograph, so its primary button is the
+     inverse of every other one: white on ink. */
+  .btn-invert {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    background-color: #fff;
+    color: var(--color-ink);
+    padding: 1rem 1.6rem;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 0 12px 30px -14px rgb(11 18 32 / 0.7);
+    transition:
+      background-color 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .btn-invert:hover {
+    background-color: #e5e7eb;
+    transform: translateY(-1px);
+  }
+
+  /* The secondary hero button: an outline over the photograph, so it reads
+     as a button without competing with the white one beside it. */
+  .btn-outline-invert {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    background-color: rgb(255 255 255 / 0.08);
+    border: 1px solid rgb(255 255 255 / 0.45);
+    color: #fff;
+    padding: 1rem 1.6rem;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    backdrop-filter: blur(6px);
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .btn-outline-invert:hover {
+    background-color: #fff;
+    border-color: #fff;
+    color: var(--color-ink);
+    transform: translateY(-1px);
+  }
+
+  /* Forms ------------------------------------------------------------ */
+  .input {
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid #d1d5db;
+    background-color: #fff;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.9rem;
+    color: var(--color-ink);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .input::placeholder {
+    color: #9ca3af;
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgb(0 113 197 / 0.12);
+  }
+
+  .input-error {
+    border-color: #dc2626;
+  }
+
+  .input-error:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgb(220 38 38 / 0.12);
+  }
+
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.375rem;
+  }
+
+  /* Surfaces --------------------------------------------------------- */
+  .card {
+    background-color: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background-color: #fff;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6b7280;
+  }
+
+  .muted {
+    color: #6b7280;
+  }
+
+  .price-strike {
+    color: #9ca3af;
+    text-decoration: line-through;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Hero carousel ---------------------------------------------------- */
+  /* The hero is one full-bleed photograph with the copy laid over it. The
+     scrim is what makes that work: it darkens the side the copy sits on so
+     white text stays legible over any image, and fades the photograph out
+     towards the far edge. On a narrow screen the copy moves to the bottom,
+     so the scrim turns with it.
+
+     There are two of them. Which one is used follows the slide: the copy
+     sits on the side of the frame the photograph has room for, so a picture
+     of two people on the left is not hidden behind the words on the left. */
+  .hero-scrim {
+    background-image: linear-gradient(
+      to top,
+      rgb(11 18 32 / 0.95) 0%,
+      rgb(11 18 32 / 0.84) 30%,
+      rgb(11 18 32 / 0.5) 58%,
+      rgb(11 18 32 / 0.32) 100%
+    );
+  }
+
+  /* The copy rises into place, one line after another. It is the one
+     movement on the page: the photographs are still, the words arrive. */
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .hero-rise {
+    animation: hero-rise 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* The headline carries its own shadow — the photograph behind it can be
+     bright as well as dark. */
+  .hero-title {
+    text-shadow:
+      0 1px 3px rgb(11 18 32 / 0.45),
+      0 4px 28px rgb(11 18 32 / 0.55);
+  }
+
+  /* The eyebrow is set off with a short rule in the site's blue. */
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: rgb(255 255 255 / 0.85);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .hero-eyebrow::before {
+    content: "";
+    display: block;
+    width: 1.75rem;
+    height: 2px;
+    background-color: var(--color-brand);
+  }
+
+  /* The active dot fills up over one slide interval. Paused by the
+     component when the carousel is hovered or the tab is hidden. */
+  .hero-progress {
+    animation-name: hero-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+
+  /* Keeps the Tailwind v4 scan in step with the carousel's utility classes. */
+  /* The hero carousel places its copy, photo and dots on an explicit grid. */
+}
+
+/* From the desktop breakpoint the copy moves to one side of the
+   photograph, so the scrim darkens that side instead of the bottom.
+   Which side is up to the slide — the copy stands on the side the
+   photograph has room for. */
+@media (min-width: 1024px) {
+  .hero-scrim {
+    background-image:
+      linear-gradient(
+        to right,
+        rgb(11 18 32 / 0.95) 0%,
+        rgb(11 18 32 / 0.9) 30%,
+        rgb(11 18 32 / 0.7) 48%,
+        rgb(11 18 32 / 0.28) 68%,
+        rgb(11 18 32 / 0.05) 100%
+      ),
+      linear-gradient(
+        to top,
+        rgb(11 18 32 / 0.62) 0%,
+        rgb(11 18 32 / 0) 30%
+      );
+  }
+
+  /* The same scrim, turned the other way for a slide whose copy stands on
+     the right. */
+  .hero-scrim-right {
+    background-image:
+      linear-gradient(
+        to left,
+        rgb(11 18 32 / 0.95) 0%,
+        rgb(11 18 32 / 0.9) 30%,
+        rgb(11 18 32 / 0.7) 48%,
+        rgb(11 18 32 / 0.28) 68%,
+        rgb(11 18 32 / 0.05) 100%
+      ),
+      linear-gradient(
+        to top,
+        rgb(11 18 32 / 0.62) 0%,
+        rgb(11 18 32 / 0) 30%
+      );
+  }
+}
+
+@keyframes hero-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+  The policy pages in src/components/policy/ and the footer's Customer
+  Support column use utility classes that have no rule until this file is
+  rescanned. Editing globals.css is what triggers that rescan.
+
+  The About and Contact pages lean on the same set of utility classes for
+  their stat bands, chain diagrams and route tables, so they are listed here
+  for the same reason.
+
+  The About page's supply-chain diagram draws its dots with a negative
+  offset (`-top-[4px]`) against a `border-t` rule, so the rule and the dot
+  share an edge. That offset is a bare pixel value rather than a scale
+  fraction on purpose — it has to match the dot's own height exactly.
+
+  The About page's promise/refusal section is a two-column layout with a
+  single vertical rule between the lists, so it uses `lg:gap-0` plus a
+  `lg:pl-16` gutter on the second column rather than a gap.
+*/

@@ -1,0 +1,235 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, User, MapPin, Package, CreditCard, RotateCcw } from "lucide-react";
+import { requirePermission } from "@/lib/guard";
+import { getReturnRequest, RETURN_STATUS_LABEL, RETURN_STATUS_TONE, RETURN_TYPE_LABEL, returnReasonLabel } from "@/lib/returns";
+import { getOrder } from "@/lib/orders";
+import { money, formatDate } from "@/lib/format";
+import { ReturnAdminActions } from "@/components/admin/returns/ReturnAdminActions";
+
+export const metadata: Metadata = { title: "Manage Return" };
+
+export default async function AdminReturnDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  await requirePermission("returns.view");
+  const { id } = await params;
+  const ret = getReturnRequest(id);
+  if (!ret) notFound();
+
+  const order = getOrder(ret.order_id);
+
+  return (
+    <div className="mx-auto max-w-[1300px]">
+      <header className="mb-6">
+        <Link
+          href="/admin/returns"
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-500 hover:text-ink"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Returns & Refunds
+        </Link>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h1 className="tnum text-[26px] font-bold text-ink">{ret.id}</h1>
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-[12px] font-semibold capitalize ${
+                RETURN_STATUS_TONE[ret.status] ?? "bg-gray-100 text-gray-600 border-gray-200"
+              }`}
+            >
+              {RETURN_STATUS_LABEL[ret.status]}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[12px] font-medium text-gray-600">
+              {RETURN_TYPE_LABEL[ret.type]}
+            </span>
+          </div>
+
+          <Link
+            href={`/admin/orders/${ret.order_id}`}
+            className="btn btn-outline btn-sm"
+          >
+            View Order {ret.order_id}
+          </Link>
+        </div>
+        <p className="mt-1 text-[13px] text-gray-500">
+          Requested on {formatDate(ret.created_at)} by{" "}
+          <strong className="text-ink">{ret.customer_name ?? "Customer"}</strong>
+        </p>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        {/* Left Column: Claim details, Items, Photos, Timeline */}
+        <div className="space-y-6">
+          {/* Claim Overview */}
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
+              Customer Claim Details
+            </h2>
+            <div className="mt-4 space-y-3 text-[13.5px]">
+              <div>
+                <span className="font-semibold text-ink">Reason: </span>
+                <span className="text-gray-700">{returnReasonLabel(ret.reason)}</span>
+              </div>
+              {ret.customer_notes && (
+                <div>
+                  <span className="font-semibold text-ink">Customer Comments: </span>
+                  <p className="mt-1 rounded-lg bg-gray-50 p-3 text-[13px] text-gray-700">
+                    {ret.customer_notes}
+                  </p>
+                </div>
+              )}
+              {ret.rejection_reason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+                  <span className="font-bold">Rejection Note: </span>
+                  {ret.rejection_reason}
+                </div>
+              )}
+            </div>
+
+            {/* Photo Evidence */}
+            {ret.images.length > 0 && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <h3 className="mb-3 text-[13px] font-semibold text-ink">
+                  Uploaded Evidence ({ret.images.length})
+                </h3>
+                <div className="flex flex-wrap gap-3">
+                  {ret.images.map((img) => (
+                    <a
+                      key={img.id}
+                      href={img.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.path}
+                        alt="Evidence"
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Items Table */}
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <header className="border-b border-gray-200 px-5 py-4">
+              <h2 className="text-[15px] font-bold text-ink">
+                Requested Items ({ret.items.length})
+              </h2>
+            </header>
+            <ul className="divide-y divide-gray-200">
+              {ret.items.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-4 px-5 py-3.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/product/${item.product_slug}`}
+                      className="font-semibold text-ink hover:text-brand"
+                    >
+                      {item.name}
+                    </Link>
+                    <div className="mt-0.5 text-[12px] text-gray-500">
+                      Quantity: <span className="tnum font-medium text-ink">{item.quantity}</span>
+                      {" · "}
+                      Unit Price: <span className="tnum font-medium text-ink">{money(item.price)}</span>
+                      {item.qc_decision && item.qc_decision !== "pending" && (
+                        <>
+                          {" · "}
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                              item.qc_decision === "restock"
+                                ? "bg-green-50 text-green-700"
+                                : item.qc_decision === "write_off"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            QC: {item.qc_decision}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span className="tnum shrink-0 text-[14px] font-bold text-ink">
+                    {money(item.price * item.quantity)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Audit Event Timeline */}
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
+              Activity & Audit History
+            </h2>
+            <ol className="relative mt-4 space-y-4 border-l border-gray-200 pl-4 ml-2">
+              {ret.events.map((ev) => (
+                <li key={ev.id} className="relative">
+                  <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-brand" />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-bold text-ink">
+                      {RETURN_STATUS_LABEL[ev.status as keyof typeof RETURN_STATUS_LABEL] ??
+                        ev.status}
+                    </p>
+                    <span className="text-[11px] text-gray-400">
+                      {formatDate(ev.created_at)}
+                    </span>
+                  </div>
+                  {ev.note && <p className="mt-0.5 text-[12.5px] text-gray-600">{ev.note}</p>}
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    By {ev.actor_name ? `${ev.actor_name} (${ev.actor_type})` : ev.actor_type}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        {/* Right Column: Customer Info & Interactive Actions */}
+        <div className="space-y-6">
+          {/* Customer & Address Details */}
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
+              <User className="h-4 w-4 text-brand" />
+              Customer Details
+            </h2>
+            <p className="text-[13.5px] font-semibold text-ink">{ret.customer_name}</p>
+            <p className="text-[12.5px] text-gray-500">{ret.customer_email}</p>
+            {ret.customer_phone && (
+              <p className="text-[12.5px] text-gray-500">{ret.customer_phone}</p>
+            )}
+
+            {order && (
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <h3 className="mb-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-700">
+                  <MapPin className="h-3.5 w-3.5 text-brand" />
+                  Pickup / Delivery Address
+                </h3>
+                <address className="text-[12.5px] not-italic leading-relaxed text-gray-600">
+                  {order.address1}
+                  {order.address2 && <>, {order.address2}</>}
+                  <br />
+                  {order.city}, {order.state} — {order.pincode}
+                </address>
+              </div>
+            )}
+          </section>
+
+          {/* Interactive Management Actions */}
+          <ReturnAdminActions ret={ret} />
+        </div>
+      </div>
+    </div>
+  );
+}
+

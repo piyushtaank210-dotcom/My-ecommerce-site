@@ -1,0 +1,64 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Next.js Build Output
+/.next/
+/out/
+/build/
+/dist/
+
+# TypeScript Build & Environment Info
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Environment & Secrets
+.env
+.env*.local
+*.pem
+
+# SQLite Database & Storage
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.db.*
+*.sqlite
+*.sqlite3
+local.db
+
+# User Uploads (keep directory structure tracked via .gitkeep)
+public/uploads/*
+!public/uploads/.gitkeep
+public/products/*.svg
+
+# Debug & Execution Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Browser Testing Profiles & Scratch Assets
+/.shots/
+/.chrome-profile/
+/.chrome-profile-*/
+/.chrome-probe/
+ref_home.html
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,271 @@
+{
+  "categories": [
+    {
+      "slug": "consoles",
+      "name": "Gaming Consoles",
+      "icon": "console",
+      "blurb": "Official console hardware — sealed, warranted, and ready to ship the same working day.",
+      "specFields": [
+        "Model and edition",
+        "Storage capacity",
+        "Connectivity",
+        "Included accessories",
+        "Warranty"
+      ]
+    },
+    {
+      "slug": "controllers",
+      "name": "Gaming Controllers",
+      "icon": "controller",
+      "blurb": "Official controller hardware — sealed, warranted, and ready to ship the same working day.",
+      "specFields": [
+        "Model and colour",
+        "Connectivity",
+        "Compatibility",
+        "Battery information",
+        "Special features",
+        "Warranty"
+      ]
+    },
+    {
+      "slug": "accessories",
+      "name": "Gaming Accessories",
+      "icon": "accessory",
+      "blurb": "The things that go with the hardware — chargers, stands, headsets and the rest.",
+      "specFields": [
+        "Accessory type",
+        "Compatibility",
+        "Connectivity",
+        "Included items",
+        "Warranty"
+      ]
+    },
+    {
+      "slug": "bundles",
+      "name": "Gaming Bundles",
+      "icon": "bundle",
+      "blurb": "Consoles and controllers together, boxed and ready — one parcel, one price.",
+      "specFields": []
+    }
+  ],
+  "products": [
+    {
+      "slug": "playstation-5-slim-disc-1tb",
+      "name": "PlayStation 5 Slim — Disc Edition 1TB",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 54990,
+      "mrp": 64990,
+      "rating": 4.8,
+      "reviews": 1284,
+      "stock": 14,
+      "badge": "Official Store",
+      "image": "ps5-slim",
+      "attributes": {
+        "Storage": ["1TB Disc", "2TB Disc"]
+      },
+      "shortDesc": "The slimmer, lighter PS5 with a 1TB SSD, full DualSense support and a three-year Sony warranty.",
+      "specs": {
+        "Storage": "1TB NVMe SSD",
+        "Edition": "Disc",
+        "Output": "4K at 120fps",
+        "Wi-Fi": "Wi-Fi 6E",
+        "Weight": "2.2 kg",
+        "Warranty": "3 years, Sony India"
+      },
+      "variants": [
+        { "name": "1TB Disc", "price": 54990, "mrp": 64990, "stock": 14 },
+        { "name": "2TB Disc", "price": 62990, "mrp": 74990, "stock": 9 }
+      ]
+    },
+    {
+      "slug": "playstation-5-slim-digital-1tb",
+      "name": "PlayStation 5 Slim — Digital Edition 1TB",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 47990,
+      "mrp": 57990,
+      "rating": 4.7,
+      "reviews": 906,
+      "stock": 18,
+      "badge": "",
+      "image": "ps5-slim-digital",
+      "shortDesc": "Same console, no disc drive — download everything from the PlayStation Store.",
+      "specs": {
+        "Storage": "1TB NVMe SSD",
+        "Edition": "Digital",
+        "Output": "4K at 120fps",
+        "Wi-Fi": "Wi-Fi 6E",
+        "Weight": "2.2 kg",
+        "Warranty": "3 years, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "playstation-5-pro-2tb",
+      "name": "PlayStation 5 Pro — 2TB",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 89990,
+      "mrp": 99990,
+      "rating": 4.9,
+      "reviews": 612,
+      "stock": 6,
+      "badge": "New",
+      "image": "ps5-pro",
+      "shortDesc": "Ray tracing, AI upscaling to 4K and a larger vapour chamber, in 2TB.",
+      "specs": {
+        "Storage": "2TB NVMe SSD",
+        "Edition": "Disc",
+        "Output": "4K at 60fps, ray traced",
+        "Wi-Fi": "Wi-Fi 7",
+        "Weight": "3.1 kg",
+        "Warranty": "3 years, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "playstation-4-slim-500gb",
+      "name": "PlayStation 4 Slim — 500GB",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 21499,
+      "mrp": 34990,
+      "rating": 4.5,
+      "reviews": 2410,
+      "stock": 21,
+      "badge": "",
+      "image": "ps4-slim",
+      "shortDesc": "The console that sold 1.2 billion copies — now the cheapest way into PlayStation.",
+      "specs": {
+        "Storage": "500GB HDD",
+        "Edition": "Disc",
+        "Output": "1080p / 4K HDR",
+        "Wi-Fi": "Wi-Fi 5",
+        "Weight": "2.1 kg",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "playstation-portal",
+      "name": "PlayStation Portal Remote Player",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 14990,
+      "mrp": 19990,
+      "rating": 4.2,
+      "reviews": 428,
+      "stock": 16,
+      "badge": "",
+      "image": "portal",
+      "shortDesc": "An 8-inch screen that streams your PS5 to any room in the house.",
+      "specs": {
+        "Screen": "8in LCD, 60Hz",
+        "Storage": "8GB",
+        "Output": "1080p",
+        "Wi-Fi": "Wi-Fi 5",
+        "Weight": "626 g",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "playstation-vr2",
+      "name": "PlayStation VR2",
+      "brand": "Sony",
+      "category": "consoles",
+      "price": 74990,
+      "mrp": 89990,
+      "rating": 4.5,
+      "reviews": 336,
+      "stock": 7,
+      "badge": "",
+      "image": "psvr2",
+      "shortDesc": "4K HDR, 110-degree field of view and inside-out tracking with eye tracking.",
+      "specs": {
+        "Display": "2000x2040 per eye, OLED",
+        "Refresh": "90Hz / 120Hz",
+        "Tracking": "Inside-out, eye tracking",
+        "Controllers": "PS VR2 Sense",
+        "Weight": "560 g",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "dualsense-white",
+      "name": "DualSense Wireless Controller — White",
+      "brand": "Sony",
+      "category": "controllers",
+      "price": 5499,
+      "mrp": 6499,
+      "rating": 4.8,
+      "reviews": 6890,
+      "stock": 32,
+      "badge": "",
+      "image": "dualsense-white",
+      "attributes": {
+        "Colour": ["White", "Midnight Blue"]
+      },
+      "shortDesc": "Haptic feedback and adaptive triggers, in Sony's classic white.",
+      "specs": {
+        "Compatibility": "PS5, PS4, PC, mobile",
+        "Features": "Haptics, adaptive triggers",
+        "Battery": "Up to 12 hours",
+        "Connection": "Bluetooth, USB-C",
+        "Weight": "292 g",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": [
+        { "name": "White", "price": 5499, "mrp": 6499, "stock": 20 },
+        { "name": "Midnight Blue", "price": 5499, "mrp": 6499, "stock": 12 }
+      ]
+    },
+    {
+      "slug": "dualsense-edge",
+      "name": "DualSense Edge Wireless Controller",
+      "brand": "Sony",
+      "category": "controllers",
+      "price": 12990,
+      "mrp": 15990,
+      "rating": 4.6,
+      "reviews": 1432,
+      "stock": 9,
+      "badge": "Pro",
+      "image": "dualsense-edge",
+      "shortDesc": "Swappable stick modules, back paddles and remappable buttons for competitive play.",
+      "specs": {
+        "Compatibility": "PS5, PC",
+        "Features": "Paddles, swappable sticks",
+        "Battery": "Up to 10 hours",
+        "Connection": "Bluetooth, USB-C",
+        "Weight": "325 g",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": []
+    },
+    {
+      "slug": "dualsense-charging-station",
+      "name": "DualSense Charging Station",
+      "brand": "Sony",
+      "category": "controllers",
+      "price": 3499,
+      "mrp": 4499,
+      "rating": 4.6,
+      "reviews": 1287,
+      "stock": 22,
+      "badge": "",
+      "image": "charging-station",
+      "shortDesc": "Charges two controllers at once and keeps them on the shelf between sessions.",
+      "specs": {
+        "Ports": "2 controllers",
+        "Adapter": "Included",
+        "Cable": "USB-C",
+        "Weight": "438 g",
+        "Warranty": "1 year, Sony India"
+      },
+      "variants": []
+    }
+  ]
+}

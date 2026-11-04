@@ -1,0 +1,2 @@
+# Keep this folder tracked in git while ignoring database binaries (*.db, *.db-wal, *.db-shm)
+

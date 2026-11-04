@@ -1,0 +1,21 @@
+{
+  "ps5-slim": "/products/ps5-slim.jpg",
+  "ps5-slim-digital": "/products/ps5-slim-digital.jpg",
+  "ps5-slim-side": "/products/ps5-slim-side.jpg",
+  "ps5-slim-controller": "/products/ps5-slim-controller.jpg",
+  "ps5-slim-angled": "/products/ps5-slim-angled.jpg",
+  "ps5-slim-back": "/products/ps5-slim-back.jpg",
+  "ps5-slim-detail": "/products/ps5-slim-detail.jpg",
+  "ps5-hero": "/products/ps5-hero.png",
+  "ps5-pro": "/products/ps5-pro.jpg",
+  "ps4-slim": "/products/ps4-slim.png",
+  "dualsense-white": "/products/dualsense-white.jpg",
+  "dualsense-midnight": "/products/dualsense-midnight.jpg",
+  "dualsense-edge": "/products/dualsense-edge.png",
+  "portal": "/products/portal.jpg",
+  "psvr2": "/products/psvr2.png",
+  "charging-station": "/products/charging-station.jpg",
+  "mouse": "/products/mouse.jpg",
+  "mic": "/products/mic.jpg",
+  "powerbank": "/products/powerbank.jpg"
+}
