@@ -5,6 +5,9 @@
   "private": true,
   "author": "ConsoleSeller <piyushtaank210@gmail.com>",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

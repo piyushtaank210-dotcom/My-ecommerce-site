@@ -19,11 +19,11 @@ tsconfig.tsbuildinfo
 *.pem
 
 # SQLite Database & Storage
-data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/*.db.*
+!data/store.db
 *.sqlite
 *.sqlite3
 local.db
