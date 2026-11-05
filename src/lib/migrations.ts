@@ -79,6 +79,11 @@ export function applyMigrations(db: DatabaseSync): void {
   // The hero slides carry the side their copy stands on.
   add("hero_slides", "side", "side TEXT NOT NULL DEFAULT 'left'");
 
+  // A hero slide may show a film instead of a photograph. The picture
+  // stays as its poster frame and as what a phone shows, so the slide
+  // still looks right where the film is not played.
+  add("hero_slides", "video", "video TEXT");
+
   // Stock, and how low it has to get before anybody is told.
   //
   // Every product and every option carries its own threshold, because a

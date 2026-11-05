@@ -125,7 +125,8 @@ CREATE TABLE IF NOT EXISTS hero_slides (
   secondary_href  TEXT,
   note            TEXT,
   side            TEXT NOT NULL DEFAULT 'left',
-  position        INTEGER DEFAULT 0
+  position        INTEGER DEFAULT 0,
+  video           TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (

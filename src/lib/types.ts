@@ -254,6 +254,11 @@ export type HeroLink = {
 export type HeroSlide = {
   id: string;
   image: string;
+  /**
+   * A film to show instead of the photograph, on a screen big enough to
+   * play it. The picture is still what a phone shows.
+   */
+  video: string | null;
   alt: string;
   image_position: string;
   eyebrow: string | null;

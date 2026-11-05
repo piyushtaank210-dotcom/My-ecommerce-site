@@ -18,7 +18,9 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [hovered, setHovered] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [reduced, setReduced] = useState(false);
+  const [wideEnough, setWideEnough] = useState(false);
   const swipeStart = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Hover, focus and a backgrounded tab all pause the carousel.
   const paused = hovered || hidden;
@@ -40,6 +42,18 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // A film is only worth playing on a screen with room for it. A phone
+  // keeps the photograph — and never downloads the film either, which is
+  // the point of asking the question here rather than hiding it with
+  // styles.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setWideEnough(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   // Advance on a timer. Depending on `index` restarts the countdown whenever
   // the slide changes, whether that was automatic or manual.
   useEffect(() => {
@@ -54,6 +68,22 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
+
+  // The film plays while its own slide is on screen, and stops when it is
+  // not — and never plays at all where motion is unwelcome.
+  const videoSlide = slides.findIndex((s) => s.video);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (wideEnough && !reduced && !hidden && videoSlide === index) {
+      video.play().catch(() => {
+        /* the browser may refuse; the poster frame stays up */
+      });
+    } else {
+      video.pause();
+    }
+  }, [index, wideEnough, reduced, hidden, videoSlide]);
 
   function onPointerDown(e: React.PointerEvent) {
     swipeStart.current = e.clientX;
@@ -92,7 +122,12 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     >
       {/* The photograph covers the whole section, edge to edge. The slide
           that is showing dissolves in while the one leaving softens and
-          drifts back — a slow change of scene rather than a cut. */}
+          drifts back — a slow change of scene rather than a cut.
+
+          A slide may also carry a film. The film plays from the tablet
+          breakpoint up, where there is room for it and a thumb on the
+          screen; a phone keeps the photograph, which is also what the film
+          falls back to before it has loaded. */}
       <div className="absolute inset-0 grid select-none">
         {slides.map((s, i) => (
           <div
@@ -103,23 +138,63 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 : "pointer-events-none opacity-0 blur-[8px] scale-[1.03]"
             }`}
           >
-            <Image
-              src={s.image}
-              alt={s.alt}
-              fill
-              preload={i === 0}
-              loading={i === 0 ? undefined : "eager"}
-              /* The photograph is served as it is. The optimiser would
-                 re-encode it a second time — the files are already sized
-                 for the job — and the browser scales it far better than a
-                 second pass through a lossy encoder does. */
-              unoptimized
-              sizes="100vw"
-              className={`object-cover transition-transform duration-[6000ms] ease-linear ${
-                i === index ? "scale-[1.06]" : "scale-100"
-              }`}
-              style={{ objectPosition: s.image_position }}
-            />
+            {s.video ? (
+              <>
+                {/* The photograph sits underneath. It is what a phone
+                    shows, and it is the poster frame the film is taken
+                    from, so the two are never out of step. */}
+                <Image
+                  src={s.image}
+                  alt={s.alt}
+                  fill
+                  preload={i === 0}
+                  loading={i === 0 ? undefined : "eager"}
+                  unoptimized
+                  sizes="100vw"
+                  className={`object-cover transition-transform duration-[6000ms] ease-linear ${
+                    i === index ? "scale-[1.06]" : "scale-100"
+                  }`}
+                  style={{ objectPosition: s.image_position }}
+                />
+                {/* The film, on a screen with room for it. It is not
+                    rendered on a phone at all, so a phone never downloads
+                    it. */}
+                {wideEnough && !reduced && (
+                  <video
+                    ref={i === videoSlide ? videoRef : undefined}
+                    src={s.video}
+                    poster={s.image}
+                    aria-hidden="true"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="auto"
+                    tabIndex={-1}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: s.image_position }}
+                  />
+                )}
+              </>
+            ) : (
+              <Image
+                src={s.image}
+                alt={s.alt}
+                fill
+                preload={i === 0}
+                loading={i === 0 ? undefined : "eager"}
+                /* The photograph is served as it is. The optimiser would
+                   re-encode it a second time — the files are already sized
+                   for the job — and the browser scales it far better than a
+                   second pass through a lossy encoder does. */
+                unoptimized
+                sizes="100vw"
+                className={`object-cover transition-transform duration-[6000ms] ease-linear ${
+                  i === index ? "scale-[1.06]" : "scale-100"
+                }`}
+                style={{ objectPosition: s.image_position }}
+              />
+            )}
           </div>
         ))}
       </div>

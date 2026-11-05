@@ -7,7 +7,7 @@
  *
  *   node scripts/sync-hero.mjs
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -24,8 +24,8 @@ const db = new DatabaseSync(join(ROOT, "data/store.db"));
 const upsert = db.prepare(`
   INSERT INTO hero_slides
     (id, image, alt, image_position, eyebrow, title, body,
-     primary_label, primary_href, secondary_label, secondary_href, note, side, position)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     primary_label, primary_href, secondary_label, secondary_href, note, side, position, video)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     image = excluded.image,
     alt = excluded.alt,
@@ -39,12 +39,19 @@ const upsert = db.prepare(`
     secondary_href = excluded.secondary_href,
     note = excluded.note,
     side = excluded.side,
-    position = excluded.position
+    position = excluded.position,
+    video = excluded.video
 `);
 
 hero.slides.forEach((s, i) => {
   const image = heroImages[s.image] ?? null;
   if (!image) console.warn(`  ! no image for hero slide "${s.id}" (key "${s.image}")`);
+
+  // A slide may name a film to play instead of the photograph.
+  const video = s.video ?? null;
+  if (video && !existsSync(join(ROOT, "public", video.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the video on slide "${s.id}" (${video})`);
+  }
 
   upsert.run(
     s.id,
@@ -60,7 +67,8 @@ hero.slides.forEach((s, i) => {
     s.secondary?.href ?? null,
     s.note ?? null,
     s.side === "right" ? "right" : "left",
-    i
+    i,
+    video
   );
 });
 

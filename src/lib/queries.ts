@@ -100,6 +100,7 @@ function mapHeroSlide(r: Row): HeroSlide {
   return {
     id: str(r.id),
     image: str(r.image),
+    video: strOrNull(r.video),
     alt: str(r.alt),
     image_position: str(r.image_position) || "50% 50%",
     eyebrow: strOrNull(r.eyebrow),
