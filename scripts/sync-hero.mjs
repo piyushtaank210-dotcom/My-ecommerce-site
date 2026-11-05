@@ -93,3 +93,14 @@ for (const r of db
 
 db.close();
 console.log(`\n✓ synced ${hero.slides.length} hero slides`);
+
+// Fold the change into the database file itself, so what is committed is
+// the shop as it stands rather than the shop as it stood before the last
+// edit. Without this the change sits in the write-ahead log, which is not
+// tracked, and never reaches the repository.
+try {
+  new DatabaseSync(join(ROOT, "data", "store.db"))
+    .exec("PRAGMA wal_checkpoint(TRUNCATE);");
+} catch {
+  /* the dev server may be holding it; the log is checkpointed anyway */
+}

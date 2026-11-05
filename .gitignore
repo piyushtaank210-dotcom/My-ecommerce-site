@@ -29,8 +29,20 @@ data/*.db.*
 local.db
 
 # User Uploads (keep directory structure tracked via .gitkeep)
+#
+# The catalogue points at these photographs, so they have to travel with the
+# repository — otherwise four of the nine products show a broken picture on the
+# live site. The "!public/uploads/**/" line matters: "public/uploads/*"
+# matches the folders themselves, and git will not look inside a folder it
+# has been told to ignore.
 public/uploads/*
 !public/uploads/.gitkeep
+!public/uploads/**/
+!public/uploads/**/*.jpg
+!public/uploads/**/*.jpeg
+!public/uploads/**/*.png
+!public/uploads/**/*.webp
+!public/uploads/**/*.avif
 public/products/*.svg
 
 # Debug & Execution Logs

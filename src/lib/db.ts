@@ -101,12 +101,35 @@ export function getDb(): DatabaseSync {
       db.exec(SCHEMA_SQL);
       db.exec("PRAGMA journal_mode = WAL;");
       db.exec("PRAGMA busy_timeout = 5000;");
+      // Fold the write-ahead log into the database file itself, and often.
+      //
+      // The store's database is tracked in git, so a change that is still
+      // sitting in the log is a change that never reaches the repository —
+      // and a deployment built from the repository never sees it either.
+      // Checkpointing after every page keeps the file itself current, which
+      // is what makes "I pushed it and nothing changed" impossible.
+      db.exec("PRAGMA wal_autocheckpoint = 16;");
     } catch (e) {
       console.warn("Database initialization notice:", e);
     }
     globalThis.__pfDb = db;
   }
   return globalThis.__pfDb;
+}
+
+/**
+ * Folds the write-ahead log into the database file and empties it.
+ *
+ * Worth calling before committing, so the file in the repository is the
+ * database as it stands rather than the database as it stood before the last
+ * few edits.
+ */
+export function checkpointDb(): void {
+  try {
+    getDb().exec("PRAGMA wal_checkpoint(TRUNCATE);");
+  } catch (e) {
+    console.warn("Could not checkpoint the database:", e);
+  }
 }
 
 /** Rows are plain objects; JSON columns need parsing. */

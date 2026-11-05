@@ -61,3 +61,13 @@ for (const r of db
 
 db.close();
 console.log(`\n✓ synced ${catalog.categories.length} categories`);
+
+// Fold the change into the database file itself, so what is committed is the
+// shop as it stands rather than the shop as it stood before the last edit.
+try {
+  new DatabaseSync(join(ROOT, "data", "store.db")).exec(
+    "PRAGMA wal_checkpoint(TRUNCATE);"
+  );
+} catch {
+  /* the dev server may be holding it; the log is checkpointed anyway */
+}

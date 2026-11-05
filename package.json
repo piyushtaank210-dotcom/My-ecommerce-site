@@ -13,6 +13,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "seed": "node scripts/seed.mjs",
+    "db:checkpoint": "node scripts/checkpoint-db.mjs",
     "sync-hero": "node scripts/sync-hero.mjs",
     "sync-categories": "node scripts/sync-categories.mjs",
     "sync-variants": "node scripts/sync-variants.mjs",

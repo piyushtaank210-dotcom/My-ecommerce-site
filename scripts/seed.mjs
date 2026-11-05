@@ -133,13 +133,22 @@ catalog.products.forEach((p, i) => {
 const insHero = db.prepare(
   `INSERT INTO hero_slides
      (id, image, alt, image_position, eyebrow, title, body,
-      primary_label, primary_href, secondary_label, secondary_href, note, side, position)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      primary_label, primary_href, secondary_label, secondary_href, note, side, position, video)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
 hero.slides.forEach((s, i) => {
   const image = heroImages[s.image] ?? null;
   if (!image) console.warn(`  ! no image for hero slide "${s.id}" (key "${s.image}")`);
+
+  // A slide may name a film to play instead of the photograph. It has to be
+  // carried into the database here as well as in sync-hero.mjs — this seed is
+  // what builds the shop on a fresh deployment, so a slide that left the film
+  // behind would never show it.
+  const video = s.video ?? null;
+  if (video && !existsSync(join(ROOT, "public", video.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the video on slide "${s.id}" (${video})`);
+  }
 
   insHero.run(
     s.id,
@@ -155,7 +164,8 @@ hero.slides.forEach((s, i) => {
     s.secondary?.href ?? null,
     s.note ?? null,
     s.side === "right" ? "right" : "left",
-    i
+    i,
+    video
   );
 });
 

@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
-import { skuFromSlug, uniqueSku } from "./sku";
-import { PRODUCT_GALLERY } from "./product-gallery";
+// The extension matters: this file is imported by the seed script, which runs
+// on plain Node rather than through Next's bundler, and Node will not guess
+// that "./sku" means "./sku.ts".
+import { skuFromSlug, uniqueSku } from "./sku.ts";
+import { PRODUCT_GALLERY } from "./product-gallery.ts";
 
 /** A number out of a row. */
 const num = (v: unknown): number => Number(v ?? 0);
@@ -55,7 +58,7 @@ export function applyMigrations(db: DatabaseSync): void {
     "handled_by",
     "handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL"
   );
-  add("contact_messages", "handled_at", "TEXT");
+  add("contact_messages", "handled_at", "handled_at TEXT");
 
   // The product editor's fuller details. Everything here is optional, so a
   // product that was added before the editor grew keeps working exactly as
