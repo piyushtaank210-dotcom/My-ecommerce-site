@@ -127,9 +127,15 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar — a drawer below lg, a fixed column above it. */}
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-[248px] flex-col justify-between bg-ink p-5 lg:flex">
-        <div className="space-y-7">
+      {/* Sidebar — a drawer below lg, a fixed column above it.
+
+          The list of links scrolls on its own and the identity block stays
+          pinned at the bottom. Without that, a short window — a laptop with
+          the browser half height, or a phone in landscape — pushes the last
+          few links off the bottom of the screen where they cannot be
+          reached at all. */}
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-[248px] flex-col bg-ink p-5 lg:flex">
+        <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto">
           {brand}
           {nav}
         </div>
@@ -144,8 +150,8 @@ export function AdminShell({
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-ink/50"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[264px] flex-col justify-between bg-ink p-5">
-            <div className="space-y-7">
+          <aside className="absolute inset-y-0 left-0 flex w-[264px] flex-col bg-ink p-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto">
               <div className="flex items-center justify-between">
                 {brand}
                 <button

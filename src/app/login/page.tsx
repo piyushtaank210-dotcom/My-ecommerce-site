@@ -15,7 +15,14 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  if (await getCurrentUser()) redirect("/account");
+  const target = safeNext(next);
+
+  // Someone who is already signed in has no business on this page — but
+  // they should land where they were going. A staff member who follows a
+  // link to /login?next=/admin is sent to the back office, not to their
+  // customer account, so they are not turned away from the page they
+  // wanted. With no destination in the link, they go to their account.
+  if (await getCurrentUser()) redirect(next ? target : "/account");
 
   return (
     <AuthShell
@@ -24,7 +31,7 @@ export default async function LoginPage({
       subtitle="Track your orders, save your details and check out in a couple of taps."
       points={AUTH_POINTS}
     >
-      <AuthForm mode="login" next={safeNext(next)} />
+      <AuthForm mode="login" next={target} />
     </AuthShell>
   );
 }

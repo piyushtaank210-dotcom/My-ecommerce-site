@@ -31,6 +31,7 @@
     "check:pages": "node scripts/check-pages.mjs",
     "check:product": "node scripts/check-product-form.mjs",
     "check:mobile": "node scripts/audit-mobile.mjs && node scripts/check-labels.mjs",
+    "check:admin-nav": "node scripts/check-admin-flow.mjs && node scripts/check-admin-walk.mjs && node scripts/check-admin-redirect.mjs && node scripts/check-signout.mjs",
     "clean:e2e": "node scripts/clean-e2e-accounts.mjs",
     "shot": "node scripts/screenshot.mjs",
     "shot:at": "node scripts/shot-at.mjs"

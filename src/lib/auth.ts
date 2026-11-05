@@ -1,7 +1,8 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { getDb } from "./db";
+import { getDb, usesPrivateDatabaseCopy } from "./db";
 import { parseRole, type Role } from "./roles";
+import { signSession, verifySession } from "./session-token";
 
 const COOKIE = "pf_auth";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -135,12 +136,12 @@ export function safeNext(next?: string | null): string {
 
 export async function startSession(userId: number): Promise<void> {
   const token = randomBytes(32).toString("hex");
-  const expires = new Date(Date.now() + MAX_AGE * 1000).toISOString();
+  const expiresAt = Date.now() + MAX_AGE * 1000;
   getDb()
     .prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
-    .run(token, userId, expires);
+    .run(token, userId, new Date(expiresAt).toISOString());
   const store = await cookies();
-  store.set(COOKIE, token, {
+  store.set(COOKIE, signSession(token, userId, expiresAt), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -150,8 +151,11 @@ export async function startSession(userId: number): Promise<void> {
 
 export async function endSession(): Promise<void> {
   const store = await cookies();
-  const token = store.get(COOKIE)?.value;
-  if (token) {
+  const raw = store.get(COOKIE)?.value;
+  if (raw) {
+    // The cookie may be signed or may be a bare token; either way the token
+    // is the first part.
+    const token = raw.split(".")[1] ?? raw;
     getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
   }
   store.delete(COOKIE);
@@ -159,8 +163,12 @@ export async function endSession(): Promise<void> {
 
 export async function getCurrentUser(): Promise<User | null> {
   const store = await cookies();
-  const token = store.get(COOKIE)?.value;
-  if (!token) return null;
+  const raw = store.get(COOKIE)?.value;
+  if (!raw) return null;
+
+  // The signed part of the cookie says who it is for and when it runs out.
+  const signed = verifySession(raw);
+  const token = signed?.token ?? raw;
 
   const row = getDb()
     .prepare(
@@ -170,12 +178,47 @@ export async function getCurrentUser(): Promise<User | null> {
     )
     .get(token) as Row | undefined;
 
-  if (!row) return null;
-
-  if (new Date(str(row.expires_at)).getTime() < Date.now()) {
-    getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
-    return null;
+  if (row) {
+    if (new Date(str(row.expires_at)).getTime() < Date.now()) {
+      console.warn(`[auth] the session for ${row.email} had expired`);
+      getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+      return null;
+    }
+    return mapUser(row);
   }
 
-  return mapUser(row);
+  // No session row.
+  //
+  // On a single machine that means the visitor has been signed out, and
+  // that is the end of it: the session row is what decides, and signing out
+  // really signs out.
+  //
+  // On a serverless host it can mean something else entirely — the request
+  // landed on an instance with its own copy of the database, which has
+  // never heard of this sign-in. There the signature on the cookie is proof
+  // enough to carry on with, because without it a visitor is thrown out of
+  // the back office every time a request lands on another instance.
+  //
+  // The fallback is deliberately not used on a normal install, where it
+  // would only take away the meaning of signing out.
+  if (signed && usesPrivateDatabaseCopy()) {
+    const user = getUserById(signed.userId);
+    if (user) {
+      console.warn(
+        `[auth] the session row for ${user.email} was not on this instance — ` +
+          `the signed cookie was used instead`
+      );
+      return user;
+    }
+  }
+
+  // The browser sent the cookie but the session behind it is gone. That is
+  // the difference between "not signed in" and "signed in once, and the
+  // session has since been thrown away" — worth saying out loud, because
+  // the second one looks exactly like the first from the outside and sends
+  // anyone chasing it looking in the wrong place.
+  console.warn(
+    `[auth] the ${COOKIE} cookie was sent but no live session matched it`
+  );
+  return null;
 }
