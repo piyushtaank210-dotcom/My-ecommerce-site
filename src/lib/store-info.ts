@@ -18,11 +18,11 @@ export const STORE = {
   tagline: "A console and controller retailer in India",
 
   /** The store's domain and URL. */
-  domain: "consoleseller.com",
-  url: "https://consoleseller.com",
+  domain: "consoleseller.in",
+  url: "https://consoleseller.in",
 
   /** The address customers write to. */
-  email: "piyushtaank210@gmail.com",
+  email: "consoleseller.in@gmail.com",
 
   /** When a real person is at the other end of the email. */
   hours: "Monday to Saturday, 9am – 7pm IST",

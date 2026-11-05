@@ -26,10 +26,10 @@ export function CartLineItem({ line }: { line: CartLine }) {
   }
 
   return (
-    <article className="flex gap-4 rounded-xl border border-gray-200 bg-white p-4">
+    <article className="flex gap-3 rounded-xl border border-gray-200 bg-white p-3.5 sm:gap-4 sm:p-4">
       <Link
         href={`/product/${line.product.slug}`}
-        className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-lg bg-gray-50"
+        className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-gray-50 sm:h-24 sm:w-24"
       >
         {line.product.image && (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -64,7 +64,7 @@ export function CartLineItem({ line }: { line: CartLine }) {
             onClick={remove}
             disabled={pending}
             aria-label={`Remove ${line.product.name} from cart`}
-            className="shrink-0 rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-9 sm:w-9 sm:p-2"
           >
             {pending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -75,13 +75,13 @@ export function CartLineItem({ line }: { line: CartLine }) {
         </div>
 
         <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-3">
-          <div className="flex h-9 items-center rounded-lg border border-gray-200">
+          <div className="flex h-10 items-center rounded-lg border border-gray-200 sm:h-9">
             <button
               type="button"
               onClick={() => setQty(line.quantity - 1)}
               disabled={pending || line.quantity <= 1}
               aria-label="Decrease quantity"
-              className="grid h-9 w-9 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
+              className="grid h-10 w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35 sm:h-9 sm:w-9"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
@@ -93,7 +93,7 @@ export function CartLineItem({ line }: { line: CartLine }) {
               onClick={() => setQty(line.quantity + 1)}
               disabled={pending || line.quantity >= max}
               aria-label="Increase quantity"
-              className="grid h-9 w-9 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
+              className="grid h-10 w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35 sm:h-9 sm:w-9"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>

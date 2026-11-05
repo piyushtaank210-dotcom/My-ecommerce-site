@@ -18,10 +18,10 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
+import { tokenForRole } from "./lib/session.mjs";
 import { clickByText, launchChrome, setInput } from "./lib/browser.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,18 +47,7 @@ const ATTRIBUTES = {
 
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-function tokenFor(email) {
-  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
-  if (!user) throw new Error(`no such user ${email}`);
-  const token = randomBytes(32).toString("hex");
-  const expires = new Date(Date.now() + 3600_000).toISOString();
-  db.prepare(
-    "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)"
-  ).run(token, user.id, expires);
-  return token;
-}
-
-const admin = tokenFor("admin@playforge.test");
+const admin = tokenForRole(db, "admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {

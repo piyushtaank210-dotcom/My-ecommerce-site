@@ -16,6 +16,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -106,7 +107,8 @@ try {
       "--disable-extensions",
       "--hide-scrollbars",
       `--remote-debugging-port=${PORT}`,
-      "--user-data-dir=" + join(ROOT, ".chrome-profile"),
+      // Outside the project on purpose — see the note in scripts/e2e.mjs.
+      "--user-data-dir=" + join(tmpdir(), "consoleseller-shot-chrome"),
       "about:blank",
     ],
     { stdio: "ignore" }

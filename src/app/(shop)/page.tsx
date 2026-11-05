@@ -97,10 +97,12 @@ export default function HomePage() {
             grid's width cap — otherwise it drifts hundreds of pixels to the
             right of "Best sellers" below it on a wide screen. The cards keep
             their cap; only this row follows the site width. */}
-        <div className="mb-6 flex items-end justify-between gap-6">
-          <div>
-            <h2 className="text-[24px] font-bold text-ink">Shop by Category</h2>
-            <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-gray-500">
+        <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6 sm:gap-6">
+          <div className="min-w-0">
+            <h2 className="text-[20px] font-bold text-ink sm:text-[24px]">
+              Shop by Category
+            </h2>
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-gray-500 sm:text-[13.5px]">
               Everything we sell, by what it is — genuine stock, warranted,
               and dispatched the same working day.
             </p>
@@ -135,7 +137,7 @@ export default function HomePage() {
                       studio shot on white to a photograph of a console
                       standing in a room, and cropping them to a common
                       frame is what makes a strip of them look accidental. */}
-                  <div className="relative bg-gray-50 p-3 sm:p-4">
+                  <div className="relative bg-gray-50 p-2.5 sm:p-4">
                     <div
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_80%_at_28%_45%,rgba(0,113,197,0.10),transparent_70%)]"
@@ -143,10 +145,15 @@ export default function HomePage() {
 
                     {/* grid-rows-1 matters: with an auto row the cells size
                         to the photographs' own height and the pictures spill
-                        out over the copy below. */}
-                    <div className="relative grid h-[300px] grid-cols-[1.35fr_1fr] grid-rows-1 gap-3 sm:h-[380px] sm:gap-4 lg:h-[420px]">
+                        out over the copy below.
+
+                        On a phone the strip is shorter and the supporting
+                        photographs sit side by side underneath the hero one,
+                        rather than in a narrow column beside it — a column
+                        that narrow crops the controllers in half. */}
+                    <div className="relative grid h-[210px] grid-cols-1 grid-rows-[1.35fr_1fr] gap-2 sm:h-[380px] sm:grid-cols-[1.35fr_1fr] sm:grid-rows-1 sm:gap-4 lg:h-[420px]">
                       {/* Hero */}
-                      <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-4 shadow-card">
+                      <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-3 shadow-card sm:p-4">
                         {hero?.image && (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img
@@ -159,11 +166,11 @@ export default function HomePage() {
                       </div>
 
                       {/* The two supporting products */}
-                      <div className="grid grid-rows-2 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:grid-rows-2 sm:gap-4">
                         {support.map((p) => (
                           <div
                             key={p.slug}
-                            className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-3 shadow-card"
+                            className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-2.5 shadow-card sm:p-3"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
@@ -178,21 +185,21 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-1 flex-col p-6 sm:p-7">
-                    <h3 className="text-[22px] font-bold text-ink">
+                  <div className="flex flex-1 flex-col p-5 sm:p-7">
+                    <h3 className="text-[19px] font-bold text-ink sm:text-[22px]">
                       {copy?.title ?? cat.name}
                     </h3>
-                    <p className="mt-2 max-w-[52ch] text-[14px] leading-relaxed text-gray-500">
+                    <p className="mt-2 max-w-[52ch] text-[13.5px] leading-relaxed text-gray-500 sm:text-[14px]">
                       {copy?.blurb ?? cat.blurb}
                     </p>
 
-                    <ul className="mt-5 grid gap-x-6 gap-y-2.5 lg:grid-cols-2">
+                    <ul className="mt-4 grid gap-x-6 gap-y-2.5 sm:mt-5 lg:grid-cols-2">
                       {(copy?.points ?? []).map((point) => (
                         <li
                           key={point}
-                          className="flex items-center gap-2 text-[13.5px] text-gray-600"
+                          className="flex items-start gap-2 text-[13px] text-gray-600 sm:items-center sm:text-[13.5px]"
                         >
-                          <Check className="h-4 w-4 shrink-0 text-brand" />
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand sm:mt-0" />
                           <span>{point}</span>
                         </li>
                       ))}
@@ -200,7 +207,7 @@ export default function HomePage() {
 
                     {/* mt-auto keeps the button on the baseline of the card
                         when one category lists more products than the other. */}
-                    <div className="mt-auto pt-6">
+                    <div className="mt-auto pt-5 sm:pt-6">
                       <span className="btn btn-primary gap-2">
                         {copy?.cta ?? `Shop ${cat.name}`}
                         <ArrowRight className="h-4 w-4" />
@@ -218,11 +225,13 @@ export default function HomePage() {
       <section className="border-y border-gray-200">
         {/* The same container as every other section, so the row lines up
             with the categories above it and the trust section below. */}
-        <div className="container-x py-14">
-          <div className="mb-8 flex items-end justify-between gap-6">
-            <div>
-              <h2 className="text-[22px] font-bold text-ink">Best sellers</h2>
-              <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-gray-500">
+        <div className="container-x py-11 sm:py-14">
+          <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8 sm:gap-6">
+            <div className="min-w-0">
+              <h2 className="text-[20px] font-bold text-ink sm:text-[22px]">
+                Best sellers
+              </h2>
+              <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-gray-500 sm:text-[13.5px]">
                 The hardware our customers keep coming back for — all
                 genuine, all in stock, all ready to go out.
               </p>
@@ -235,7 +244,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-9 lg:grid-cols-5">
             {featured.map((p) => (
               <BestSellerCard key={p.slug} product={p} />
             ))}

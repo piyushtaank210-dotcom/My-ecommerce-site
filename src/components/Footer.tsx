@@ -32,7 +32,7 @@ export function Footer() {
   return (
     <footer className="mt-20 border-t border-gray-200 bg-gray-50">
       <div className="container-x">
-        <div className="grid gap-8 border-b border-gray-200 py-10 sm:grid-cols-3">
+        <div className="grid gap-8 border-b border-gray-200 py-9 sm:grid-cols-3 sm:py-10">
           {PROMISES.map(({ Icon, title, body }) => (
             <div key={title} className="flex gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand">
@@ -48,8 +48,8 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="grid gap-10 py-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 py-9 sm:grid-cols-2 sm:gap-10 sm:py-10 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="col-span-2 sm:col-span-1">
             <Link href="/" className="inline-block" aria-label="ConsoleSeller Home">
               <Image
                 src="/logo.png"

@@ -194,7 +194,7 @@ export function TrustSection() {
       </div>
 
       {/* The awkward cases, and the details to check us against */}
-      <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 sm:p-8">
           <h3 className="text-[19px] font-bold text-ink">When something goes wrong</h3>
           <p className="mt-2 text-[13.5px] leading-relaxed text-gray-500">
@@ -233,7 +233,7 @@ export function TrustSection() {
                   <dt className="text-[11px] font-bold uppercase tracking-[0.13em] text-white/45">
                     {label}
                   </dt>
-                  <dd className="mt-1 text-[13.5px] leading-relaxed text-white/85">
+                  <dd className="mt-1 break-words text-[13.5px] leading-relaxed text-white/85">
                     {href ? (
                       <a href={href} className="hover:underline">
                         {value}

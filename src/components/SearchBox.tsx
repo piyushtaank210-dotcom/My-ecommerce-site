@@ -11,8 +11,13 @@ type Suggestion = Pick<
   "slug" | "name" | "brand" | "price" | "image"
 >;
 
-export function SearchBox() {
-  const [query, setQuery] = useState("");
+export function SearchBox({
+  initialQuery = "",
+}: {
+  /** The term to start with — the search results page passes its own query. */
+  initialQuery?: string;
+}) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,7 +97,7 @@ export function SearchBox() {
                 setResults([]);
               }}
               aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 transition-colors hover:text-ink"
+              className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded text-gray-400 transition-colors hover:text-ink sm:right-2.5 sm:h-auto sm:w-auto sm:p-1"
             >
               <X className="h-3.5 w-3.5" />
             </button>

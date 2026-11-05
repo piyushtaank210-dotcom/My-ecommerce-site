@@ -21,7 +21,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const user = db.prepare("SELECT id FROM users WHERE email = ?").get("admin@playforge.test");
+const user = db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
+if (!user) throw new Error("no admin account to sign in as");
 const token = randomBytes(32).toString("hex");
 db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(
   token,

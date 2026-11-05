@@ -115,7 +115,7 @@ function Block({ block }: { block: PolicyBlock }) {
   switch (block.kind) {
     case "p":
       return (
-        <p className="text-[14px] leading-[1.75] text-gray-600">
+        <p className="break-words text-[14px] leading-[1.75] text-gray-600">
           <Placeholders text={block.text} />
         </p>
       );
@@ -133,7 +133,7 @@ function Block({ block }: { block: PolicyBlock }) {
           {block.items.map((item, i) => (
             <li key={i} className="flex gap-3 text-[14px] leading-[1.7] text-gray-600">
               <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" />
-              <span>
+              <span className="min-w-0 break-words">
                 <Placeholders text={item} />
               </span>
             </li>
@@ -149,7 +149,7 @@ function Block({ block }: { block: PolicyBlock }) {
               <span className="tnum mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-tint text-[11px] font-bold text-brand">
                 {i + 1}
               </span>
-              <span>
+              <span className="min-w-0 break-words">
                 <Placeholders text={item} />
               </span>
             </li>

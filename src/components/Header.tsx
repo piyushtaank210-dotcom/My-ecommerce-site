@@ -25,11 +25,11 @@ export async function Header() {
           the right-hand group weigh. Nothing here is absolutely
           positioned, so the whole thing reflows with the viewport.
         */}
-        <div className="grid h-16 grid-cols-[auto_1fr] items-center gap-3 lg:h-[72px] lg:grid-cols-[1fr_auto_1fr] lg:gap-8">
+        <div className="grid h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3 lg:h-[72px] lg:grid-cols-[1fr_auto_1fr] lg:gap-8">
           {/* Left — the brand */}
           <Link
             href="/"
-            className="flex shrink-0 items-center justify-self-start"
+            className="flex min-w-0 items-center justify-self-start"
             aria-label="ConsoleSeller Home"
           >
             <Image
@@ -38,7 +38,7 @@ export async function Header() {
               width={180}
               height={35}
               priority
-              className="h-8 w-auto object-contain sm:h-9"
+              className="h-auto w-[clamp(112px,38vw,164px)] object-contain sm:h-9 sm:w-auto"
             />
           </Link>
 
@@ -46,7 +46,7 @@ export async function Header() {
           <MainNav />
 
           {/* Right — search, sign in, cart */}
-          <div className="flex min-w-0 items-center justify-end gap-1">
+          <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
             <Link
               href="/search"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink md:hidden"
@@ -63,7 +63,7 @@ export async function Header() {
               <div className="group relative">
                 <Link
                   href="/account"
-                  className="flex h-10 items-center gap-2 rounded-lg px-2.5 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink"
+                  className="flex h-10 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
                 >
                   <User className="h-[18px] w-[18px]" />
                   {/* Icons only below xl — the text would squeeze the
@@ -105,7 +105,7 @@ export async function Header() {
             ) : (
               <Link
                 href="/login"
-                className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink"
+                className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
               >
                 <User className="h-[18px] w-[18px]" />
                 <span className="hidden xl:inline">Sign in</span>
@@ -114,7 +114,7 @@ export async function Header() {
 
             <Link
               href="/cart"
-              className="relative flex h-10 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-ink"
+              className="relative flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
               aria-label={`Cart, ${cartCount} items`}
             >
               <ShoppingCart className="h-[18px] w-[18px]" />

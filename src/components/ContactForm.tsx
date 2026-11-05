@@ -28,7 +28,7 @@ export function ContactForm() {
 
   if (sent) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
         <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-tint text-brand">
           <CheckCircle2 className="h-6 w-6" />
         </span>

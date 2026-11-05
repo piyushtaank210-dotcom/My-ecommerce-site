@@ -41,7 +41,7 @@ export function MobileMenu() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="grid h-10 w-10 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 lg:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>

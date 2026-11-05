@@ -4,6 +4,7 @@ import { PackageSearch } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SortSelect } from "@/components/Filters";
+import { SearchBox } from "@/components/SearchBox";
 import { getProducts, countProducts } from "@/lib/queries";
 import type { SortKey } from "@/lib/types";
 
@@ -32,13 +33,20 @@ export default async function SearchPage({
       <Breadcrumbs items={[{ label: "Search" }]} />
 
       <header className="mb-6">
-        <h1 className="text-[28px] font-bold text-ink">
+        <h1 className="text-[22px] font-bold text-ink sm:text-[28px]">
           {q ? `Results for “${q}”` : "All products"}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-gray-500">
           {total} {total === 1 ? "product" : "products"}
         </p>
       </header>
+
+      {/* The header's search box is hidden on a phone, so the page carries
+          its own — otherwise there would be no way to change the search from
+          a phone at all. */}
+      <div className="mb-6 md:hidden">
+        <SearchBox initialQuery={q} />
+      </div>
 
       <div className="mb-6 flex justify-end border-y border-gray-200 py-3">
         <div className="w-full sm:w-52">

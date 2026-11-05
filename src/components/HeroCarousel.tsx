@@ -75,7 +75,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Featured"
-      className="relative isolate flex min-h-[34rem] touch-pan-y flex-col overflow-hidden bg-ink sm:min-h-[40rem] lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
+      className="relative isolate flex min-h-[30rem] touch-pan-y flex-col overflow-hidden bg-ink sm:min-h-[36rem] lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocusCapture={() => setHovered(true)}
@@ -137,7 +137,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           they cross-fade. On a narrow screen it sits along the bottom.
           The row sits in the site's own frame, so the headline lines up
           with the header above it however wide the screen is. */}
-      <div className="container-x relative flex flex-1 flex-col justify-end pb-7 pt-20 lg:justify-center lg:pb-0">
+      <div className="container-x relative flex flex-1 flex-col justify-end pb-6 pt-16 sm:pb-7 sm:pt-20 lg:justify-center lg:pb-0">
         <div
           className={`w-full max-w-[42rem] ${
             active.side === "right" ? "lg:ml-auto" : ""
@@ -165,7 +165,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   )}
 
                   <h1
-                    className={`hero-title mt-5 max-w-[15ch] text-[clamp(2.25rem,4.4vw,3.9rem)] font-extrabold leading-[1.04] tracking-[-0.03em] text-white ${
+                    className={`hero-title mt-4 max-w-[15ch] text-[clamp(1.9rem,4.4vw,3.9rem)] font-extrabold leading-[1.06] tracking-[-0.03em] text-white sm:mt-5 ${
                       on ? "hero-rise" : ""
                     }`}
                     style={on ? { animationDelay: "90ms" } : undefined}
@@ -175,7 +175,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 
                   {s.body && (
                     <p
-                      className={`mt-5 max-w-[48ch] text-[15px] leading-relaxed text-white/85 sm:text-[16.5px] ${
+                      className={`mt-4 max-w-[48ch] text-[14.5px] leading-relaxed text-white/85 sm:mt-5 sm:text-[16.5px] ${
                         on ? "hero-rise" : ""
                       }`}
                       style={on ? { animationDelay: "180ms" } : undefined}
@@ -185,19 +185,19 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   )}
 
                   <div
-                    className={`mt-8 flex flex-wrap items-center gap-3 sm:gap-4 ${
+                    className={`mt-6 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-4 ${
                       on ? "hero-rise" : ""
                     }`}
                     style={on ? { animationDelay: "260ms" } : undefined}
                   >
                     {s.primary && (
-                      <Link href={s.primary.href} className="btn-invert">
+                      <Link href={s.primary.href} className="btn-invert flex-1 sm:flex-none">
                         {s.primary.label}
                         <ChevronRight className="h-4 w-4" />
                       </Link>
                     )}
                     {s.secondary && (
-                      <Link href={s.secondary.href} className="btn-outline-invert group">
+                      <Link href={s.secondary.href} className="btn-outline-invert group flex-1 sm:flex-none">
                         {s.secondary.label}
                         <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                       </Link>
@@ -206,7 +206,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 
                   {s.note && (
                     <p
-                      className={`mt-6 text-[12.5px] text-white/65 ${
+                      className={`mt-5 text-[12.5px] text-white/65 sm:mt-6 ${
                         on ? "hero-rise" : ""
                       }`}
                       style={on ? { animationDelay: "330ms" } : undefined}
@@ -223,12 +223,12 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 
       {/* Slide controls — dots and counter on the left, arrows on the right.
           In the site's own frame, so they line up with the header. */}
-      <div className="container-x relative flex items-center justify-between gap-4 pb-8 pt-2 sm:pb-10">
+      <div className="container-x relative flex items-center justify-between gap-3 pb-6 pt-2 sm:gap-4 sm:pb-10">
         {count > 1 && (
           <>
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
               <div
-                className="flex items-center gap-2.5"
+                className="flex items-center gap-1.5 sm:gap-2.5"
                 role="tablist"
                 aria-label="Choose slide"
               >
@@ -240,7 +240,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     aria-label={s.title}
                     aria-current={i === index}
                     onClick={() => setIndex(i)}
-                    className="group h-6 p-0"
+                    className="group h-8 p-0 sm:h-6"
                   >
                     {i === index ? (
                       <span className="block h-1 w-8 overflow-hidden rounded-full bg-white/30">
@@ -259,28 +259,28 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 ))}
               </div>
 
-              <p className="tnum text-[12px] font-medium tracking-[0.14em] text-white/70">
+              <p className="tnum shrink-0 text-[11px] font-medium tracking-[0.12em] text-white/70 sm:text-[12px] sm:tracking-[0.14em]">
                 {String(index + 1).padStart(2, "0")} /{" "}
                 {String(count).padStart(2, "0")}
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => go(-1)}
                 aria-label="Previous slide"
-                className="grid h-9 w-9 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
+                className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
               >
-                <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                <ChevronLeft className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
               </button>
               <button
                 type="button"
                 onClick={() => go(1)}
                 aria-label="Next slide"
-                className="grid h-9 w-9 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
+                className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
               >
-                <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                <ChevronRight className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
               </button>
             </div>
           </>

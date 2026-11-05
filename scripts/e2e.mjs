@@ -5,8 +5,9 @@
  *   npm run e2e                       # against http://localhost:3000
  *   BASE_URL=http://localhost:3001 npm run e2e
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -115,7 +116,11 @@ try {
   console.log("→ launching Chrome");
   const launched = await launchChrome({
     port: PORT,
-    profile: join(ROOT, ".chrome-profile"),
+    // The Chrome profile lives in the OS temp directory, never inside the
+    // project: Turbopack watches the whole project tree, and a profile Chrome
+    // holds locked there panics it during a CSS rebuild — the server keeps
+    // answering 200 while the client bundle stays dead and no button works.
+    profile: join(tmpdir(), "consoleseller-e2e-chrome"),
     dir: SHOTS,
   });
   chrome = launched.chrome;
@@ -751,8 +756,8 @@ try {
     /begins on the date we approve/i.test(refundText)
   );
   check(
-    "refund policy leaves the return window as a placeholder",
-    /\[INSERT RETURN WINDOW/.test(refundText)
+    "refund policy has no placeholder left in it",
+    !/\[INSERT /.test(refundText)
   );
   await cdp.shot("15-policies", true);
 
@@ -797,10 +802,28 @@ try {
   // The admin panel is driven through a real sign-in, so the session, the
   // redirects and the client components are all exercised together.
   console.log("\n→ back office");
-  const ADMIN_PASSWORD = process.env.PF_ADMIN_PASSWORD ?? "playforge-admin-1";
+
+  // The account the local environment file names — that is the one whose
+  // password it also holds. The scripts do not load .env.local themselves,
+  // so it is read here. If the file names nothing, fall back to whichever
+  // account holds the admin role.
+  const localEnv = existsSync(join(ROOT, ".env.local"))
+    ? readFileSync(join(ROOT, ".env.local"), "utf8")
+    : "";
+  const ADMIN_EMAIL =
+    process.env.PF_ADMIN_EMAIL ??
+    localEnv.match(/^PF_ADMIN_EMAIL="(.*)"/m)?.[1] ??
+    new DatabaseSync(join(ROOT, "data/store.db"))
+      .prepare("SELECT email FROM users WHERE role = 'admin' ORDER BY id LIMIT 1")
+      .get()?.email ??
+    "consoleseller.in@gmail.com";
+  const ADMIN_PASSWORD =
+    process.env.PF_ADMIN_PASSWORD ??
+    localEnv.match(/^PF_ADMIN_PASSWORD="(.*)"/m)?.[1] ??
+    "myconsole@121";
 
   await cdp.goto(`${BASE}/login`);
-  await cdp.evaluate(setInput("email", "admin@playforge.test"));
+  await cdp.evaluate(setInput("email", ADMIN_EMAIL));
   await cdp.evaluate(setInput("password", ADMIN_PASSWORD));
   await sleep(200);
   await cdp.evaluate(clickByText("Sign in"));
@@ -1599,6 +1622,29 @@ try {
     await restoreStock();
   } catch (err) {
     console.error("  ! the stock could not be put back:", err.message);
+  }
+  // The account this run registered goes too. It is removed through the
+  // back office's own delete endpoint — the same way the products this run
+  // created are removed — so the store is left as it was found rather than
+  // collecting a test account on every run.
+  //
+  // The guard is deliberate: only an address shaped like this run's own
+  // fixture is ever removed, so no real account can be deleted by mistake.
+  try {
+    if (!/^e2e\d+@example\.com$/.test(ACCOUNT.email)) {
+      throw new Error(`refusing to remove ${ACCOUNT.email}`);
+    }
+    const admin = new DatabaseSync(join(ROOT, "data/store.db"))
+      .prepare("SELECT id FROM users WHERE email = ?")
+      .get(ACCOUNT.email);
+    if (admin) {
+      await cdp.evaluate(
+        `fetch('/api/admin/users/${admin.id}', { method: 'DELETE' }).then(r => r.text()).then(() => 'OK')`
+      );
+      console.log(`  ✓ the test account ${ACCOUNT.email} was removed`);
+    }
+  } catch (err) {
+    console.error("  ! the test account could not be removed:", err.message);
   }
   chrome?.kill();
   await sleep(300);

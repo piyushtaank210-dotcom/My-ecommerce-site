@@ -90,7 +90,7 @@ export function AuthForm({
             type="button"
             onClick={() => setShowPassword((v) => !v)}
             aria-label={showPassword ? "Hide password" : "Show password"}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1.5 text-gray-400 transition-colors hover:text-ink"
+            className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded text-gray-400 transition-colors hover:text-ink sm:right-2.5 sm:h-auto sm:w-auto sm:p-1.5"
           >
             {showPassword ? (
               <EyeOff className="h-4 w-4" />

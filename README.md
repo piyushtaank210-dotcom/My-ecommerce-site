@@ -1,6 +1,6 @@
 # ConsoleSeller — Consoles & Gaming Accessories
 
-Official repository for **ConsoleSeller** ([consoleseller.com](https://consoleseller.com)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 5-day return, replacement & refund management system.
+Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 5-day return, replacement & refund management system.
 
 **Stack:** Next.js 16 (App Router, Turbopack, React 19) · Tailwind CSS v4 · SQLite via Node's native `node:sqlite` · Zod. Clean, zero external runtime infrastructure dependencies, fast local setup.
 
@@ -26,8 +26,8 @@ The seed creates initial staff accounts for the back office:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@consoleseller.com` | `consoleseller-admin-1` |
-| Support | `support@consoleseller.com` | `consoleseller-support-1` |
+| Admin | `consoleseller.in@gmail.com` | `myconsole@121` |
+| Support | `support@consoleseller.in` | `consoleseller-support-1` |
 
 Override them with `PF_ADMIN_EMAIL`, `PF_ADMIN_PASSWORD`, `PF_SUPPORT_EMAIL`, and `PF_SUPPORT_PASSWORD` in your `.env.local` if needed. `npm run staff` adds staff accounts to an existing database without rebuilding it, and `npm run set-role <email> <role>` modifies an existing account's role.
 

@@ -20,7 +20,7 @@ const doc: PolicyDoc = {
       blocks: [
         {
           kind: "p",
-          text: "These Terms of Service (\"Terms\") form a binding agreement between you and Console Seller (\"ConsoleSeller\", \"we\", \"us\"), the operator of the gaming products store at https://consoleseller.com. We sell consoles, controllers and gaming accessories, including PlayStation 5 consoles, PlayStation and DualSense controllers, Xbox consoles, Xbox wireless controllers and related accessories, to customers in India.",
+          text: "These Terms of Service (\"Terms\") form a binding agreement between you and Console Seller (\"ConsoleSeller\", \"we\", \"us\"), the operator of the gaming products store at https://consoleseller.in. We sell consoles, controllers and gaming accessories, including PlayStation 5 consoles, PlayStation and DualSense controllers, Xbox consoles, Xbox wireless controllers and related accessories, to customers in India.",
         },
         {
           kind: "p",
@@ -295,10 +295,10 @@ const doc: PolicyDoc = {
           kind: "ul",
           items: [
             "Business name: Console Seller",
-            "Customer support: piyushtaank210@gmail.com",
+            "Customer support: consoleseller.in@gmail.com",
             "Telephone: +91 98760 22697",
             "Registered / business address: H.No. 193, Ranchi Colony, Tharike Threekey, Ludhiana, Punjab - 142021",
-            "Grievance Officer: Piyush Taank, piyushtaank210@gmail.com, +91 98760 22697",
+            "Grievance Officer: Piyush Taank, consoleseller.in@gmail.com, +91 98760 22697",
           ],
         },
         {

@@ -36,7 +36,7 @@ export function AccountNav({ items }: { items: AccountNavItem[] }) {
       : pathname.startsWith(href);
 
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-gray-200">
+    <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-gray-200">
       {items.map((item) => {
         const Icon = ICONS[item.icon];
         const active = isActive(item.href);

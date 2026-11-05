@@ -98,9 +98,9 @@ export default async function ProductPage({
               <h2 className="mb-3 text-[15px] font-bold text-ink">Specifications</h2>
               <dl className="divide-y divide-gray-200 rounded-xl border border-gray-200">
                 {specRows.map((row) => (
-                  <div key={row.label} className="flex justify-between gap-6 px-4 py-2.5">
-                    <dt className="text-[13.5px] text-gray-500">{row.label}</dt>
-                    <dd className="text-right text-[13.5px] font-medium text-ink">
+                  <div key={row.label} className="flex justify-between gap-3 px-4 py-2.5 sm:gap-6">
+                    <dt className="min-w-0 text-[13.5px] text-gray-500">{row.label}</dt>
+                    <dd className="min-w-0 break-words text-right text-[13.5px] font-medium text-ink">
                       {row.value}
                     </dd>
                   </div>
@@ -143,21 +143,21 @@ export default async function ProductPage({
               </h2>
               <dl className="space-y-1.5 text-[13px]">
                 {weight && (
-                  <div className="flex justify-between gap-6">
-                    <dt className="text-gray-500">Weight</dt>
-                    <dd className="font-medium text-ink">{weight}</dd>
+                  <div className="flex justify-between gap-3 sm:gap-6">
+                    <dt className="min-w-0 text-gray-500">Weight</dt>
+                    <dd className="min-w-0 break-words font-medium text-ink">{weight}</dd>
                   </div>
                 )}
                 {box && (
-                  <div className="flex justify-between gap-6">
-                    <dt className="text-gray-500">Package</dt>
-                    <dd className="tnum font-medium text-ink">{box} cm</dd>
+                  <div className="flex justify-between gap-3 sm:gap-6">
+                    <dt className="min-w-0 text-gray-500">Package</dt>
+                    <dd className="tnum min-w-0 break-words font-medium text-ink">{box} cm</dd>
                   </div>
                 )}
                 {product.warranty && (
-                  <div className="flex justify-between gap-6">
-                    <dt className="text-gray-500">Warranty</dt>
-                    <dd className="text-right font-medium text-ink">
+                  <div className="flex justify-between gap-3 sm:gap-6">
+                    <dt className="min-w-0 text-gray-500">Warranty</dt>
+                    <dd className="min-w-0 break-words text-right font-medium text-ink">
                       {product.warranty}
                     </dd>
                   </div>

@@ -126,7 +126,7 @@ function AddressCard({
             type="button"
             onClick={onEdit}
             aria-label={`Edit ${address.label}`}
-            className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink"
+            className="grid h-10 w-10 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink sm:h-8 sm:w-8"
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -135,7 +135,7 @@ function AddressCard({
             onClick={remove}
             disabled={pending}
             aria-label={`Remove ${address.label}`}
-            className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            className="grid h-10 w-10 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:h-8 sm:w-8"
           >
             {pending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -166,7 +166,7 @@ function AddressCard({
           type="button"
           onClick={makeDefault}
           disabled={pending}
-          className="mt-4 text-[12.5px] font-medium text-brand hover:underline disabled:opacity-50"
+          className="mt-4 inline-flex min-h-[40px] items-center text-[12.5px] font-medium text-brand hover:underline disabled:opacity-50"
         >
           Make this my default
         </button>
@@ -209,7 +209,7 @@ function AddressForm({
           type="button"
           onClick={onCancel}
           aria-label="Cancel"
-          className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-ink"
+          className="grid h-10 w-10 place-items-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-ink sm:h-8 sm:w-8"
         >
           <X className="h-4 w-4" />
         </button>

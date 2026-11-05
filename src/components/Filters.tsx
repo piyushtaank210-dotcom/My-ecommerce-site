@@ -75,7 +75,7 @@ export function CategoryFilter({
             type="button"
             onClick={() => select(c.slug || undefined)}
             aria-pressed={on}
-            className={`rounded-full border px-3 py-1 text-[12.5px] font-medium transition-colors ${
+            className={`rounded-full border px-3 py-2 text-[12.5px] font-medium transition-colors sm:py-1 ${
               on
                 ? "border-brand bg-brand text-white"
                 : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
@@ -125,7 +125,7 @@ export function BrandFilter({
             type="button"
             onClick={() => toggle(b)}
             aria-pressed={on}
-            className={`rounded-full border px-3 py-1 text-[12.5px] font-medium transition-colors ${
+            className={`rounded-full border px-3 py-2 text-[12.5px] font-medium transition-colors sm:py-1 ${
               on
                 ? "border-brand bg-brand text-white"
                 : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"

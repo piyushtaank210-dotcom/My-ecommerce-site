@@ -111,7 +111,7 @@
     border-radius: 0.5rem;
     font-weight: 600;
     font-size: 0.875rem;
-    line-height: 1;
+    line-height: 1.1;
     padding: 0.7rem 1.1rem;
     border: 1px solid transparent;
     cursor: pointer;
@@ -165,6 +165,16 @@
   .btn-sm {
     padding: 0.45rem 0.75rem;
     font-size: 0.8125rem;
+  }
+
+  /* On a touch screen a button has to be big enough to hit with a thumb.
+     The rules above describe the desktop design and are left alone; this
+     raises the floor only for a device that is actually being touched. */
+  @media (pointer: coarse) {
+    .btn,
+    .btn-sm {
+      min-height: 2.5rem;
+    }
   }
 
   /* The hero sits on top of a photograph, so its primary button is the
@@ -380,6 +390,51 @@
 
   /* Keeps the Tailwind v4 scan in step with the carousel's utility classes. */
   /* The hero carousel places its copy, photo and dots on an explicit grid. */
+}
+
+/*
+  Phone-sized screens.
+  ---------------------------------------------------------------------------
+  The rules above describe the desktop design and are left exactly as they
+  were. The ones here are the phone adaptations: the hero's buttons lose
+  their wide letter-spacing and padding so two of them fit on one line, and
+  the page respects the notch and the home indicator on a phone that has
+  either.
+*/
+@media (max-width: 639px) {
+  .btn-invert,
+  .btn-outline-invert {
+    padding: 0.9rem 1.1rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+  }
+}
+
+/*
+  Safe areas.
+  ---------------------------------------------------------------------------
+  A phone with a notch or a home indicator cuts into the edges of the
+  screen. The gutters are padded by the safe area on top of their own
+  width, so nothing sits under the camera or the gesture bar.
+*/
+@supports (padding: max(0px)) {
+  .container-x {
+    padding-left: max(
+      clamp(1.25rem, 3.5vw, 4rem),
+      env(safe-area-inset-left)
+    );
+    padding-right: max(
+      clamp(1.25rem, 3.5vw, 4rem),
+      env(safe-area-inset-right)
+    );
+  }
+}
+
+@supports (padding: max(0px)) {
+  header {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* From the desktop breakpoint the copy moves to one side of the

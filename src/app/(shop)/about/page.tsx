@@ -172,7 +172,7 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <aside className="self-start rounded-2xl bg-ink p-8 sm:p-10">
+          <aside className="self-start rounded-2xl bg-ink p-5 sm:p-10">
             <span aria-hidden="true" className="block h-1 w-12 rounded-full bg-brand" />
             <blockquote className="mt-7 text-[20px] font-semibold leading-[1.4] tracking-[-0.02em] text-white sm:text-[22px]">
               If it is on the site, it is on the shelf, it is genuine, and it
@@ -283,7 +283,7 @@ export default function AboutPage() {
 
       {/* Call to action */}
       <section className="container-x py-16 sm:py-20">
-        <div className="flex flex-col items-start gap-6 rounded-2xl bg-brand px-7 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-10">
+        <div className="flex flex-col items-start gap-6 rounded-2xl bg-brand px-5 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:py-10">
           <div>
             <h2 className="text-[22px] font-bold text-white sm:text-[26px]">
               Browse the full catalogue

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "ConsoleSeller — Consoles & Gaming Accessories e-commerce store with return, replacement & refund management system",
   "private": true,
-  "author": "ConsoleSeller <piyushtaank210@gmail.com>",
+  "author": "ConsoleSeller <consoleseller.in@gmail.com>",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -30,7 +30,10 @@
     "check:import": "node scripts/check-import.mjs",
     "check:pages": "node scripts/check-pages.mjs",
     "check:product": "node scripts/check-product-form.mjs",
-    "shot": "node scripts/screenshot.mjs"
+    "check:mobile": "node scripts/audit-mobile.mjs && node scripts/check-labels.mjs",
+    "clean:e2e": "node scripts/clean-e2e-accounts.mjs",
+    "shot": "node scripts/screenshot.mjs",
+    "shot:at": "node scripts/shot-at.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -16,10 +16,10 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
+import { tokenForRole } from "./lib/session.mjs";
 import {
   clickByText,
   launchChrome,
@@ -37,18 +37,7 @@ const WITH_OPTIONS = "dualsense-white";
 
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-function tokenFor(email) {
-  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
-  if (!user) throw new Error(`no such user ${email}`);
-  const token = randomBytes(32).toString("hex");
-  const expires = new Date(Date.now() + 3600_000).toISOString();
-  db.prepare(
-    "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)"
-  ).run(token, user.id, expires);
-  return token;
-}
-
-const admin = tokenFor("admin@playforge.test");
+const admin = tokenForRole(db, "admin");
 
 /** The stock the product started the run with, so it can be put back. */
 const ORIGINAL_STOCK = db
@@ -152,7 +141,7 @@ console.log("\n→ the inventory page and its API");
     `status ${anon.status}`
   );
 
-  const support = tokenFor("support@playforge.test");
+  const support = tokenForRole(db, "support");
   const asSupport = await api("/api/admin/inventory", { cookie: support });
   check("support can see the stock", asSupport.status === 200);
   const supportAdjust = await api("/api/admin/inventory/adjust", {

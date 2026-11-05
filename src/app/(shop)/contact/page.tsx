@@ -251,7 +251,7 @@ export default function ContactPage() {
 
           {/* Right — the form. */}
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-5 sm:p-6">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-6">
               <h2 className="text-[17px] font-bold text-ink">Send us a message</h2>
               <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
                 Fill in the form and we will reply by email.
@@ -412,7 +412,7 @@ export default function ContactPage() {
       {/* The details you can check us against, and the policies. */}
       <section className="bg-ink">
         <div className="container-x py-14 sm:py-16">
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
             <div>
               <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-white/50">
                 Store details
@@ -491,11 +491,15 @@ export default function ContactPage() {
                   value: "No account needed. Guest checkout is always available.",
                 },
               ].map((d) => (
-                <div key={d.label} className="flex items-start gap-4 py-4">
-                  <dt className="w-[110px] shrink-0 text-[11px] font-bold uppercase tracking-[0.13em] text-white/45">
+                <div key={d.label} className="flex items-start gap-3 py-4 sm:gap-4">
+                  <dt className="w-[84px] shrink-0 text-[11px] font-bold uppercase tracking-[0.13em] text-white/45 sm:w-[110px]">
                     {d.label}
                   </dt>
-                  <dd className="text-[13.5px] leading-relaxed text-white/85">
+                  {/* min-w-0 lets the value shrink inside the flex row, and
+                      break-words stops a long unbroken string — the email
+                      address — pushing the panel past the edge of a narrow
+                      screen. */}
+                  <dd className="min-w-0 break-words text-[13.5px] leading-relaxed text-white/85">
                     {d.href ? (
                       <a href={d.href} className="hover:underline">
                         {d.value}

@@ -277,7 +277,7 @@ const doc: PolicyDoc = {
         {
           kind: "ol",
           items: [
-            "Contact our customer support team — use the contact form on this website, or email piyushtaank210@gmail.com.",
+            "Contact our customer support team — use the contact form on this website, or email consoleseller.in@gmail.com.",
             "Give us your order number and the reason for the request. The order number is on your order confirmation and in the Orders section of your account.",
             "Share supporting photographs or videos where they are relevant — for example the damage, the fault, or the contents of the box.",
             "Wait for our confirmation. We will tell you whether the request is approved and, if a return is needed, where to send the product.",
@@ -303,7 +303,7 @@ const doc: PolicyDoc = {
           kind: "ul",
           items: [
             "Business name: Console Seller",
-            "Customer support email: piyushtaank210@gmail.com",
+            "Customer support email: consoleseller.in@gmail.com",
             "Customer support phone: +91 98760 22697",
             "Business address: H.No. 193, Ranchi Colony, Tharike Threekey, Ludhiana, Punjab - 142021",
             "Return shipping address: H.No. 193, Ranchi Colony, Tharike Threekey, Ludhiana, Punjab - 142021",

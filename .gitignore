@@ -45,7 +45,6 @@ pnpm-debug.log*
 /.chrome-profile/
 /.chrome-profile-*/
 /.chrome-probe/
-ref_home.html
 
 # Operating System Files
 .DS_Store

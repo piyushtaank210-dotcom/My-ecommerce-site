@@ -10,13 +10,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://consoleseller.com"),
+  metadataBase: new URL("https://consoleseller.in"),
   title: {
     default: "ConsoleSeller — Consoles & Controllers",
     template: "%s · ConsoleSeller",
   },
   description:
-    "Buy gaming consoles and controllers — PS5, PS5 Pro, PS4, Xbox and DualSense on consoleseller.com. Genuine stock with Indian warranty, fast delivery.",
+    "Buy gaming consoles and controllers — PS5, PS5 Pro, PS4, Xbox and DualSense on consoleseller.in. Genuine stock with Indian warranty, fast delivery.",
   icons: {
     icon: "/icon.png",
     apple: "/icon.png",

@@ -12,27 +12,17 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { tokenForRole } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-function tokenFor(email) {
-  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
-  if (!user) throw new Error(`no such user ${email}`);
-  const token = randomBytes(32).toString("hex");
-  db.prepare(
-    "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)"
-  ).run(token, user.id, new Date(Date.now() + 3600_000).toISOString());
-  return token;
-}
-
-const admin = tokenFor("admin@playforge.test");
-const support = tokenFor("support@playforge.test");
+const admin = tokenForRole(db, "admin");
+const support = tokenForRole(db, "support");
 
 let failures = 0;
 function check(label, ok, extra = "") {

@@ -9,13 +9,13 @@ import { randomBytes, scryptSync } from "node:crypto";
 export const STAFF = [
   {
     name: "Store Admin",
-    email: process.env.PF_ADMIN_EMAIL ?? "piyushtaank210@gmail.com",
-    password: process.env.PF_ADMIN_PASSWORD ?? "consoleseller-admin-1",
+    email: process.env.PF_ADMIN_EMAIL ?? "consoleseller.in@gmail.com",
+    password: process.env.PF_ADMIN_PASSWORD ?? "myconsole@121",
     role: "admin",
   },
   {
     name: "Support Desk",
-    email: process.env.PF_SUPPORT_EMAIL ?? "support@consoleseller.com",
+    email: process.env.PF_SUPPORT_EMAIL ?? "support@consoleseller.in",
     password: process.env.PF_SUPPORT_PASSWORD ?? "consoleseller-support-1",
     role: "support",
   },

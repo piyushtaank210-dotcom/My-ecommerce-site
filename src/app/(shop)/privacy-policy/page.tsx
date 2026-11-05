@@ -22,7 +22,7 @@ const doc: PolicyDoc = {
       blocks: [
         {
           kind: "p",
-          text: "ConsoleSeller (\"ConsoleSeller\", \"we\", \"us\") operates the gaming products store at https://consoleseller.com. We sell consoles, controllers and gaming accessories — including PlayStation 5 consoles, PlayStation and DualSense controllers, Xbox consoles, Xbox wireless controllers and related accessories — and we serve customers across India.",
+          text: "ConsoleSeller (\"ConsoleSeller\", \"we\", \"us\") operates the gaming products store at https://consoleseller.in. We sell consoles, controllers and gaming accessories — including PlayStation 5 consoles, PlayStation and DualSense controllers, Xbox consoles, Xbox wireless controllers and related accessories — and we serve customers across India.",
         },
         {
           kind: "p",
@@ -289,7 +289,7 @@ const doc: PolicyDoc = {
         },
         {
           kind: "p",
-          text: "To exercise any of these rights, email piyushtaank210@gmail.com. We will acknowledge your request, verify your identity so that we do not disclose your information to someone else, and respond within the time the law requires. We do not charge for this unless a request is manifestly unfounded or excessive.",
+          text: "To exercise any of these rights, email consoleseller.in@gmail.com. We will acknowledge your request, verify your identity so that we do not disclose your information to someone else, and respond within the time the law requires. We do not charge for this unless a request is manifestly unfounded or excessive.",
         },
         {
           kind: "p",
@@ -325,7 +325,7 @@ const doc: PolicyDoc = {
         },
         {
           kind: "p",
-          text: "If you believe a child has given us personal information, contact us at piyushtaank210@gmail.com and we will delete it. A parent or guardian who believes a child has placed an order should contact us, and we will work to cancel the order and remove the information.",
+          text: "If you believe a child has given us personal information, contact us at consoleseller.in@gmail.com and we will delete it. A parent or guardian who believes a child has placed an order should contact us, and we will work to cancel the order and remove the information.",
         },
       ],
     },
@@ -355,8 +355,8 @@ const doc: PolicyDoc = {
           kind: "ul",
           items: [
             "Business name: Console Seller",
-            "Grievance Officer / Privacy contact: Piyush Taank, piyushtaank210@gmail.com",
-            "Customer support: piyushtaank210@gmail.com",
+            "Grievance Officer / Privacy contact: Piyush Taank, consoleseller.in@gmail.com",
+            "Customer support: consoleseller.in@gmail.com",
             "Telephone: +91 98760 22697",
             "Registered / business address: H.No. 193, Ranchi Colony, Tharike Threekey, Ludhiana, Punjab - 142021",
           ],
