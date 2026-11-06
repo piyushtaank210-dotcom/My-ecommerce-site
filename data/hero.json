@@ -4,6 +4,7 @@
       "id": "showcase",
       "image": "hero-showcase",
       "video": "/hero/hero-showcase.mp4",
+      "video_poster": "/hero/hero-showcase-poster.jpg",
       "alt": "A PlayStation 5 console, a PS5 game disc and two controllers on a neon-lit desk in a gaming room",
       "position": "50% 50%",
       "side": "left",

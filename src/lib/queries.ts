@@ -101,6 +101,7 @@ function mapHeroSlide(r: Row): HeroSlide {
     id: str(r.id),
     image: str(r.image),
     video: strOrNull(r.video),
+    video_poster: strOrNull(r.video_poster),
     alt: str(r.alt),
     image_position: str(r.image_position) || "50% 50%",
     eyebrow: strOrNull(r.eyebrow),

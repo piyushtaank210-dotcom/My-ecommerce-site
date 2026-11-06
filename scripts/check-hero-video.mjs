@@ -30,6 +30,12 @@ const { chrome, cdp } = await launchChrome({
 
 let failures = 0;
 
+/** Records one thing that has to be true, and says so either way. */
+const check = (ok, label) => {
+  if (!ok) failures++;
+  console.log(`   ${ok ? "✓" : "✗"} ${label}`);
+};
+
 try {
   for (const size of SIZES) {
     await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -88,7 +94,87 @@ try {
       `   ${ok ? "✓ as expected" : "✗ WRONG"} — wanted the ${size.wantVideo ? "film" : "photograph"}\n`
     );
   }
-  console.log(failures ? `${failures} size(s) behaved wrongly` : "✓ every size behaves as asked");
+
+  /* ------------------------------------------------------ the film's life */
+
+  console.log("— the hero opens on the film, and the film hands over —");
+
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1280,
+    height: 800,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await cdp.goto(`${BASE}/`);
+  await sleep(1500);
+
+  const opening = await cdp.evaluate(`(() => {
+    const v = document.querySelector('section[aria-roledescription=carousel] video');
+    return {
+      poster: v?.getAttribute('poster') ?? null,
+      playing: v ? !v.paused : null,
+      t: v ? Number(v.currentTime.toFixed(2)) : null,
+    };
+  })()`);
+  console.log(`   film playing     : ${opening.playing ? "yes" : "no"} (t=${opening.t}s)`);
+  console.log(`   poster           : ${opening.poster}`);
+  check(opening.playing === true, "the film is already running when the hero opens");
+  check(
+    Boolean(opening.poster) && opening.poster !== "/hero/hero-showcase.jpg",
+    "the poster is the film's own first frame, not the photograph"
+  );
+
+  // Run the film to its end and see whether the next picture comes up.
+  await cdp.evaluate(`(() => {
+    const v = document.querySelector('section[aria-roledescription=carousel] video');
+    v.currentTime = Math.max(0, v.duration - 0.15);
+    return true;
+  })()`);
+  await sleep(4000);
+
+  const handover = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    return {
+      slide: slide?.getAttribute('aria-label') ?? null,
+      ended: section.querySelector('video')?.ended ?? null,
+    };
+  })()`);
+  console.log(`   after the end    : slide ${handover.slide}`);
+  check(handover.ended === true, "the film ran to its end");
+  check(handover.slide === "2 of 5", "the next picture came up on its own");
+
+  /* -------------------------------------------------- less movement asked */
+
+  console.log("\n— a reader who has asked for less movement —");
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  const reducedRequests = [];
+  cdp.on?.("Network.requestWillBeSent", (p) => {
+    if (p.request?.url?.includes(".mp4")) reducedRequests.push(p.request.url);
+  });
+  await cdp.goto(`${BASE}/`);
+  await sleep(2500);
+
+  const reduced = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const v = section.querySelector('video');
+    const r = v?.getBoundingClientRect();
+    const img = section.querySelector('img')?.getBoundingClientRect();
+    return {
+      filmShown: r ? r.width > 0 && r.height > 0 : false,
+      photoShown: img ? img.width > 0 && img.height > 0 : false,
+    };
+  })()`);
+  console.log(`   film shown       : ${reduced.filmShown ? "yes" : "no"}`);
+  console.log(`   photograph shown : ${reduced.photoShown ? "yes" : "no"}`);
+  console.log(`   film downloaded  : ${reducedRequests.length ? "yes" : "no"}`);
+  check(reduced.filmShown === false, "the film is not shown where movement is unwelcome");
+  check(reduced.photoShown === true, "the photograph carries the slide instead");
+  check(reducedRequests.length === 0, "the film was never downloaded");
+
+  console.log(failures ? `${failures} check(s) failed` : "✓ every check passed");
   if (failures) process.exitCode = 1;
 } finally {
   chrome.kill();

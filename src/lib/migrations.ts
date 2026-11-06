@@ -87,6 +87,11 @@ export function applyMigrations(db: DatabaseSync): void {
   // still looks right where the film is not played.
   add("hero_slides", "video", "video TEXT");
 
+  // The film's own first frame, held as a still. The browser shows it
+  // while the film is still downloading, which is what keeps the hero
+  // from showing the photograph and then jumping to the film.
+  add("hero_slides", "video_poster", "video_poster TEXT");
+
   // Stock, and how low it has to get before anybody is told.
   //
   // Every product and every option carries its own threshold, because a

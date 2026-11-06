@@ -259,6 +259,14 @@ export type HeroSlide = {
    * play it. The picture is still what a phone shows.
    */
   video: string | null;
+  /**
+   * The film's own first frame, held as a still.
+   *
+   * It is what the browser shows while the film is still downloading, so
+   * the picture on screen when the hero opens is the frame the film opens
+   * on — the scene does not jump when the film takes over from the still.
+   */
+  video_poster: string | null;
   alt: string;
   image_position: string;
   eyebrow: string | null;

@@ -24,8 +24,9 @@ const db = new DatabaseSync(join(ROOT, "data/store.db"));
 const upsert = db.prepare(`
   INSERT INTO hero_slides
     (id, image, alt, image_position, eyebrow, title, body,
-     primary_label, primary_href, secondary_label, secondary_href, note, side, position, video)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     primary_label, primary_href, secondary_label, secondary_href, note, side, position,
+     video, video_poster)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     image = excluded.image,
     alt = excluded.alt,
@@ -40,7 +41,8 @@ const upsert = db.prepare(`
     note = excluded.note,
     side = excluded.side,
     position = excluded.position,
-    video = excluded.video
+    video = excluded.video,
+    video_poster = excluded.video_poster
 `);
 
 hero.slides.forEach((s, i) => {
@@ -51,6 +53,14 @@ hero.slides.forEach((s, i) => {
   const video = s.video ?? null;
   if (video && !existsSync(join(ROOT, "public", video.replace(/^\//, "")))) {
     console.warn(`  ! no file for the video on slide "${s.id}" (${video})`);
+  }
+
+  // The still the browser holds while the film downloads. It is the film's
+  // own first frame, so the picture on screen does not change when the
+  // film takes over.
+  const videoPoster = s.video_poster ?? null;
+  if (videoPoster && !existsSync(join(ROOT, "public", videoPoster.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the poster on slide "${s.id}" (${videoPoster})`);
   }
 
   upsert.run(
@@ -68,7 +78,8 @@ hero.slides.forEach((s, i) => {
     s.note ?? null,
     s.side === "right" ? "right" : "left",
     i,
-    video
+    video,
+    videoPoster
   );
 });
 

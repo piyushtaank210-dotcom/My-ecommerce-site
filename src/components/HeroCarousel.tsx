@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { HeroSlide } from "@/lib/types";
 
-/** How long a slide stays on screen before the carousel advances. */
+/** How long a picture slide stays on screen before the carousel advances. */
 const SLIDE_MS = 6000;
 
 /** A drag of at least this many pixels counts as a swipe. */
@@ -19,11 +19,22 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [hidden, setHidden] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [wideEnough, setWideEnough] = useState(false);
+  const [filmLength, setFilmLength] = useState(0);
+  const [filmFailed, setFilmFailed] = useState(false);
   const swipeStart = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Hover, focus and a backgrounded tab all pause the carousel.
   const paused = hovered || hidden;
+
+  // The slide that carries a film. A film decides how long its own slide
+  // lasts: it plays to the end and hands over to the next picture itself.
+  const videoSlide = slides.findIndex((s) => s.video);
+
+  // How long the slide on screen lasts. A slide with a film lasts as long
+  // as the film does; a picture slide lasts for the usual interval.
+  const slideMs =
+    index === videoSlide && filmLength > 0 ? filmLength * 1000 : SLIDE_MS;
 
   const go = useCallback(
     (delta: number) => {
@@ -43,9 +54,9 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }, []);
 
   // A film is only worth playing on a screen with room for it. A phone
-  // keeps the photograph — and never downloads the film either, which is
-  // the point of asking the question here rather than hiding it with
-  // styles.
+  // keeps the photograph: the film's own source rules it out there, so a
+  // phone never downloads the film at all, and this is where the browser
+  // is asked whether there is room for it before it is started.
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     const update = () => setWideEnough(mq.matches);
@@ -56,11 +67,17 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 
   // Advance on a timer. Depending on `index` restarts the countdown whenever
   // the slide changes, whether that was automatic or manual.
+  //
+  // A slide with a film is not timed at all while the film is playing: it
+  // runs to its end and hands over to the next picture itself. The timer
+  // takes over where the film is not playing — on a phone, or if the
+  // browser would not play it — so the carousel never sits on one slide.
   useEffect(() => {
     if (count < 2 || paused || reduced) return;
+    if (index === videoSlide && wideEnough && !filmFailed) return;
     const id = window.setTimeout(() => setIndex((index + 1) % count), SLIDE_MS);
     return () => window.clearTimeout(id);
-  }, [count, index, paused, reduced]);
+  }, [count, index, paused, reduced, videoSlide, wideEnough, filmFailed]);
 
   // Don't burn through the slides while the tab is in the background.
   useEffect(() => {
@@ -71,19 +88,36 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 
   // The film plays while its own slide is on screen, and stops when it is
   // not — and never plays at all where motion is unwelcome.
-  const videoSlide = slides.findIndex((s) => s.video);
-
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (wideEnough && !reduced && !hidden && videoSlide === index) {
-      video.play().catch(() => {
-        /* the browser may refuse; the poster frame stays up */
+    if (videoSlide !== index) {
+      video.pause();
+      return;
+    }
+    // A film that has been watched to the end starts again from the top
+    // when its slide comes round.
+    if (video.ended) {
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* the film has not loaded yet, and starts at the top anyway */
+      }
+    }
+    if (wideEnough && !reduced && !hidden && !hovered && !filmFailed) {
+      video.play().catch((err: unknown) => {
+        const name = (err as { name?: string } | null)?.name;
+        // The browser would not start the film — it wants a gesture first,
+        // or it cannot play the file. The photograph carries the slide
+        // instead, and the carousel goes back to its usual timing.
+        if (name === "NotAllowedError" || name === "NotSupportedError") {
+          setFilmFailed(true);
+        }
       });
     } else {
       video.pause();
     }
-  }, [index, wideEnough, reduced, hidden, videoSlide]);
+  }, [index, wideEnough, reduced, hidden, hovered, videoSlide, filmFailed]);
 
   function onPointerDown(e: React.PointerEvent) {
     swipeStart.current = e.clientX;
@@ -124,10 +158,10 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           that is showing dissolves in while the one leaving softens and
           drifts back — a slow change of scene rather than a cut.
 
-          A slide may also carry a film. The film plays from the tablet
-          breakpoint up, where there is room for it and a thumb on the
-          screen; a phone keeps the photograph, which is also what the film
-          falls back to before it has loaded. */}
+          A slide may also carry a film. The film is on the page from the
+          start and is running when the hero opens; it plays to its end and
+          then hands over to the next picture. A phone keeps the
+          photograph, and never downloads the film at all. */}
       <div className="absolute inset-0 grid select-none">
         {slides.map((s, i) => (
           <div
@@ -141,8 +175,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
             {s.video ? (
               <>
                 {/* The photograph sits underneath. It is what a phone
-                    shows, and it is the poster frame the film is taken
-                    from, so the two are never out of step. */}
+                    shows, and what the slide falls back to when the film
+                    cannot be played at all. */}
                 <Image
                   src={s.image}
                   alt={s.alt}
@@ -156,25 +190,49 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   }`}
                   style={{ objectPosition: s.image_position }}
                 />
-                {/* The film, on a screen with room for it. It is not
-                    rendered on a phone at all, so a phone never downloads
-                    it. */}
-                {wideEnough && !reduced && (
-                  <video
-                    ref={i === videoSlide ? videoRef : undefined}
+                {/* The film. It is in the page from the very first byte, so
+                    it is already running when the hero opens instead of
+                    swapping in over the photograph a moment later.
+
+                    Its poster is the film's own first frame, so the picture
+                    on screen does not change when the film takes over from
+                    the still — the hero opens on the scene the film opens
+                    on, and simply starts moving.
+
+                    The source carries the width and the motion preference,
+                    so a phone — and a reader who has asked for less
+                    movement — never downloads the film at all. */}
+                <video
+                  ref={i === videoSlide ? videoRef : undefined}
+                  poster={s.video_poster ?? s.image}
+                  aria-hidden="true"
+                  autoPlay
+                  muted
+                  playsInline
+                  preload="auto"
+                  tabIndex={-1}
+                  onEnded={() => {
+                    // The film has run to its end: hand over to the next
+                    // picture, which is what the shopper sees next.
+                    if (i !== index) return;
+                    setIndex((n) => (n + 1) % count);
+                  }}
+                  onLoadedMetadata={(e) => {
+                    const d = e.currentTarget.duration;
+                    if (Number.isFinite(d)) setFilmLength(d);
+                  }}
+                  onError={() => setFilmFailed(true)}
+                  className={`hero-film absolute inset-0 h-full w-full object-cover ${
+                    filmFailed ? "opacity-0" : ""
+                  }`}
+                  style={{ objectPosition: s.image_position }}
+                >
+                  <source
                     src={s.video}
-                    poster={s.image}
-                    aria-hidden="true"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="auto"
-                    tabIndex={-1}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    style={{ objectPosition: s.image_position }}
+                    type="video/mp4"
+                    media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"
                   />
-                )}
+                </video>
               </>
             ) : (
               <Image
@@ -321,10 +379,14 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                       <span className="block h-1 w-8 overflow-hidden rounded-full bg-white/30">
                         <span
                           key={s.id}
-                          className={`block h-full w-full origin-left rounded-full bg-white ${
-                            paused ? "" : "hero-progress"
-                          }`}
-                          style={{ animationDuration: `${SLIDE_MS}ms` }}
+                          className="hero-progress block h-full w-full origin-left rounded-full bg-white"
+                          style={{
+                            // A slide with a film is as long as the film is.
+                            animationDuration: `${slideMs}ms`,
+                            // Paused, the bar holds where it is rather than
+                            // jumping to the end and starting again.
+                            animationPlayState: paused ? "paused" : "running",
+                          }}
                         />
                       </span>
                     ) : (
