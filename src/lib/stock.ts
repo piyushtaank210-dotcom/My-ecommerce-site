@@ -121,6 +121,7 @@ export const MOVEMENT_TYPES = [
   "resale",
   "restock",
   "return",
+  "replacement",
   "adjustment",
 ] as const;
 
@@ -131,6 +132,7 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   resale: "Order reopened",
   restock: "Order cancelled",
   return: "Return verified",
+  replacement: "Replacement sent",
   adjustment: "Adjusted",
 };
 
@@ -139,6 +141,7 @@ export const MOVEMENT_TONE: Record<MovementType, string> = {
   resale: "bg-blue-50 text-blue-700",
   restock: "bg-green-50 text-green-700",
   return: "bg-green-50 text-green-700",
+  replacement: "bg-cyan-50 text-cyan-700",
   adjustment: "bg-gray-100 text-gray-700",
 };
 

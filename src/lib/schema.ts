@@ -266,6 +266,11 @@ CREATE TABLE IF NOT EXISTS return_requests (
   replacement_order_id TEXT,
   replacement_courier  TEXT,
   replacement_tracking TEXT,
+  replacement_product_slug TEXT,
+  replacement_variant_id TEXT,
+  replacement_dispatch_date TEXT,
+  replacement_delivery_status TEXT,
+  replacement_delivered_at TEXT,
   created_at           TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -280,7 +285,10 @@ CREATE TABLE IF NOT EXISTS return_items (
   price         INTEGER NOT NULL,
   quantity      INTEGER NOT NULL,
   reason_detail TEXT,
-  qc_decision   TEXT NOT NULL DEFAULT 'pending'
+  qc_decision   TEXT NOT NULL DEFAULT 'pending',
+  replacement_product_slug TEXT,
+  replacement_variant_id TEXT,
+  replacement_quantity INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS return_images (

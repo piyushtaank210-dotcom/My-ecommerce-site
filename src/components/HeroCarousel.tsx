@@ -225,8 +225,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   src={s.image}
                   alt={s.alt}
                   fill
-                  preload={i === 0}
-                  loading={i === 0 ? undefined : "eager"}
+                  loading="eager"
+                  fetchPriority="low"
                   unoptimized
                   sizes="100vw"
                   className={`object-cover transition-transform duration-[6000ms] ease-linear ${
@@ -291,8 +291,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 src={s.image}
                 alt={s.alt}
                 fill
-                preload={i === 0}
-                loading={i === 0 ? undefined : "eager"}
+                loading="eager"
+                fetchPriority="low"
                 /* The photograph is served as it is. The optimiser would
                    re-encode it a second time — the files are already sized
                    for the job — and the browser scales it far better than a

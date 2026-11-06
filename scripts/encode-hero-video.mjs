@@ -1,18 +1,25 @@
 /**
  * Encodes the hero film for the web.
  *
- * Two things matter here, and both were wrong with the film as it first
- * arrived:
+ * Three things matter here, and all three were wrong with the film as it
+ * first arrived:
  *
  *   1. The index (the `moov` atom) has to sit at the *front* of the file
  *      — `+faststart`. With it at the back, a browser has to download the
  *      whole film before it can play a single frame, which is most of the
  *      "buffering" a visitor sees.
  *
- *   2. The bitrate has to be a sane one. The film arrived at nearly
- *      3,000 kb/s — close to transparent, and three times what the
- *      picture needs. At 1,200 kb/s it is the same picture on the screen
- *      and a third of the bytes on the wire.
+ *   2. The frame has to be the shape of the hero. The hero is a wide band
+ *      — about 2.08 to 1 on a desktop — and a 16:9 film put in it is
+ *      cropped by a quarter, which reads as the picture being zoomed in.
+ *      The frame is trimmed to the hero's shape instead, so the browser
+ *      has nothing left to crop.
+ *
+ *   3. The bitrate has to be a sane one, and the frame a shade sharper.
+ *      The film arrived at nearly 3,000 kb/s — close to transparent, and
+ *      three times what the picture needs. At 1,200 kb/s it is the same
+ *      picture on the wire, and the sharpen puts back the crispness the
+ *      smaller file would otherwise lose when a wide screen blows it up.
  *
  * The film has no sound, so the silent audio track is dropped.
  *
@@ -31,7 +38,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FFMPEG = process.env.FFMPEG ?? "ffmpeg";
 const ENC = process.env.ENC ?? (process.platform === "win32" ? "h264_mf" : "libx264");
 
-const SOURCE = join(ROOT, "public", "hero", "hero-showcase.mp4");
+const SOURCE = join(ROOT, "public", "hero", "hero-showcase-controller.mp4");
 const TARGET = join(ROOT, "public", "hero", "hero-showcase-web.mp4");
 
 if (!existsSync(SOURCE)) {
@@ -48,6 +55,13 @@ const rate =
     ? ["-rate_control", "pc_vbr", "-b:v", "1200k"]
     : ["-crf", "23"];
 
+// The hero's shape, and a shade of sharpening to make up for the frame
+// being blown up on a wide screen.
+const shape = [
+  "-vf",
+  "crop=iw:round(ih*0.854):0:round((ih-ih*0.854)/2),unsharp=5:5:0.8:5:5:0.0",
+];
+
 const result = spawnSync(
   FFMPEG,
   [
@@ -58,6 +72,7 @@ const result = spawnSync(
     "-an",
     "-c:v", ENC,
     ...rate,
+    ...shape,
     "-pix_fmt", "yuv420p",
     "-movflags", "+faststart",
     TARGET,

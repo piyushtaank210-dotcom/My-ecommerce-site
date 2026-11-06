@@ -135,6 +135,21 @@ function readBucket(
   return num(row.stock);
 }
 
+/**
+ * What is on the shelf for one product or option.
+ *
+ * The back office needs to answer "is there one of these to send?" before
+ * it offers one, so the reader is public. A product stocked by its options
+ * has no shelf of its own — the option does.
+ */
+export function stockOnHand(
+  db: DatabaseSync,
+  productSlug: string,
+  variantId: string | null
+): number {
+  return readBucket(db, productSlug, variantId);
+}
+
 /** Puts a number into a bucket. */
 function writeBucket(
   db: DatabaseSync,
@@ -466,10 +481,14 @@ export function takeStockForOrder(
   quantity: number,
   productName: string,
   userId: number | null,
-  type: "sale" | "resale" = "sale"
+  type: "sale" | "resale" | "replacement" = "sale",
+  reason?: string | null
 ): { taken: number; backordered: number } {
   const available = readBucket(db, productSlug, variantId);
-  const allowBackorder = backordersAllowed(getBackorderPolicy());
+  // A replacement is a unit going out to a customer who is waiting for it.
+  // It cannot be sent on backorder — there has to be something on the shelf.
+  const allowBackorder =
+    type === "replacement" ? false : backordersAllowed(getBackorderPolicy());
 
   if (available < quantity && !allowBackorder) {
     throw new InventoryError(
@@ -490,11 +509,12 @@ export function takeStockForOrder(
     next,
     type,
     reason:
-      type === "resale"
+      reason ??
+      (type === "resale"
         ? `Order ${orderId} reopened`
         : backordered
           ? `Order ${orderId} — ${backordered} on backorder`
-          : `Order ${orderId}`,
+          : `Order ${orderId}`),
     note: null,
     orderId,
     userId,

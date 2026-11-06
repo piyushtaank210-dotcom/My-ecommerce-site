@@ -6,18 +6,50 @@ import {
   rejectReturnAction,
   schedulePickupAction,
   recordQcAction,
-  processRefundAction,
+  initiateRefundAction,
+  confirmRefundPaidAction,
+  rejectRefundAction,
+  markCompletedAction,
+  markReceivedAction,
+  requestMoreInfoAction,
   dispatchReplacementAction,
+  setReplacementDeliveryAction,
   addStaffNoteAction,
   type AdminReturnState,
 } from "@/lib/admin-return-actions";
-import type { ReturnRequest } from "@/lib/return-status";
-import { money } from "@/lib/format";
-import { Check, X, Truck, ClipboardCheck, CreditCard, Send, Loader2 } from "lucide-react";
+import type {
+  ReturnRequest,
+  ReplacementCandidate,
+} from "@/lib/return-status";
+import {
+  REPLACEMENT_DELIVERY_STATUSES,
+  REPLACEMENT_DELIVERY_LABEL,
+  REPLACEMENT_DELIVERY_TONE,
+} from "@/lib/return-status";
+import { money, formatDate } from "@/lib/format";
+import {
+  Check,
+  X,
+  Truck,
+  ClipboardCheck,
+  CreditCard,
+  Send,
+  Loader2,
+  PackageCheck,
+  HelpCircle,
+  Flag,
+  Banknote,
+} from "lucide-react";
 
 const initial: AdminReturnState = { ok: false };
 
-export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
+export function ReturnAdminActions({
+  ret,
+  candidates = [],
+}: {
+  ret: ReturnRequest;
+  candidates?: ReplacementCandidate[];
+}) {
   // 1. Approve / Reject States
   const [approveState, approveAction, isApprovePending] = useActionState(
     approveReturnAction,
@@ -52,7 +84,17 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
 
   // 4. Refund
   const [refundState, refundAction, isRefundPending] = useActionState(
-    processRefundAction,
+    initiateRefundAction,
+    initial
+  );
+
+  // 4b. Confirming the refund has actually been paid, and refusing it.
+  const [paidState, paidAction, isPaidPending] = useActionState(
+    confirmRefundPaidAction,
+    initial
+  );
+  const [refuseState, refuseAction, isRefusePending] = useActionState(
+    rejectRefundAction,
     initial
   );
 
@@ -62,9 +104,56 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
     initial
   );
 
+  // 5b. Where the replacement has got to.
+  const [deliveryState, deliveryAction, isDeliveryPending] = useActionState(
+    setReplacementDeliveryAction,
+    initial
+  );
+
+  // What is going out, item by item. It starts as the unit that came back.
+  const [replacementChoice, setReplacementChoice] = useState<
+    Record<number, { value: string; quantity: number }>
+  >(() => {
+    const map: Record<number, { value: string; quantity: number }> = {};
+    for (const c of candidates) {
+      const own = c.options.find((o) => o.current) ?? c.options[0];
+      map[c.itemId] = { value: own?.value ?? "", quantity: c.quantity };
+    }
+    return map;
+  });
+
+  const choices = candidates.map((c) => {
+    const pick = replacementChoice[c.itemId];
+    const option = c.options.find((o) => o.value === pick?.value);
+    return {
+      itemId: c.itemId,
+      productSlug: option?.productSlug ?? "",
+      variantId: option?.variantId ?? null,
+      quantity: pick?.quantity ?? c.quantity,
+    };
+  });
+
   // 6. Notes
   const [noteState, noteAction, isNotePending] = useActionState(
     addStaffNoteAction,
+    initial
+  );
+
+  // 7. Asking the customer for more information
+  const [infoState, infoAction, isInfoPending] = useActionState(
+    requestMoreInfoAction,
+    initial
+  );
+
+  // 8. The product arriving back at the warehouse
+  const [receivedState, receivedAction, isReceivedPending] = useActionState(
+    markReceivedAction,
+    initial
+  );
+
+  // 9. Closing the request
+  const [completeState, completeAction, isCompletePending] = useActionState(
+    markCompletedAction,
     initial
   );
 
@@ -76,7 +165,7 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
   return (
     <div className="space-y-6">
       {/* 1. APPROVE / REJECT PANEL (For 'requested' state) */}
-      {ret.status === "requested" && (
+      {(ret.status === "requested" || ret.status === "info_requested") && (
         <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-5">
           <h2 className="text-[15px] font-bold text-ink">Review Request</h2>
           <p className="mt-1 text-[12.5px] text-gray-600">
@@ -146,6 +235,40 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
               </button>
             </form>
           </div>
+
+          {/* Ask the customer for more information */}
+          <form
+            action={infoAction}
+            className="mt-4 rounded-lg border border-gray-200 bg-white p-4"
+          >
+            <input type="hidden" name="returnId" value={ret.id} />
+            <h3 className="flex items-center gap-1.5 text-[13.5px] font-bold text-gray-800">
+              <HelpCircle className="h-4 w-4 text-gray-500" />
+              Request More Information
+            </h3>
+            <p className="mt-1 text-[12px] text-gray-500">
+              The question is shown to the customer on their own returns page.
+            </p>
+            {infoState.message && (
+              <p className={`mt-2 text-[12.5px] ${infoState.ok ? "text-green-700" : "text-red-600"}`}>
+                {infoState.message}
+              </p>
+            )}
+            <textarea
+              name="message"
+              required
+              rows={2}
+              placeholder="e.g. Please upload a photo of the serial number on the box..."
+              className="mt-3 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+            />
+            <button
+              type="submit"
+              disabled={isInfoPending}
+              className="btn btn-outline btn-sm mt-3 w-full"
+            >
+              {isInfoPending ? "Sending..." : "Ask the customer"}
+            </button>
+          </form>
         </section>
       )}
 
@@ -243,7 +366,55 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
         </section>
       )}
 
-      {/* 3. QUALITY CHECK (QC) & RECEIPT PANEL */}
+      {/* 3. THE PRODUCT ARRIVING BACK */}
+      {(ret.status === "pickup_scheduled" || ret.status === "approved") && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <PackageCheck className="h-4 w-4 text-brand" />
+            Mark Product Received
+          </h2>
+          <p className="mt-1 text-[12.5px] text-gray-500">
+            The parcel has arrived at the warehouse and is waiting for inspection.
+          </p>
+
+          {receivedState.message && (
+            <p className={`mt-3 text-[13px] ${receivedState.ok ? "text-green-700" : "text-red-600"}`}>
+              {receivedState.message}
+            </p>
+          )}
+
+          <form action={receivedAction} className="mt-4 space-y-3">
+            <input type="hidden" name="returnId" value={ret.id} />
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600">
+                Receipt Notes
+              </label>
+              <input
+                type="text"
+                name="notes"
+                placeholder="Optional — what came in, and in what condition..."
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isReceivedPending}
+              className="btn btn-primary btn-sm"
+            >
+              {isReceivedPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Recording...
+                </>
+              ) : (
+                "Mark as Received"
+              )}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {/* 4. QUALITY CHECK (QC) & RECEIPT PANEL */}
       {(ret.status === "pickup_scheduled" || ret.status === "received") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
@@ -361,15 +532,17 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
         </section>
       )}
 
-      {/* 4. REFUND SETTLEMENT PANEL (When QC is passed and type === 'return') */}
+      {/* 5. REFUND PANEL (When QC is passed and type === 'return') */}
       {ret.type === "return" && (ret.status === "qc_passed" || (ret.status === "received" && ret.qc_status === "passed")) && (
         <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <CreditCard className="h-4 w-4 text-green-700" />
-            Process Refund
+            Approve the Refund
           </h2>
           <p className="mt-1 text-[12.5px] text-gray-600">
-            Record the financial refund transaction to complete this return.
+            Approving the refund says the money will go back. It does not say it
+            has. The payment is confirmed separately, once it has actually gone
+            out.
           </p>
 
           {refundState.message && (
@@ -380,7 +553,7 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
 
           <form action={refundAction} className="mt-4 space-y-4">
             <input type="hidden" name="returnId" value={ret.id} />
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[12px] font-semibold text-gray-600">
                   Refund Amount (₹) *
@@ -391,7 +564,7 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
                   required
                   min={1}
                   defaultValue={ret.refund_amount || ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink font-bold"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] font-bold text-ink"
                 />
               </div>
 
@@ -411,29 +584,16 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
                   <option value="Cash Refund">Cash Refund</option>
                 </select>
               </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600">
-                  Bank Reference / UTR Number *
-                </label>
-                <input
-                  type="text"
-                  name="reference"
-                  required
-                  placeholder="e.g. UTR492819482910"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
-                />
-              </div>
             </div>
 
             <div>
               <label className="block text-[12px] font-semibold text-gray-600">
-                Settlement Notes
+                Notes
               </label>
               <input
                 type="text"
                 name="notes"
-                placeholder="Optional confirmation note or bank receipt ref..."
+                placeholder="Optional — anything the customer should know about the refund..."
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
               />
             </div>
@@ -443,21 +603,121 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
               disabled={isRefundPending}
               className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
             >
-              {isRefundPending ? "Settling refund..." : "Confirm Refund & Mark Completed"}
+              {isRefundPending ? "Approving..." : "Approve Refund"}
             </button>
           </form>
         </section>
       )}
 
-      {/* 5. REPLACEMENT DISPATCH PANEL (When QC is passed and type === 'replacement') */}
+      {/* 5b. THE REFUND IS RAISED — IS THE MONEY OUT? */}
+      {ret.type === "return" && ret.status === "refund_pending" && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Banknote className="h-4 w-4 text-amber-700" />
+            The Refund
+          </h2>
+          <p className="mt-1 text-[12.5px] text-gray-600">
+            {ret.refund_status === "processed"
+              ? `Paid — ${money(ret.refund_amount)} went back on ${
+                  ret.refund_processed_at ? formatDate(ret.refund_processed_at) : ""
+                }${ret.refund_reference ? ` under reference ${ret.refund_reference}` : ""}.`
+              : `Raised — ${money(ret.refund_amount)} is owed to the customer by ${
+                  ret.refund_method ?? "the original payment source"
+                }. It is not paid until it is confirmed below.`}
+          </p>
+
+          {paidState.message && (
+            <p className={`mt-3 text-[13px] ${paidState.ok ? "text-green-700" : "text-red-600"}`}>
+              {paidState.message}
+            </p>
+          )}
+          {refuseState.message && (
+            <p className={`mt-3 text-[13px] ${refuseState.ok ? "text-green-700" : "text-red-600"}`}>
+              {refuseState.message}
+            </p>
+          )}
+
+          {ret.refund_status !== "processed" && (
+            <>
+              <form action={paidAction} className="mt-4 space-y-4">
+                <input type="hidden" name="returnId" value={ret.id} />
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600">
+                    Reference the refund was paid under *
+                  </label>
+                  <input
+                    type="text"
+                    name="reference"
+                    required
+                    placeholder="e.g. UTR492819482910"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600">
+                    Notes
+                  </label>
+                  <input
+                    type="text"
+                    name="notes"
+                    placeholder="Optional — when it went out, and how..."
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isPaidPending}
+                  className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
+                >
+                  {isPaidPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    "Confirm the Refund Has Been Paid"
+                  )}
+                </button>
+              </form>
+
+              <form action={refuseAction} className="mt-5 border-t border-amber-200 pt-5">
+                <input type="hidden" name="returnId" value={ret.id} />
+                <label className="block text-[12px] font-semibold text-gray-600">
+                  Refuse the refund instead
+                </label>
+                <p className="mt-1 text-[12px] text-gray-500">
+                  The customer is told why. A reason is required.
+                </p>
+                <textarea
+                  name="reason"
+                  required
+                  rows={2}
+                  placeholder="e.g. The unit was not returned in the condition claimed..."
+                  className="mt-2 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                />
+                <button
+                  type="submit"
+                  disabled={isRefusePending}
+                  className="btn btn-outline btn-sm mt-3 text-red-700 hover:border-red-300 hover:bg-red-50"
+                >
+                  {isRefusePending ? "Refusing..." : "Refuse the Refund"}
+                </button>
+              </form>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* 6. REPLACEMENT DISPATCH PANEL (When QC is passed and type === 'replacement') */}
       {ret.type === "replacement" && (ret.status === "qc_passed" || (ret.status === "received" && ret.qc_status === "passed")) && (
         <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Truck className="h-4 w-4 text-blue-700" />
-            Dispatch Replacement Shipment
+            Create the Replacement Shipment
           </h2>
           <p className="mt-1 text-[12.5px] text-gray-600">
-            Deduct replacement units from warehouse stock and record the outbound tracking number.
+            Choose what is going out. The shelf is checked again when the
+            shipment is created, so what is shown here is never the last word.
           </p>
 
           {replacementState.message && (
@@ -466,9 +726,100 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
             </p>
           )}
 
-          <form action={replacementAction} className="mt-4 space-y-4">
+          <form action={replacementAction} className="mt-4 space-y-5">
             <input type="hidden" name="returnId" value={ret.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="choices" value={JSON.stringify(choices)} />
+
+            {/* What is going out, item by item. */}
+            <div className="space-y-3">
+              {candidates.map((candidate) => {
+                const pick = replacementChoice[candidate.itemId];
+                const option = candidate.options.find((o) => o.value === pick?.value);
+                const wanted = pick?.quantity ?? candidate.quantity;
+                const short = option ? option.stock < wanted : false;
+
+                return (
+                  <div
+                    key={candidate.itemId}
+                    className="rounded-lg border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-[13px] font-bold text-ink">
+                        {candidate.itemName}
+                      </p>
+                      <p className="text-[12px] text-gray-500">
+                        {candidate.quantity} unit{candidate.quantity === 1 ? "" : "s"} came back
+                      </p>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_7rem]">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-600">
+                          Send instead
+                        </label>
+                        <select
+                          name="replacementChoice"
+                          value={pick?.value ?? ""}
+                          onChange={(e) =>
+                            setReplacementChoice((prev) => ({
+                              ...prev,
+                              [candidate.itemId]: {
+                                ...prev[candidate.itemId],
+                                value: e.target.value,
+                              },
+                            }))
+                          }
+                          className="mt-1 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[13px] text-ink"
+                        >
+                          {candidate.options.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                              {o.current ? " (the unit that came back)" : ""} —{" "}
+                              {o.stock > 0 ? `${o.stock} in stock` : "out of stock"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-600">
+                          How many
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={wanted}
+                          onChange={(e) =>
+                            setReplacementChoice((prev) => ({
+                              ...prev,
+                              [candidate.itemId]: {
+                                ...prev[candidate.itemId],
+                                quantity: Math.max(1, Number(e.target.value) || 1),
+                              },
+                            }))
+                          }
+                          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                        />
+                      </div>
+                    </div>
+
+                    {option && (
+                      <p
+                        className={`mt-2 text-[12px] ${
+                          short ? "text-red-600" : "text-gray-500"
+                        }`}
+                      >
+                        {short
+                          ? `Only ${option.stock} on the shelf — pick another, or wait for stock.`
+                          : `${option.stock} on the shelf.`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="block text-[12px] font-semibold text-gray-600">
                   Outbound Courier *
@@ -484,13 +835,25 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
 
               <div>
                 <label className="block text-[12px] font-semibold text-gray-600">
-                  New Tracking Number *
+                  Tracking / AWB Number *
                 </label>
                 <input
                   type="text"
                   name="tracking"
                   required
                   placeholder="e.g. REP-TRK-789012"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600">
+                  Dispatch Date
+                </label>
+                <input
+                  type="date"
+                  name="dispatchDate"
+                  defaultValue={new Date().toISOString().slice(0, 10)}
                   className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
                 />
               </div>
@@ -503,7 +866,7 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
               <input
                 type="text"
                 name="notes"
-                placeholder="Dispatched replacement unit from warehouse..."
+                placeholder="Which unit went out, and anything the customer should know..."
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
               />
             </div>
@@ -513,13 +876,150 @@ export function ReturnAdminActions({ ret }: { ret: ReturnRequest }) {
               disabled={isReplacementPending}
               className="btn btn-primary btn-sm bg-blue-700 hover:bg-blue-800 border-blue-700"
             >
-              {isReplacementPending ? "Dispatching..." : "Dispatch Replacement & Complete"}
+              {isReplacementPending ? "Dispatching..." : "Create the Replacement Shipment"}
             </button>
           </form>
         </section>
       )}
 
-      {/* 6. INTERNAL STAFF NOTE */}
+      {/* 6b. THE REPLACEMENT IS ON ITS WAY */}
+      {ret.type === "replacement" && ret.status === "replacement_pending" && ret.replacement_order_id && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Truck className="h-4 w-4 text-brand" />
+            The Replacement
+          </h2>
+          <dl className="mt-3 space-y-2 text-[13px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Shipment</dt>
+              <dd className="tnum font-medium text-ink">{ret.replacement_order_id}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Courier</dt>
+              <dd className="font-medium text-ink">{ret.replacement_courier ?? "—"}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Tracking / AWB</dt>
+              <dd className="tnum font-medium text-ink">{ret.replacement_tracking ?? "—"}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Dispatched on</dt>
+              <dd className="font-medium text-ink">{ret.replacement_dispatch_date ?? "—"}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Delivery</dt>
+              <dd>
+                <span
+                  className={`inline-block rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
+                    REPLACEMENT_DELIVERY_TONE[
+                      ret.replacement_delivery_status ?? "dispatched"
+                    ]
+                  }`}
+                >
+                  {
+                    REPLACEMENT_DELIVERY_LABEL[
+                      ret.replacement_delivery_status ?? "dispatched"
+                    ]
+                  }
+                </span>
+              </dd>
+            </div>
+          </dl>
+
+          {deliveryState.message && (
+            <p className={`mt-3 text-[13px] ${deliveryState.ok ? "text-green-700" : "text-red-600"}`}>
+              {deliveryState.message}
+            </p>
+          )}
+
+          <form action={deliveryAction} className="mt-4 space-y-3">
+            <input type="hidden" name="returnId" value={ret.id} />
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600">
+                Where it has got to
+              </label>
+              <select
+                name="deliveryStatus"
+                defaultValue={ret.replacement_delivery_status ?? "dispatched"}
+                className="mt-1 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[13px] text-ink sm:w-72"
+              >
+                {REPLACEMENT_DELIVERY_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {REPLACEMENT_DELIVERY_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600">
+                Notes
+              </label>
+              <input
+                type="text"
+                name="notes"
+                placeholder="Optional — what the courier said..."
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+              />
+            </div>
+            <button type="submit" disabled={isDeliveryPending} className="btn btn-outline btn-sm">
+              {isDeliveryPending ? "Recording..." : "Record the delivery"}
+            </button>
+          </form>
+        </section>
+      )}
+      {/* 7. CLOSING THE REQUEST */}
+      {(ret.status === "refund_pending" || ret.status === "replacement_pending") && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Flag className="h-4 w-4 text-brand" />
+            Mark as Completed
+          </h2>
+          <p className="mt-1 text-[12.5px] text-gray-500">
+            {ret.type === "replacement"
+              ? "The replacement has gone out. Close the request once the customer has it."
+              : ret.refund_status === "processed"
+                ? "The refund has been confirmed as paid. The request can be closed."
+                : "The refund has been raised but not confirmed as paid. Confirm the refund first — the request stays open until the money has actually gone back."}
+          </p>
+
+          {completeState.message && (
+            <p className={`mt-3 text-[13px] ${completeState.ok ? "text-green-700" : "text-red-600"}`}>
+              {completeState.message}
+            </p>
+          )}
+
+          <form action={completeAction} className="mt-4 space-y-3">
+            <input type="hidden" name="returnId" value={ret.id} />
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600">
+                Closing Notes
+              </label>
+              <input
+                type="text"
+                name="notes"
+                placeholder="Optional — what was settled, and how..."
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isCompletePending}
+              className="btn btn-primary btn-sm"
+            >
+              {isCompletePending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Closing...
+                </>
+              ) : (
+                "Mark as Completed"
+              )}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {/* 8. INTERNAL STAFF NOTE */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="flex items-center gap-2 text-[14px] font-bold text-ink">
           <Send className="h-4 w-4 text-gray-500" />

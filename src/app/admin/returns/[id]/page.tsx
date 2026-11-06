@@ -1,9 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, User, MapPin, Package, CreditCard, RotateCcw } from "lucide-react";
+import {
+  ArrowLeft,
+  User,
+  MapPin,
+  Package,
+  CreditCard,
+  RotateCcw,
+  CalendarClock,
+  Banknote,
+  StickyNote,
+} from "lucide-react";
 import { requirePermission } from "@/lib/guard";
-import { getReturnRequest, RETURN_STATUS_LABEL, RETURN_STATUS_TONE, RETURN_TYPE_LABEL, returnReasonLabel } from "@/lib/returns";
+import {
+  getReturnRequest,
+  calculateReturnDeadline,
+  RETURN_STATUS_LABEL,
+  RETURN_STATUS_TONE,
+  RETURN_TYPE_LABEL,
+  returnReasonLabel,
+  replacementCandidates,
+} from "@/lib/returns";
 import { getOrder } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
 import { ReturnAdminActions } from "@/components/admin/returns/ReturnAdminActions";
@@ -21,6 +39,15 @@ export default async function AdminReturnDetailPage({
   if (!ret) notFound();
 
   const order = getOrder(ret.order_id);
+
+  // When the product was delivered decides the last day a return could
+  // have been asked for, and whether that day has gone.
+  const deadline = calculateReturnDeadline(order?.delivered_at ?? null);
+  const itemValue = ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+
+  // What could be sent in place of what came back, and what is on the shelf.
+  const candidates =
+    ret.type === "replacement" ? replacementCandidates(ret.id) : [];
 
   return (
     <div className="mx-auto max-w-[1300px]">
@@ -78,6 +105,14 @@ export default async function AdminReturnDetailPage({
                   <span className="font-semibold text-ink">Customer Comments: </span>
                   <p className="mt-1 rounded-lg bg-gray-50 p-3 text-[13px] text-gray-700">
                     {ret.customer_notes}
+                  </p>
+                </div>
+              )}
+              {ret.admin_notes && (
+                <div>
+                  <span className="font-semibold text-ink">Admin Remarks: </span>
+                  <p className="mt-1 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-[13px] text-gray-700">
+                    {ret.admin_notes}
                   </p>
                 </div>
               )}
@@ -197,6 +232,55 @@ export default async function AdminReturnDetailPage({
 
         {/* Right Column: Customer Info & Interactive Actions */}
         <div className="space-y-6">
+          {/* The purchase the request is about */}
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
+              <Package className="h-4 w-4 text-brand" />
+              Purchase &amp; Eligibility
+            </h2>
+            <dl className="space-y-2.5 text-[13px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-gray-500">Delivered on</dt>
+                <dd className="font-medium text-ink">
+                  {order?.delivered_at ? formatDate(order.delivered_at) : "Not delivered yet"}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-gray-500">Return deadline</dt>
+                <dd
+                  className={`font-medium ${
+                    deadline.isExpired ? "text-red-600" : "text-ink"
+                  }`}
+                >
+                  {deadline.isExpired
+                    ? "Passed"
+                    : `${deadline.daysRemaining} day${deadline.daysRemaining === 1 ? "" : "s"} left`}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-gray-500">Original price</dt>
+                <dd className="tnum font-medium text-ink">{money(itemValue)}</dd>
+              </div>
+              {ret.refund_amount > 0 && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-gray-500">Refund</dt>
+                  <dd className="tnum font-medium text-ink">
+                    {money(ret.refund_amount)}
+                    {ret.refund_status === "pending" && (
+                      <span className="ml-1.5 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                        Pending
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <p className="mt-3 border-t border-gray-100 pt-3 text-[12px] text-gray-500">
+              The window for this return is {deadline.windowDays} days from delivery
+              {deadline.formattedDeadline ? ` — it closed on ${deadline.formattedDeadline}` : ""}.
+            </p>
+          </section>
+
           {/* Customer & Address Details */}
           <section className="rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
@@ -226,7 +310,7 @@ export default async function AdminReturnDetailPage({
           </section>
 
           {/* Interactive Management Actions */}
-          <ReturnAdminActions ret={ret} />
+          <ReturnAdminActions ret={ret} candidates={candidates} />
         </div>
       </div>
     </div>

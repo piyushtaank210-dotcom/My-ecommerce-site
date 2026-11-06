@@ -6,6 +6,7 @@ import {
   RETURN_STATUS_LABEL,
   RETURN_STATUS_TONE,
   RETURN_TYPE_LABEL,
+  REPLACEMENT_DELIVERY_LABEL,
   returnReasonLabel,
 } from "@/lib/returns";
 import { getProduct } from "@/lib/queries";
@@ -160,7 +161,17 @@ export default async function AccountReturnsPage() {
               ) : ret.status === "completed" && ret.type === "replacement" ? (
                 <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
                   <Truck className="h-3.5 w-3.5" />
-                  Replacement {ret.replacement_order_id || "shipment"} dispatched
+                  Replacement {ret.replacement_order_id || "shipment"} delivered
+                </span>
+              ) : ret.type === "replacement" && ret.replacement_tracking ? (
+                // The outbound AWB, not the reverse-logistics one.
+                <span className="inline-flex items-center gap-1.5 text-purple-700 font-medium">
+                  <Truck className="h-3.5 w-3.5" />
+                  Replacement {ret.replacement_order_id} ·{" "}
+                  {REPLACEMENT_DELIVERY_LABEL[
+                    ret.replacement_delivery_status ?? "dispatched"
+                  ]}{" "}
+                  · AWB: {ret.replacement_tracking}
                 </span>
               ) : ret.pickup_tracking ? (
                 <span className="inline-flex items-center gap-1.5 text-purple-700 font-medium">

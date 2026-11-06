@@ -8,10 +8,21 @@ import {
   rejectReturnRequest,
   schedulePickup,
   recordQcInspection,
-  processRefund,
+  initiateRefund,
+  confirmRefundPaid,
+  rejectRefund,
+  markCompleted,
+  markProductReceived,
+  requestMoreInformation,
   dispatchReplacement,
+  setReplacementDelivery,
   addInternalNote,
 } from "./returns";
+import { InventoryError } from "./inventory";
+import {
+  REPLACEMENT_DELIVERY_STATUSES,
+  type ReplacementDeliveryStatus,
+} from "./return-status";
 
 export type AdminReturnState = {
   ok: boolean;
@@ -160,9 +171,12 @@ export async function recordQcAction(
 }
 
 /**
- * Process Refund
+ * Approve a refund.
+ *
+ * The refund is raised here. It is not recorded as paid until somebody
+ * confirms the payment separately.
  */
-export async function processRefundAction(
+export async function initiateRefundAction(
   _prev: AdminReturnState,
   formData: FormData
 ): Promise<AdminReturnState> {
@@ -174,17 +188,15 @@ export async function processRefundAction(
   const returnId = String(formData.get("returnId") ?? "").trim();
   const amount = Math.round(Number(formData.get("amount") ?? 0));
   const method = String(formData.get("method") ?? "Original Source").trim();
-  const reference = String(formData.get("reference") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
-  if (!returnId || amount <= 0 || !reference) {
-    return { ok: false, message: "Please specify valid refund amount and bank/gateway reference UTR." };
+  if (!returnId || amount <= 0) {
+    return { ok: false, message: "Please enter the amount to refund." };
   }
 
-  const result = processRefund(returnId, { id: staff.id, name: staff.name }, {
+  const result = initiateRefund(returnId, { id: staff.id, name: staff.name }, {
     amount,
     method,
-    reference,
     notes: notes || undefined,
   });
 
@@ -193,7 +205,161 @@ export async function processRefundAction(
 }
 
 /**
- * Dispatch Replacement
+ * Confirm the refund has actually been paid.
+ *
+ * This is the only thing that makes a refund a refund.
+ */
+export async function confirmRefundPaidAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const reference = String(formData.get("reference") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+  if (!reference) {
+    return {
+      ok: false,
+      message: "Enter the reference the refund was paid under (UTR, gateway reference).",
+    };
+  }
+
+  const result = confirmRefundPaid(
+    returnId,
+    { id: staff.id, name: staff.name },
+    { reference, notes: notes || undefined }
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
+}
+
+/**
+ * Refuse the refund, with the reason on the record.
+ */
+export async function rejectRefundAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+  if (!reason) {
+    return { ok: false, message: "Please give a reason for refusing the refund." };
+  }
+
+  const result = rejectRefund(
+    returnId,
+    { id: staff.id, name: staff.name },
+    reason
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
+}
+
+/**
+ * Mark the request as completed.
+ */
+export async function markCompletedAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+
+  const result = markCompleted(
+    returnId,
+    { id: staff.id, name: staff.name },
+    notes || undefined
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
+}
+
+/**
+ * Ask the customer for more information.
+ */
+export async function requestMoreInfoAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const message = String(formData.get("message") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+  if (!message) {
+    return { ok: false, message: "Say what you need from the customer." };
+  }
+
+  const result = requestMoreInformation(
+    returnId,
+    { id: staff.id, name: staff.name },
+    message
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
+}
+
+/**
+ * Mark the returned product as received.
+ */
+export async function markReceivedAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+
+  const result = markProductReceived(
+    returnId,
+    { id: staff.id, name: staff.name },
+    notes || undefined
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
+}
+
+/**
+ * Create the replacement shipment.
+ *
+ * What goes out is chosen item by item, and the shelf is checked again
+ * here — the panel shows the stock as it was, and the stock can move
+ * between looking and clicking.
  */
 export async function dispatchReplacementAction(
   _prev: AdminReturnState,
@@ -207,17 +373,78 @@ export async function dispatchReplacementAction(
   const returnId = String(formData.get("returnId") ?? "").trim();
   const courier = String(formData.get("courier") ?? "").trim();
   const tracking = String(formData.get("tracking") ?? "").trim();
+  const dispatchDate = String(formData.get("dispatchDate") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const rawChoices = String(formData.get("choices") ?? "").trim();
 
   if (!returnId || !courier || !tracking) {
     return { ok: false, message: "Enter courier and tracking number for the replacement." };
   }
 
-  const result = dispatchReplacement(returnId, { id: staff.id, name: staff.name }, {
-    courier,
-    tracking,
-    notes: notes || undefined,
-  });
+  let choices: {
+    itemId: number;
+    productSlug: string;
+    variantId: string | null;
+    quantity: number;
+  }[] = [];
+
+  try {
+    choices = JSON.parse(rawChoices || "[]");
+  } catch {
+    return { ok: false, message: "The replacement could not be read. Try again." };
+  }
+
+  try {
+    const result = dispatchReplacement(
+      returnId,
+      { id: staff.id, name: staff.name },
+      {
+        courier,
+        tracking,
+        dispatchDate: dispatchDate || null,
+        notes: notes || undefined,
+      },
+      choices
+    );
+
+    if (result.ok) revalidateAll(returnId);
+    return result;
+  } catch (err) {
+    // The shelf did not have what was asked for. That is not a crash — it
+    // is the answer.
+    if (err instanceof InventoryError) {
+      return { ok: false, message: err.message };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Record where the replacement has got to.
+ */
+export async function setReplacementDeliveryAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const status = String(formData.get("deliveryStatus") ?? "").trim() as ReplacementDeliveryStatus;
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+  if (!REPLACEMENT_DELIVERY_STATUSES.includes(status)) {
+    return { ok: false, message: "That is not a delivery status." };
+  }
+
+  const result = setReplacementDelivery(
+    returnId,
+    { id: staff.id, name: staff.name },
+    { status, notes: notes || undefined }
+  );
 
   if (result.ok) revalidateAll(returnId);
   return result;

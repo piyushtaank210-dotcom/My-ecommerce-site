@@ -86,11 +86,26 @@ export function applyMigrations(db: DatabaseSync): void {
   // stays as its poster frame and as what a phone shows, so the slide
   // still looks right where the film is not played.
   add("hero_slides", "video", "video TEXT");
-
   // The film's own first frame, held as a still. The browser shows it
   // while the film is still downloading, which is what keeps the hero
   // from showing the photograph and then jumping to the film.
   add("hero_slides", "video_poster", "video_poster TEXT");
+
+  // A replacement is a shipment of its own. These are what is going out
+  // (which may not be the unit that came back), when it went, and where
+  // it has got to — so the customer can be told the truth about it.
+  add("return_requests", "replacement_product_slug", "replacement_product_slug TEXT");
+  add("return_requests", "replacement_variant_id", "replacement_variant_id TEXT");
+  add("return_requests", "replacement_dispatch_date", "replacement_dispatch_date TEXT");
+  add("return_requests", "replacement_delivery_status", "replacement_delivery_status TEXT");
+  add("return_requests", "replacement_delivered_at", "replacement_delivered_at TEXT");
+
+  // What is going out in place of the unit that came back. It is not
+  // always the same unit — sometimes the option the customer wants is
+  // the one that is in stock.
+  add("return_items", "replacement_product_slug", "replacement_product_slug TEXT");
+  add("return_items", "replacement_variant_id", "replacement_variant_id TEXT");
+  add("return_items", "replacement_quantity", "replacement_quantity INTEGER");
 
   // Stock, and how low it has to get before anybody is told.
   //

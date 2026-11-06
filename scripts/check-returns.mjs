@@ -201,12 +201,40 @@ const movement = db.prepare("SELECT * FROM inventory_movements WHERE order_id = 
 check("Audit movement logged with movement_type='return'", !!movement);
 
 // 6. Test Refund Settlement
+// The refund is raised first and paid later. Approving a refund is not the
+// same as paying it, and the request is not finished until the payment has
+// been confirmed.
 console.log("\n6. Testing Refund Processing:");
 db.prepare(
   `UPDATE return_requests
-   SET status = 'completed',
-       refund_status = 'processed',
+   SET status = 'refund_pending',
+       refund_status = 'pending',
        refund_method = 'Original Source (UPI)',
+       refund_amount = ?,
+       updated_at = datetime('now')
+   WHERE id = ?`
+).run(testItem.price, retId1);
+
+db.prepare(
+  `INSERT INTO return_events (return_id, status, actor_type, actor_name, note)
+   VALUES (?, 'refund_pending', 'staff', 'Admin', 'Refund approved via UPI')`
+).run(retId1);
+
+const refundRet = db
+  .prepare("SELECT status, refund_status, refund_reference FROM return_requests WHERE id = ?")
+  .get(retId1);
+check("Return request marked 'refund_pending'", refundRet?.status === "refund_pending");
+check("Refund status marked 'pending'", refundRet?.refund_status === "pending");
+check(
+  "An approved refund is not recorded as paid",
+  refundRet?.refund_status !== "processed"
+);
+check("No payment reference yet", !refundRet?.refund_reference);
+
+// The payment goes out, and is confirmed separately.
+db.prepare(
+  `UPDATE return_requests
+   SET refund_status = 'processed',
        refund_reference = 'UPI/UTR/887766554433',
        refund_processed_at = datetime('now'),
        updated_at = datetime('now')
@@ -215,12 +243,36 @@ db.prepare(
 
 db.prepare(
   `INSERT INTO return_events (return_id, status, actor_type, actor_name, note)
-   VALUES (?, 'completed', 'staff', 'Admin', 'Refund of ₹${testItem.price} credited via UPI')`
+   VALUES (?, 'refund_pending', 'staff', 'Admin', 'Refund confirmed as paid (Ref: UPI/UTR/887766554433)')`
 ).run(retId1);
 
-const completedRet = db.prepare("SELECT status, refund_status, refund_reference FROM return_requests WHERE id = ?").get(retId1);
+const paidRet = db
+  .prepare("SELECT status, refund_status, refund_reference FROM return_requests WHERE id = ?")
+  .get(retId1);
+check("Refund status marked 'processed'", paidRet?.refund_status === "processed");
+check("Bank UTR reference recorded", paidRet?.refund_reference === "UPI/UTR/887766554433");
+check(
+  "The request is still open until the refund is paid",
+  paidRet?.status === "refund_pending"
+);
+
+// And then it is closed.
+db.prepare(
+  `UPDATE return_requests
+   SET status = 'completed', updated_at = datetime('now')
+   WHERE id = ?`
+).run(retId1);
+
+db.prepare(
+  `INSERT INTO return_events (return_id, status, actor_type, actor_name, note)
+   VALUES (?, 'completed', 'staff', 'Admin', 'Request completed.')`
+).run(retId1);
+
+const completedRet = db
+  .prepare("SELECT status, refund_status, refund_reference FROM return_requests WHERE id = ?")
+  .get(retId1);
 check("Return request marked 'completed'", completedRet?.status === "completed");
-check("Refund status marked 'processed'", completedRet?.refund_status === "processed");
+check("The refund stays paid", completedRet?.refund_status === "processed");
 check("Bank UTR reference recorded", completedRet?.refund_reference === "UPI/UTR/887766554433");
 
 // 7. Test Replacement Flow
@@ -234,15 +286,73 @@ db.prepare(
 
 db.prepare(
   `UPDATE return_requests
-   SET status = 'completed',
+   SET status = 'replacement_pending',
        replacement_order_id = 'REP-DELIV-9988',
        updated_at = datetime('now')
    WHERE id = ?`
 ).run(retId2);
 
-const replacementRet = db.prepare("SELECT type, status, replacement_order_id FROM return_requests WHERE id = ?").get(retId2);
-check("Replacement request marked 'completed'", replacementRet?.status === "completed");
+const replacementRet = db
+  .prepare("SELECT type, status, replacement_order_id FROM return_requests WHERE id = ?")
+  .get(retId2);
+check("Replacement request marked 'replacement_pending'", replacementRet?.status === "replacement_pending");
 check("Replacement shipment ID logged", replacementRet?.replacement_order_id === "REP-DELIV-9988");
+
+db.prepare(
+  `UPDATE return_requests
+   SET status = 'completed', updated_at = datetime('now')
+   WHERE id = ?`
+).run(retId2);
+
+const closedReplacement = db
+  .prepare("SELECT status FROM return_requests WHERE id = ?")
+  .get(retId2);
+check("Replacement request marked 'completed'", closedReplacement?.status === "completed");
+
+// 7b. The stages in between — a request is received before it is inspected,
+// and it is inspected before a refund is raised.
+console.log("\n7b. Testing The Intermediate Stages:");
+const retId4 = `RET-STG${Date.now().toString().slice(-4)}`;
+db.prepare(
+  `INSERT INTO return_requests
+    (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
+   VALUES (?, ?, ?, 'return', 'pickup_scheduled', 'damaged', 'Arrived and waiting', 0, 'none')`
+).run(retId4, orderId, order.user_id);
+
+db.prepare(
+  `UPDATE return_requests
+   SET status = 'received', received_at = datetime('now'), updated_at = datetime('now')
+   WHERE id = ?`
+).run(retId4);
+const receivedRet = db.prepare("SELECT status, received_at FROM return_requests WHERE id = ?").get(retId4);
+check("Request marked 'received'", receivedRet?.status === "received");
+check("Receipt time recorded", Boolean(receivedRet?.received_at));
+
+db.prepare(
+  `UPDATE return_requests
+   SET status = 'qc_passed', qc_status = 'passed', updated_at = datetime('now')
+   WHERE id = ?`
+).run(retId4);
+const qcRet = db.prepare("SELECT status, qc_status FROM return_requests WHERE id = ?").get(retId4);
+check("Request marked 'qc_passed'", qcRet?.status === "qc_passed");
+check("Inspection result recorded", qcRet?.qc_status === "passed");
+
+// 7c. Asking the customer for more information.
+const retId5 = `RET-INF${Date.now().toString().slice(-4)}`;
+db.prepare(
+  `INSERT INTO return_requests
+    (id, order_id, user_id, type, status, reason, customer_notes, admin_notes, refund_amount, refund_status)
+   VALUES (?, ?, ?, 'return', 'requested', 'other', 'Not sure', 'Please send a photo of the box.', 0, 'none')`
+).run(retId5, orderId, order.user_id);
+
+db.prepare(
+  `UPDATE return_requests
+   SET status = 'info_requested', updated_at = datetime('now')
+   WHERE id = ?`
+).run(retId5);
+const infoRet = db.prepare("SELECT status, admin_notes FROM return_requests WHERE id = ?").get(retId5);
+check("Request marked 'info_requested'", infoRet?.status === "info_requested");
+check("The question asked of the customer is kept", infoRet?.admin_notes?.includes("photo") ?? false);
 
 // 8. Test Customer Cancellation
 console.log("\n8. Testing Customer Cancellation:");

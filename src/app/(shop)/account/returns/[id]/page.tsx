@@ -24,6 +24,7 @@ import {
   RETURN_STATUS_LABEL,
   RETURN_STATUS_TONE,
   RETURN_TYPE_LABEL,
+  REPLACEMENT_DELIVERY_LABEL,
   returnReasonLabel,
 } from "@/lib/returns";
 import { getProduct } from "@/lib/queries";
@@ -75,6 +76,46 @@ export default async function CustomerReturnDetailPage({
 
   const isTerminalNegative = ret.status === "rejected" || ret.status === "cancelled";
 
+  // The statuses that mean a stage has been passed. A request moves
+  // forward through them, so every stage before the current one is done.
+  const UNDER_REVIEW = ["requested", "info_requested"];
+  const PAST_REVIEW = [
+    "approved",
+    "pickup_scheduled",
+    "received",
+    "qc_passed",
+    "qc_failed",
+    "refund_pending",
+    "replacement_pending",
+    "completed",
+  ];
+  const PAST_APPROVAL = [
+    "pickup_scheduled",
+    "received",
+    "qc_passed",
+    "qc_failed",
+    "refund_pending",
+    "replacement_pending",
+    "completed",
+  ];
+  const PAST_PICKUP = [
+    "received",
+    "qc_passed",
+    "qc_failed",
+    "refund_pending",
+    "replacement_pending",
+    "completed",
+  ];
+  const PAST_RECEIPT = [
+    "qc_passed",
+    "qc_failed",
+    "refund_pending",
+    "replacement_pending",
+    "completed",
+  ];
+  const PAST_INSPECTION = ["refund_pending", "replacement_pending", "completed"];
+  const SETTLED = ["refund_pending", "replacement_pending"];
+
   // Helper to extract event timestamp by status
   const findEventDate = (statusKey: string): string | null => {
     const ev = ret.events.find((e) => e.status === statusKey);
@@ -102,47 +143,50 @@ export default async function CustomerReturnDetailPage({
       label: "Under Review",
       description: "Support team reviewing claim",
       status:
-        ret.status === "requested"
+        UNDER_REVIEW.includes(ret.status)
           ? "current"
-          : ["approved", "pickup_scheduled", "received", "qc_passed", "completed"].includes(
-                ret.status
-              )
+          : PAST_REVIEW.includes(ret.status)
             ? "completed"
             : "pending",
       date:
-        ret.status === "requested"
+        UNDER_REVIEW.includes(ret.status)
           ? "In progress"
           : findEventDate("under_review") || findEventDate("approved") || formatDate(ret.created_at),
       note:
-        ret.status === "requested"
-          ? "Our support team is reviewing your claim and submitted photos."
-          : "Claim verified by support team.",
+        ret.status === "info_requested"
+          ? ret.admin_notes || "Our support team has asked for more information."
+          : UNDER_REVIEW.includes(ret.status)
+            ? "Our support team is reviewing your claim and submitted photos."
+            : "Claim verified by support team.",
     },
     {
       key: "approved",
       label: "Approved",
       description: "Request authorized for return",
       status:
-        ret.status === "requested"
+        UNDER_REVIEW.includes(ret.status)
           ? "pending"
           : ret.status === "approved"
             ? "current"
-            : ["pickup_scheduled", "received", "qc_passed", "completed"].includes(ret.status)
+            : PAST_APPROVAL.includes(ret.status)
               ? "completed"
               : "pending",
       date: findEventDate("approved"),
-      note: ret.admin_notes || (ret.status === "approved" ? "Pickup will be scheduled soon." : null),
+      note:
+        ret.status === "info_requested"
+          ? null
+          : ret.admin_notes || (ret.status === "approved" ? "Pickup will be scheduled soon." : null),
     },
     {
       key: "pickup_scheduled",
       label: "Pickup Scheduled",
       description: "Courier pickup arranged",
       status:
-        ["requested", "approved"].includes(ret.status)
+        ["requested", "info_requested", "approved"].includes(ret.status)
           ? "pending"
           : ret.status === "pickup_scheduled"
             ? "current"
-            : ["received", "qc_passed", "completed"].includes(ret.status)
+            : PAST_PICKUP.includes(ret.status)
               ? "completed"
               : "pending",
       date: ret.pickup_date || findEventDate("pickup_scheduled"),
@@ -153,11 +197,11 @@ export default async function CustomerReturnDetailPage({
       label: "Product Received",
       description: "Arrived at inspection hub",
       status:
-        ["requested", "approved", "pickup_scheduled"].includes(ret.status)
+        ["requested", "info_requested", "approved", "pickup_scheduled"].includes(ret.status)
           ? "pending"
           : ret.status === "received"
             ? "current"
-            : ["qc_passed", "completed"].includes(ret.status)
+            : PAST_RECEIPT.includes(ret.status)
               ? "completed"
               : "pending",
       date: ret.received_at ? formatDate(ret.received_at) : findEventDate("received"),
@@ -168,11 +212,15 @@ export default async function CustomerReturnDetailPage({
       label: "Inspection Completed",
       description: "Quality & condition verified",
       status:
-        ["requested", "approved", "pickup_scheduled", "received"].includes(ret.status)
+        ["requested", "info_requested", "approved", "pickup_scheduled", "received"].includes(
+          ret.status
+        )
           ? "pending"
           : ret.status === "qc_passed" || ret.status === "completed"
             ? "completed"
-            : "pending",
+            : PAST_INSPECTION.includes(ret.status)
+              ? "completed"
+              : "pending",
       date: findEventDate("qc_passed") || (ret.status === "completed" ? findEventDate("completed") : null),
       note: ret.qc_notes || (ret.qc_status === "passed" ? "Device condition verified." : null),
     },
@@ -184,25 +232,41 @@ export default async function CustomerReturnDetailPage({
           ? "New replacement shipped"
           : "Refund credited to source",
       status:
-        ret.status === "completed" || ret.refund_status === "processed" || !!ret.replacement_order_id
-          ? "completed"
-          : ret.status === "qc_passed"
-            ? "current"
-            : "pending",
+        ret.type === "replacement"
+          ? // A replacement is only done when it has arrived. Writing the
+            // courier number down is not the same as delivering it.
+            ret.replacement_delivery_status === "delivered" ||
+            ret.replacement_delivery_status === "returned" ||
+            ret.status === "completed"
+            ? "completed"
+            : "current"
+          : ret.status === "completed" || ret.refund_status === "processed"
+            ? "completed"
+            : ret.status === "qc_passed" || SETTLED.includes(ret.status)
+              ? "current"
+              : "pending",
       date:
         ret.type === "replacement"
-          ? findEventDate("completed")
+          ? ret.replacement_delivered_at
+            ? formatDate(ret.replacement_delivered_at)
+            : findEventDate("replacement_pending") || findEventDate("completed")
           : ret.refund_processed_at
             ? formatDate(ret.refund_processed_at)
-            : findEventDate("completed"),
+            : findEventDate("refund_pending") || findEventDate("completed"),
       note:
         ret.type === "replacement"
           ? ret.replacement_order_id
-            ? `Replacement ID: ${ret.replacement_order_id}`
-            : "Replacement being processed."
+            ? `Shipment ${ret.replacement_order_id}${
+                ret.replacement_courier ? ` via ${ret.replacement_courier}` : ""
+              }${ret.replacement_tracking ? ` · ${ret.replacement_tracking}` : ""}.`
+            : "The replacement is being prepared."
           : ret.refund_status === "processed"
-            ? `Refund: ${money(ret.refund_amount)}`
-            : "Refund settlement pending.",
+            ? `Refund of ${money(ret.refund_amount)} has been credited to you.`
+            : ret.refund_status === "failed"
+              ? "The refund was refused. Our team will be in touch."
+              : ret.refund_status === "pending"
+                ? `Refund of ${money(ret.refund_amount)} has been approved and is on its way back to you.`
+                : "Refund settlement pending.",
     },
     {
       key: "completed",
@@ -515,8 +579,30 @@ export default async function CustomerReturnDetailPage({
         </section>
       )}
 
-      {/* Refund Settlement Details Card */}
-      {ret.type === "return" && (ret.refund_status === "processed" || ret.status === "completed") && (
+      {/* The refund has been approved but the money has not gone back yet. */}
+      {ret.type === "return" && ret.refund_status === "pending" && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 shadow-xs">
+          <div className="flex items-center justify-between border-b border-amber-200/70 pb-2.5">
+            <h2 className="flex items-center gap-2 text-[14.5px] font-bold text-amber-950">
+              <CreditCard className="h-4 w-4 text-amber-700" />
+              Refund Approved
+            </h2>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-800">
+              On its way
+            </span>
+          </div>
+          <p className="mt-3 text-[13px] text-amber-900/80">
+            We have approved a refund of{" "}
+            <strong className="tnum">{money(ret.refund_amount)}</strong> to your{" "}
+            {ret.refund_method || "original payment source"}. It is being sent now —
+            this page updates as soon as the payment has gone through.
+          </p>
+        </section>
+      )}
+
+      {/* Refund Settlement Details Card — shown once the money has actually
+          gone back, never on the strength of an approval alone. */}
+      {ret.type === "return" && ret.refund_status === "processed" && (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-xs">
           <div className="flex items-center justify-between border-b border-emerald-200/70 pb-2.5">
             <h2 className="flex items-center gap-2 text-[14.5px] font-bold text-emerald-950">
@@ -565,26 +651,36 @@ export default async function CustomerReturnDetailPage({
         </section>
       )}
 
-      {/* Replacement Tracking Details Card */}
-      {ret.type === "replacement" && (ret.replacement_order_id || ret.status === "completed") && (
+      {/* Replacement Tracking Details Card — shown when a replacement has
+          actually been sent. It says what is on the record, and nothing
+          more: a courier that was never chosen is not invented here. */}
+      {ret.type === "replacement" && ret.replacement_order_id && (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-xs">
           <div className="flex items-center justify-between border-b border-emerald-200/70 pb-2.5">
             <h2 className="flex items-center gap-2 text-[14.5px] font-bold text-emerald-950">
-              <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+              <Truck className="h-4 w-4 text-emerald-700" />
               Replacement Shipment Details
             </h2>
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-emerald-800">
-              Dispatched
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
+                ret.replacement_delivery_status === "delivered"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-amber-100 text-amber-800"
+              }`}
+            >
+              {REPLACEMENT_DELIVERY_LABEL[
+                ret.replacement_delivery_status ?? "dispatched"
+              ]}
             </span>
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-3 text-[13px]">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 text-[13px]">
             <div className="rounded-lg bg-white border border-emerald-100 p-3">
               <span className="block text-[11px] uppercase font-bold text-emerald-800">
                 Replacement Shipment ID
               </span>
               <span className="mt-1 block tnum text-[14.5px] font-bold text-ink">
-                {ret.replacement_order_id || "REP-GENERATED"}
+                {ret.replacement_order_id}
               </span>
             </div>
 
@@ -593,7 +689,7 @@ export default async function CustomerReturnDetailPage({
                 Courier Partner
               </span>
               <span className="mt-1 block text-[14px] font-bold text-ink">
-                {ret.replacement_courier || "Delhivery"}
+                {ret.replacement_courier || "Not recorded yet"}
               </span>
             </div>
 
@@ -602,13 +698,24 @@ export default async function CustomerReturnDetailPage({
                 Tracking / AWB Number
               </span>
               <span className="mt-1 block tnum text-[14px] font-bold text-emerald-900 tracking-wide">
-                {ret.replacement_tracking || "In Transit"}
+                {ret.replacement_tracking || "Not recorded yet"}
+              </span>
+            </div>
+
+            <div className="rounded-lg bg-white border border-emerald-100 p-3">
+              <span className="block text-[11px] uppercase font-bold text-emerald-800">
+                Dispatched On
+              </span>
+              <span className="mt-1 block text-[14px] font-bold text-ink">
+                {ret.replacement_dispatch_date || "Not recorded yet"}
               </span>
             </div>
           </div>
 
           <p className="mt-3 text-[12px] text-emerald-800">
-            A brand new replacement unit has been packed and handed over to our courier partner. You will receive standard delivery updates via SMS and email.
+            {ret.replacement_delivery_status === "delivered"
+              ? "The replacement has been delivered. We hope it is everything you needed."
+              : "A brand new replacement unit has been packed and handed over to our courier partner. You will receive standard delivery updates via SMS and email."}
           </p>
         </section>
       )}
