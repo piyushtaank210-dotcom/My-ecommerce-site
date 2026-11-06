@@ -114,14 +114,25 @@ try {
       poster: v?.getAttribute('poster') ?? null,
       playing: v ? !v.paused : null,
       t: v ? Number(v.currentTime.toFixed(2)) : null,
+      background: v ? getComputedStyle(v).backgroundColor : null,
     };
   })()`);
   console.log(`   film playing     : ${opening.playing ? "yes" : "no"} (t=${opening.t}s)`);
   console.log(`   poster           : ${opening.poster}`);
+  console.log(`   film background  : ${opening.background}`);
   check(opening.playing === true, "the film is already running when the hero opens");
   check(
     Boolean(opening.poster) && opening.poster !== "/hero/hero-showcase.jpg",
     "the poster is the film's own first frame, not the photograph"
+  );
+  // A film is see-through until it has a poster or a frame, and the
+  // photograph underneath arrives after the first paint. Without a
+  // background of its own the hero would flash the photograph on the way
+  // to the film.
+  check(
+    Boolean(opening.background) && !/rgba\(.*,\s*0\)/.test(opening.background),
+    "the film covers the photograph while it is still loading",
+    opening.background ?? "none"
   );
 
   // Run the film to its end and see whether the next picture comes up.
@@ -143,6 +154,52 @@ try {
   console.log(`   after the end    : slide ${handover.slide}`);
   check(handover.ended === true, "the film ran to its end");
   check(handover.slide === "2 of 5", "the next picture came up on its own");
+
+  /* ------------------------------------------------------- the film is away */
+
+  console.log("\n— the film cannot be downloaded —");
+
+  // The browser says so quietly: play() stays pending rather than
+  // rejecting, so the photograph has to notice for itself.
+  cdp.on?.("Fetch.requestPaused", async (p) => {
+    if (!p.request?.url?.includes(".mp4")) {
+      await cdp.send("Fetch.continueRequest", { requestId: p.requestId });
+      return;
+    }
+    await cdp.send("Fetch.failRequest", {
+      requestId: p.requestId,
+      errorReason: "Failed",
+    });
+  });
+  await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*.mp4*" }] });
+
+  await cdp.goto(`${BASE}/`);
+  await sleep(2500);
+
+  const broken = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const v = section.querySelector('video');
+    const img = section.querySelector('img');
+    return {
+      filmOpacity: getComputedStyle(v).opacity,
+      photoOpacity: getComputedStyle(img).opacity,
+    };
+  })()`);
+  console.log(`   film opacity     : ${broken.filmOpacity}`);
+  console.log(`   photo opacity   : ${broken.photoOpacity}`);
+  check(broken.filmOpacity === "0", "the film is out of the way");
+  check(broken.photoOpacity === "1", "the photograph carries the slide");
+
+  await sleep(5000);
+  const moved = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    return slide?.getAttribute('aria-label') ?? null;
+  })()`);
+  console.log(`   after a while    : slide ${moved}`);
+  check(moved === "2 of 5", "the carousel keeps moving without the film");
+
+  await cdp.send("Fetch.disable");
 
   /* -------------------------------------------------- less movement asked */
 

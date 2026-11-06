@@ -119,6 +119,23 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     }
   }, [index, wideEnough, reduced, hidden, hovered, videoSlide, filmFailed]);
 
+  // A browser that cannot play the file says so quietly. play() stays
+  // pending rather than rejecting, and the error arrives while the page
+  // is still waking up, so it is never heard. The element's own state is
+  // the only reliable witness, and it is watched while the film is on
+  // screen: the moment the film is out of reach, the photograph takes
+  // over and the carousel goes back to its usual timing.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || videoSlide !== index || filmFailed) return;
+    if (!wideEnough || reduced) return;
+    const id = window.setInterval(() => {
+      // 3 is NETWORK_NO_SOURCE: there is no film this browser can play.
+      if (video.error || video.networkState === 3) setFilmFailed(true);
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [index, videoSlide, filmFailed, wideEnough, reduced]);
+
   function onPointerDown(e: React.PointerEvent) {
     swipeStart.current = e.clientX;
   }
@@ -199,6 +216,12 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     the still — the hero opens on the scene the film opens
                     on, and simply starts moving.
 
+                    The film carries the hero's own background colour. A
+                    video is see-through until it has a poster or a frame,
+                    and the photograph underneath arrives after the first
+                    paint — without this, the hero would flash the
+                    photograph on the way to the film.
+
                     The source carries the width and the motion preference,
                     so a phone — and a reader who has asked for less
                     movement — never downloads the film at all. */}
@@ -222,7 +245,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     if (Number.isFinite(d)) setFilmLength(d);
                   }}
                   onError={() => setFilmFailed(true)}
-                  className={`hero-film absolute inset-0 h-full w-full object-cover ${
+                  className={`hero-film absolute inset-0 h-full w-full bg-ink object-cover ${
                     filmFailed ? "opacity-0" : ""
                   }`}
                   style={{ objectPosition: s.image_position }}
@@ -231,6 +254,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     src={s.video}
                     type="video/mp4"
                     media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"
+                    onError={() => setFilmFailed(true)}
                   />
                 </video>
               </>
