@@ -135,6 +135,43 @@ try {
     opening.background ?? "none"
   );
 
+  // The bar fills over the length of the film, not over the usual slide
+  // interval, so the two stay together.
+  const bar = await cdp.evaluate(`(() => {
+    const el = document.querySelector('.hero-progress');
+    if (!el) return null;
+    const s = getComputedStyle(el);
+    return { state: s.animationPlayState, duration: s.animationDuration };
+  })()`);
+  console.log(`   progress bar     : ${bar?.state} over ${bar?.duration}`);
+  check(
+    bar !== null && parseFloat(bar.duration) > 8,
+    "the progress bar fills over the length of the film",
+    bar?.duration ?? "none"
+  );
+
+  // A cursor moving across the hero must not stop the film. It is the
+  // picture on the slide, not something the shopper has to hold still for.
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: 640,
+    y: 300,
+    button: "none",
+  });
+  await sleep(2000);
+  const hovering = await cdp.evaluate(`(() => {
+    const v = document.querySelector('section[aria-roledescription=carousel] video');
+    const el = document.querySelector('.hero-progress');
+    return {
+      paused: v?.paused ?? null,
+      t: v ? Number(v.currentTime.toFixed(2)) : null,
+      bar: el ? getComputedStyle(el).animationPlayState : null,
+    };
+  })()`);
+  console.log(`   under the cursor : t=${hovering.t}s paused=${hovering.paused} bar=${hovering.bar}`);
+  check(hovering.paused === false, "the film keeps playing with the cursor on the hero");
+  check(hovering.bar === "running", "the progress bar keeps filling too");
+
   // Run the film to its end and see whether the next picture comes up.
   await cdp.evaluate(`(() => {
     const v = document.querySelector('section[aria-roledescription=carousel] video');

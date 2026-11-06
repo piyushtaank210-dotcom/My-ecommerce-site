@@ -23,8 +23,15 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [filmFailed, setFilmFailed] = useState(false);
   const swipeStart = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Whether the film's end has already been dealt with. If the film ends
+  // before the page has finished waking up, the event is never heard, and
+  // this is how the slide knows it has to move on.
+  const endedSeen = useRef(false);
 
-  // Hover, focus and a backgrounded tab all pause the carousel.
+  // Hover, focus and a backgrounded tab all pause the carousel, so a
+  // shopper reading the copy does not have the slide change under them.
+  // The film is not one of them: it is the picture on the slide, and it
+  // plays through whatever the cursor is doing.
   const paused = hovered || hidden;
 
   // The slide that carries a film. A film decides how long its own slide
@@ -35,6 +42,11 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   // as the film does; a picture slide lasts for the usual interval.
   const slideMs =
     index === videoSlide && filmLength > 0 ? filmLength * 1000 : SLIDE_MS;
+
+  // The bar fills over exactly as long as the slide will last, so it is
+  // paused by whatever is holding the slide back. On a slide with a film
+  // that is the film itself, and the film does not stop for a cursor.
+  const barPaused = index === videoSlide && !filmFailed ? hidden : paused;
 
   const go = useCallback(
     (delta: number) => {
@@ -87,7 +99,9 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }, []);
 
   // The film plays while its own slide is on screen, and stops when it is
-  // not — and never plays at all where motion is unwelcome.
+  // not — and never plays at all where motion is unwelcome. A cursor
+  // moving across the hero does not stop it: the film is the picture on
+  // the slide, not a thing the shopper has to hold still for.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -95,16 +109,29 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       video.pause();
       return;
     }
-    // A film that has been watched to the end starts again from the top
-    // when its slide comes round.
+    // The length of the film. The browser may have worked it out before
+    // this page finished waking up, in which case the event that carries
+    // it has already gone by — so it is read off the element as well.
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      setFilmLength((known) => (known === 0 ? video.duration : known));
+    }
     if (video.ended) {
+      if (!endedSeen.current) {
+        // The film ran to its end while the page was still waking up and
+        // nobody heard it. Move on to the next picture.
+        endedSeen.current = true;
+        setIndex((n) => (n + 1) % count);
+        return;
+      }
+      // A film that has been watched to the end starts again from the top
+      // when its slide comes round.
       try {
         video.currentTime = 0;
       } catch {
         /* the film has not loaded yet, and starts at the top anyway */
       }
     }
-    if (wideEnough && !reduced && !hidden && !hovered && !filmFailed) {
+    if (wideEnough && !reduced && !hidden && !filmFailed) {
       video.play().catch((err: unknown) => {
         const name = (err as { name?: string } | null)?.name;
         // The browser would not start the film — it wants a gesture first,
@@ -117,7 +144,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     } else {
       video.pause();
     }
-  }, [index, wideEnough, reduced, hidden, hovered, videoSlide, filmFailed]);
+  }, [index, wideEnough, reduced, hidden, videoSlide, filmFailed, count]);
 
   // A browser that cannot play the file says so quietly. play() stays
   // pending rather than rejecting, and the error arrives while the page
@@ -238,6 +265,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     // The film has run to its end: hand over to the next
                     // picture, which is what the shopper sees next.
                     if (i !== index) return;
+                    endedSeen.current = true;
                     setIndex((n) => (n + 1) % count);
                   }}
                   onLoadedMetadata={(e) => {
@@ -409,7 +437,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                             animationDuration: `${slideMs}ms`,
                             // Paused, the bar holds where it is rather than
                             // jumping to the end and starting again.
-                            animationPlayState: paused ? "paused" : "running",
+                            animationPlayState: barPaused ? "paused" : "running",
                           }}
                         />
                       </span>

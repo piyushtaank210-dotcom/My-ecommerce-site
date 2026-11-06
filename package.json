@@ -15,6 +15,7 @@
     "seed": "node scripts/seed.mjs",
     "db:checkpoint": "node scripts/checkpoint-db.mjs",
     "sync-hero": "node scripts/sync-hero.mjs",
+    "encode:hero": "node scripts/encode-hero-video.mjs",
     "sync-categories": "node scripts/sync-categories.mjs",
     "sync-variants": "node scripts/sync-variants.mjs",
     "schema": "node scripts/write-schema.mjs",
