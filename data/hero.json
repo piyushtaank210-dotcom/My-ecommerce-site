@@ -2,7 +2,7 @@
   "slides": [
     {
       "id": "showcase",
-      "image": "hero-console-frame",
+      "image": "hero-console-still",
       "video": "/hero/hero-console-web.mp4",
       "video_poster": "/hero/hero-console-web-poster.jpg",
       "alt": "An Xbox console, a PlayStation 5 console, a game disc and a wireless controller on a lit desk",
@@ -10,9 +10,15 @@
       "side": "left",
       "eyebrow": "Consoles & controllers",
       "title": "The console store that actually has stock.",
-      "body": "Consoles and controllers from every brand we stock — genuine hardware, with the full Indian warranty behind it.",
-      "primary": { "label": "Shop consoles", "href": "/category/consoles" },
-      "secondary": { "label": "Controllers", "href": "/category/controllers" },
+      "body": "Consoles and controllers from every brand we stock — genuine hardware, with the warranty behind it.",
+      "primary": {
+        "label": "Shop consoles",
+        "href": "/category/consoles"
+      },
+      "secondary": {
+        "label": "Controllers",
+        "href": "/category/controllers"
+      },
       "note": "Dispatched the same working day"
     },
     {
@@ -23,23 +29,32 @@
       "side": "right",
       "eyebrow": "Local multiplayer",
       "title": "Two friends, one console.",
-      "body": "Two people, one couch, one console — and every controller we stock, packed and ready.",
-      "primary": { "label": "Shop controllers", "href": "/category/controllers" },
-      "secondary": { "label": "Consoles", "href": "/category/consoles" },
+      "body": "Two people, one couch, one console — and a controller for each of them.",
+      "primary": {
+        "label": "Shop controllers",
+        "href": "/category/controllers"
+      },
+      "secondary": {
+        "label": "Consoles",
+        "href": "/category/consoles"
+      },
       "note": "5-day replacement on a faulty unit"
     },
     {
       "id": "neon",
-      "image": "hero-neon",
+      "image": "hero-controller-still",
       "video": "/hero/hero-controller-web.mp4",
       "video_poster": "/hero/hero-controller-web-poster.jpg",
-      "alt": "A DualSense controller on a desk in a blue-lit gaming room",
+      "alt": "A white wireless controller with blue light streaks around it",
       "position": "50% 45%",
       "side": "left",
       "eyebrow": "Controllers",
       "title": "The controller that actually ships.",
-      "body": "Feel every impact and every pull of the trigger, in the controller you reach for first.",
-      "primary": { "label": "Shop controllers", "href": "/category/controllers" },
+      "body": "Feel every impact and every pull of the trigger, in the one you reach for.",
+      "primary": {
+        "label": "Shop controllers",
+        "href": "/category/controllers"
+      },
       "note": "Genuine stock, every colour"
     },
     {
@@ -50,9 +65,15 @@
       "side": "right",
       "eyebrow": "The full setup",
       "title": "Everything the setup needs.",
-      "body": "A console for the screen, a controller for the sofa — the pieces a setup is actually missing.",
-      "primary": { "label": "Shop consoles", "href": "/category/consoles" },
-      "secondary": { "label": "Controllers", "href": "/category/controllers" },
+      "body": "A console for the screen, a controller for the sofa — the pieces a setup is missing.",
+      "primary": {
+        "label": "Shop consoles",
+        "href": "/category/consoles"
+      },
+      "secondary": {
+        "label": "Controllers",
+        "href": "/category/controllers"
+      },
       "note": "The full Indian warranty"
     },
     {
@@ -63,8 +84,11 @@
       "side": "left",
       "eyebrow": "Every colour",
       "title": "Fitted to your hands.",
-      "body": "Bought through the authorised channel, so the warranty on the box is the warranty on the invoice.",
-      "primary": { "label": "Shop controllers", "href": "/category/controllers" },
+      "body": "Through the authorised channel — the warranty on the box is the warranty on the invoice.",
+      "primary": {
+        "label": "Shop controllers",
+        "href": "/category/controllers"
+      },
       "note": "A real person usually replies within a working day"
     }
   ]

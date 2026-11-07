@@ -328,10 +328,11 @@
   .hero-scrim {
     background-image: linear-gradient(
       to top,
-      rgb(11 18 32 / 0.95) 0%,
-      rgb(11 18 32 / 0.84) 30%,
-      rgb(11 18 32 / 0.5) 58%,
-      rgb(11 18 32 / 0.32) 100%
+      rgb(11 18 32 / 0.94) 0%,
+      rgb(11 18 32 / 0.86) 28%,
+      rgb(11 18 32 / 0.6) 50%,
+      rgb(11 18 32 / 0.16) 78%,
+      rgb(11 18 32 / 0.05) 100%
     );
   }
 
@@ -404,6 +405,20 @@
     }
   }
 
+  /* The still under a film is for the screens the film does not play on.
+     A phone keeps the picture and never downloads the film; a wide
+     screen plays the film, and the film and its own poster are the
+     picture there — so the still is not painted at all, and the two can
+     never be seen swapping over one another.
+
+     The rule mirrors the one above exactly: the still is hidden
+     wherever the film is shown. */
+  @media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+    .hero-still {
+      display: none;
+    }
+  }
+
   /* Keeps the Tailwind v4 scan in step with the carousel's utility classes. */
   /* The hero carousel places its copy, photo and dots on an explicit grid. */
 }
@@ -420,9 +435,9 @@
 @media (max-width: 639px) {
   .btn-invert,
   .btn-outline-invert {
-    padding: 0.9rem 1.1rem;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
+    padding: 0.8rem 0.9rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
   }
 }
 

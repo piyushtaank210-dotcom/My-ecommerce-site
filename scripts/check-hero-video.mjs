@@ -114,6 +114,7 @@ try {
     return {
       poster: v?.getAttribute('poster') ?? null,
       still: still?.getAttribute('src') ?? null,
+      stillShown: still ? getComputedStyle(still).display !== 'none' : null,
       playing: v ? !v.paused : null,
       t: v ? Number(v.currentTime.toFixed(2)) : null,
       background: v ? getComputedStyle(v).backgroundColor : null,
@@ -128,11 +129,11 @@ try {
     Boolean(opening.poster) && /-poster\.jpg$/.test(opening.poster),
     "the poster is the film's own first frame, not a separate picture"
   );
-  // The hero opens on a film, and there is no separate photograph under
-  // it: the still a phone shows is the film's own first frame.
+  // Where the film plays, the still under it is not painted at all, so
+  // the two can never be seen swapping over one another.
   check(
-    opening.still === opening.poster,
-    "the first slide's still is the film's own frame — there is no separate image"
+    opening.stillShown === false,
+    "the still under the film is not painted where the film plays"
   );
   // A film is see-through until it has a poster or a frame, and the
   // photograph underneath arrives after the first paint. Without a

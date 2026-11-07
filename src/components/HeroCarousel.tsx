@@ -264,7 +264,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Featured"
-      className="relative isolate flex min-h-[30rem] touch-pan-y flex-col overflow-hidden bg-ink sm:min-h-[36rem] lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
+      className="relative isolate flex min-h-[36rem] touch-pan-y flex-col overflow-hidden bg-ink lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
       onFocusCapture={() => setFocused(true)}
       onBlurCapture={() => setFocused(false)}
       onKeyDown={(e) => {
@@ -297,9 +297,15 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           >
             {s.video ? (
               <>
-                {/* The photograph sits underneath. It is what a phone
-                    shows, and what the slide falls back to when the film
-                    cannot be played at all. */}
+                {/* The still sits underneath. It is what a phone shows —
+                    the film never plays there, and the film is a
+                    landscape picture, so on a phone the still is cut for
+                    the screen instead. It is also what the slide falls
+                    back to when the film cannot be played at all.
+
+                    Where the film does play, this still is not painted:
+                    the film and its own poster are the picture, and the
+                    two can never be seen swapping over one another. */}
                 <Image
                   src={s.image}
                   alt={s.alt}
@@ -308,10 +314,16 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   fetchPriority="low"
                   unoptimized
                   sizes="100vw"
-                  className={`object-cover transition-transform duration-[6000ms] ease-linear ${
+                  className={`hero-still object-cover transition-transform duration-[6000ms] ease-linear ${
                     i === index ? "scale-[1.06]" : "scale-100"
                   }`}
-                  style={{ objectPosition: s.image_position }}
+                  style={{
+                    objectPosition: s.image_position,
+                    // Where the film cannot be played at all, this still is
+                    // the picture — so it has to be shown even on a screen
+                    // the film would have played on.
+                    display: films[s.id]?.failed ? "block" : undefined,
+                  }}
                 />
                 {/* The film. The film on the slide the hero opens on is in
                     the page from the very first byte, so it is already
@@ -411,7 +423,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           they cross-fade. On a narrow screen it sits along the bottom.
           The row sits in the site's own frame, so the headline lines up
           with the header above it however wide the screen is. */}
-      <div className="container-x relative flex flex-1 flex-col justify-end pb-6 pt-16 sm:pb-7 sm:pt-20 lg:justify-center lg:pb-0">
+      <div className="container-x relative flex flex-1 flex-col justify-end pb-6 pt-10 sm:pb-7 sm:pt-20 lg:justify-center lg:pb-0">
         <div
           className={`w-full max-w-[42rem] ${
             active.side === "right" ? "lg:ml-auto" : ""
@@ -479,8 +491,14 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   </div>
 
                   {s.note && (
+                    /* The note is the smallest line on the slide and the
+                       least load-bearing — the same promise is made on the
+                       product page, in the footer and in the trust panel
+                       below the hero. A phone has the room to carry it; a
+                       small screen is better off with the headline, the
+                       line under it and the buttons. */
                     <p
-                      className={`mt-5 text-[12.5px] text-white/65 sm:mt-6 ${
+                      className={`mt-5 hidden text-[12.5px] text-white/65 sm:mt-6 sm:block ${
                         on ? "hero-rise" : ""
                       }`}
                       style={on ? { animationDelay: "330ms" } : undefined}
