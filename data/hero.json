@@ -10,10 +10,10 @@
       "side": "left",
       "eyebrow": "Consoles & controllers",
       "title": "The console store that actually has stock.",
-      "body": "Consoles and controllers from every brand we stock — genuine hardware with Indian warranty, dispatched the same day.",
+      "body": "Consoles and controllers from every brand we stock — genuine hardware, with the full Indian warranty behind it.",
       "primary": { "label": "Shop consoles", "href": "/category/consoles" },
       "secondary": { "label": "Controllers", "href": "/category/controllers" },
-      "note": "Fast dispatch · 7-day replacement · Genuine stock"
+      "note": "Dispatched the same working day"
     },
     {
       "id": "lounge",
@@ -23,22 +23,24 @@
       "side": "right",
       "eyebrow": "Local multiplayer",
       "title": "Two friends, one console.",
-      "body": "Two people, one couch, one console — and every controller we stock, dispatched the same day.",
+      "body": "Two people, one couch, one console — and every controller we stock, packed and ready.",
       "primary": { "label": "Shop controllers", "href": "/category/controllers" },
       "secondary": { "label": "Consoles", "href": "/category/consoles" },
-      "note": "Fast dispatch · 7-day replacement · Genuine stock"
+      "note": "5-day replacement on a faulty unit"
     },
     {
       "id": "neon",
       "image": "hero-neon",
+      "video": "/hero/hero-controller-web.mp4",
+      "video_poster": "/hero/hero-controller-web-poster.jpg",
       "alt": "A DualSense controller on a desk in a blue-lit gaming room",
       "position": "50% 45%",
       "side": "left",
-      "eyebrow": "DualSense",
+      "eyebrow": "Controllers",
       "title": "The controller that actually ships.",
-      "body": "Haptic feedback, adaptive triggers and a 1,000 mAh battery — packed and dispatched the same day you order.",
+      "body": "Feel every impact and every pull of the trigger, in the controller you reach for first.",
       "primary": { "label": "Shop controllers", "href": "/category/controllers" },
-      "note": "Fast dispatch · 7-day replacement · Genuine stock"
+      "note": "Genuine stock, every colour"
     },
     {
       "id": "setup",
@@ -48,10 +50,10 @@
       "side": "right",
       "eyebrow": "The full setup",
       "title": "Everything the setup needs.",
-      "body": "A console for the screen, a controller for the sofa — genuine parts, dispatched the same day.",
+      "body": "A console for the screen, a controller for the sofa — the pieces a setup is actually missing.",
       "primary": { "label": "Shop consoles", "href": "/category/consoles" },
       "secondary": { "label": "Controllers", "href": "/category/controllers" },
-      "note": "Fast dispatch · 7-day replacement · Genuine stock"
+      "note": "The full Indian warranty"
     },
     {
       "id": "dualsense",
@@ -59,11 +61,11 @@
       "alt": "Hands holding a white DualSense controller in front of a television",
       "position": "50% 50%",
       "side": "left",
-      "eyebrow": "DualSense",
+      "eyebrow": "Every colour",
       "title": "Fitted to your hands.",
-      "body": "Every colour we stock, in the box — haptics, triggers and a 1,000 mAh battery, dispatched the same day.",
+      "body": "Bought through the authorised channel, so the warranty on the box is the warranty on the invoice.",
       "primary": { "label": "Shop controllers", "href": "/category/controllers" },
-      "note": "Fast dispatch · 7-day replacement · Genuine stock"
+      "note": "A real person usually replies within a working day"
     }
   ]
 }

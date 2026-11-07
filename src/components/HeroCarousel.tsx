@@ -12,6 +12,14 @@ const SLIDE_MS = 6000;
 /** A drag of at least this many pixels counts as a swipe. */
 const SWIPE_PX = 48;
 
+/** What a film has told us about itself. */
+type FilmInfo = {
+  /** How long the film runs, in seconds. */
+  length: number;
+  /** The browser would not play it, so the photograph carries the slide. */
+  failed: boolean;
+};
+
 export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const count = slides.length;
   const [index, setIndex] = useState(0);
@@ -19,34 +27,58 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [hidden, setHidden] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [wideEnough, setWideEnough] = useState(false);
-  const [filmLength, setFilmLength] = useState(0);
-  const [filmFailed, setFilmFailed] = useState(false);
+  /**
+   * What each film has told us, by slide. A slide with no film has no
+   * entry. The films are independent of one another: one of them failing
+   * says nothing about the next, and each decides the length of its own
+   * slide.
+   */
+  const [films, setFilms] = useState<Record<string, FilmInfo>>({});
   const swipeStart = useRef<number | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  // Whether the film's end has already been dealt with. If the film ends
-  // before the page has finished waking up, the event is never heard, and
-  // this is how the slide knows it has to move on.
-  const endedSeen = useRef(false);
+  /** The film element on each slide. */
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  /**
+   * Whether each film's end has already been dealt with. If a film ends
+   * before the page has finished waking up, the event is never heard, and
+   * this is how the slide knows it has to move on.
+   */
+  const endedSeen = useRef(new Set<string>());
 
   // Hover, focus and a backgrounded tab all pause the carousel, so a
   // shopper reading the copy does not have the slide change under them.
-  // The film is not one of them: it is the picture on the slide, and it
+  // A film is not one of them: it is the picture on the slide, and it
   // plays through whatever the cursor is doing.
   const paused = hovered || hidden;
 
-  // The slide that carries a film. A film decides how long its own slide
-  // lasts: it plays to the end and hands over to the next picture itself.
-  const videoSlide = slides.findIndex((s) => s.video);
+  const active = slides[index];
+  /** Whether the slide on screen carries a film. */
+  const onFilm = Boolean(active?.video);
+  /** What the film on the slide on screen has told us. */
+  const activeFilm = active?.video ? films[active.id] : undefined;
+  const filmLength = activeFilm?.length ?? 0;
+  const filmFailed = activeFilm?.failed ?? false;
 
-  // How long the slide on screen lasts. A slide with a film lasts as long
-  // as the film does; a picture slide lasts for the usual interval.
+  /**
+   * The film on the slide the hero opens on. It is the one that is
+   * fetched and running from the very first byte; the others are fetched
+   * when the carousel reaches them, so a visitor who never gets there
+   * never pays for them.
+   */
+  const openingFilm = slides[0]?.video ? 0 : -1;
+
+  /**
+   * How long the slide on screen lasts. A slide with a film lasts as long
+   * as the film does; a picture slide lasts for the usual interval.
+   */
   const slideMs =
-    index === videoSlide && filmLength > 0 ? filmLength * 1000 : SLIDE_MS;
+    filmLength > 0 && !filmFailed ? filmLength * 1000 : SLIDE_MS;
 
-  // The bar fills over exactly as long as the slide will last, so it is
-  // paused by whatever is holding the slide back. On a slide with a film
-  // that is the film itself, and the film does not stop for a cursor.
-  const barPaused = index === videoSlide && !filmFailed ? hidden : paused;
+  /**
+   * The bar fills over exactly as long as the slide will last, so it is
+   * paused by whatever is holding the slide back. On a slide with a film
+   * that is the film itself, and the film does not stop for a cursor.
+   */
+  const barPaused = onFilm && !filmFailed ? hidden : paused;
 
   const go = useCallback(
     (delta: number) => {
@@ -55,6 +87,16 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     },
     [count]
   );
+
+  /** Records what a film has told us, without churning the state. */
+  const setFilm = useCallback((id: string, patch: Partial<FilmInfo>) => {
+    setFilms((prev) => {
+      const now = prev[id] ?? { length: 0, failed: false };
+      const next = { ...now, ...patch };
+      if (next.length === now.length && next.failed === now.failed) return prev;
+      return { ...prev, [id]: next };
+    });
+  }, []);
 
   // Honour the OS "reduce motion" setting: no auto-advance, no animation.
   useEffect(() => {
@@ -86,10 +128,10 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   // browser would not play it — so the carousel never sits on one slide.
   useEffect(() => {
     if (count < 2 || paused || reduced) return;
-    if (index === videoSlide && wideEnough && !filmFailed) return;
+    if (onFilm && wideEnough && !filmFailed) return;
     const id = window.setTimeout(() => setIndex((index + 1) % count), SLIDE_MS);
     return () => window.clearTimeout(id);
-  }, [count, index, paused, reduced, videoSlide, wideEnough, filmFailed]);
+  }, [count, index, paused, reduced, onFilm, wideEnough, filmFailed]);
 
   // Don't burn through the slides while the tab is in the background.
   useEffect(() => {
@@ -98,28 +140,38 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
-  // The film plays while its own slide is on screen, and stops when it is
-  // not — and never plays at all where motion is unwelcome. A cursor
-  // moving across the hero does not stop it: the film is the picture on
-  // the slide, not a thing the shopper has to hold still for.
+  // Every film that is not on screen is still. The slides are stacked on
+  // top of one another, so a film that is off screen has to be holding
+  // its frame rather than playing underneath the next one.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (videoSlide !== index) {
-      video.pause();
-      return;
+    for (let i = 0; i < count; i++) {
+      if (i === index) continue;
+      videoRefs.current[i]?.pause();
     }
+  }, [index, count]);
+
+  // The film on the slide on screen plays; it stops when it is not on
+  // screen, and it never plays at all where motion is unwelcome. A
+  // cursor moving across the hero does not stop it: the film is the
+  // picture on the slide, not a thing the shopper has to hold still for.
+  useEffect(() => {
+    const slide = slides[index];
+    if (!slide?.video) return;
+    const video = videoRefs.current[index];
+    if (!video) return;
+
     // The length of the film. The browser may have worked it out before
     // this page finished waking up, in which case the event that carries
     // it has already gone by — so it is read off the element as well.
     if (Number.isFinite(video.duration) && video.duration > 0) {
-      setFilmLength((known) => (known === 0 ? video.duration : known));
+      setFilm(slide.id, { length: video.duration });
     }
+
     if (video.ended) {
-      if (!endedSeen.current) {
+      if (!endedSeen.current.has(slide.id)) {
         // The film ran to its end while the page was still waking up and
         // nobody heard it. Move on to the next picture.
-        endedSeen.current = true;
+        endedSeen.current.add(slide.id);
         setIndex((n) => (n + 1) % count);
         return;
       }
@@ -131,6 +183,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
         /* the film has not loaded yet, and starts at the top anyway */
       }
     }
+
     if (wideEnough && !reduced && !hidden && !filmFailed) {
       video.play().catch((err: unknown) => {
         const name = (err as { name?: string } | null)?.name;
@@ -138,13 +191,13 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
         // or it cannot play the file. The photograph carries the slide
         // instead, and the carousel goes back to its usual timing.
         if (name === "NotAllowedError" || name === "NotSupportedError") {
-          setFilmFailed(true);
+          setFilm(slide.id, { failed: true });
         }
       });
     } else {
       video.pause();
     }
-  }, [index, wideEnough, reduced, hidden, videoSlide, filmFailed, count]);
+  }, [index, wideEnough, reduced, hidden, filmFailed, count, slides, setFilm]);
 
   // A browser that cannot play the file says so quietly. play() stays
   // pending rather than rejecting, and the error arrives while the page
@@ -153,15 +206,19 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   // screen: the moment the film is out of reach, the photograph takes
   // over and the carousel goes back to its usual timing.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || videoSlide !== index || filmFailed) return;
-    if (!wideEnough || reduced) return;
+    const slide = slides[index];
+    if (!slide?.video) return;
+    const video = videoRefs.current[index];
+    if (!video || !wideEnough || reduced) return;
+    if (films[slide.id]?.failed) return;
     const id = window.setInterval(() => {
       // 3 is NETWORK_NO_SOURCE: there is no film this browser can play.
-      if (video.error || video.networkState === 3) setFilmFailed(true);
+      if (video.error || video.networkState === 3) {
+        setFilm(slide.id, { failed: true });
+      }
     }, 400);
     return () => window.clearInterval(id);
-  }, [index, videoSlide, filmFailed, wideEnough, reduced]);
+  }, [index, slides, wideEnough, reduced, films, setFilm]);
 
   function onPointerDown(e: React.PointerEvent) {
     swipeStart.current = e.clientX;
@@ -176,8 +233,6 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }
 
   if (count === 0) return null;
-
-  const active = slides[index];
 
   return (
     <section
@@ -202,9 +257,9 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           that is showing dissolves in while the one leaving softens and
           drifts back — a slow change of scene rather than a cut.
 
-          A slide may also carry a film. The film is on the page from the
-          start and is running when the hero opens; it plays to its end and
-          then hands over to the next picture. A phone keeps the
+          A slide may also carry a film. A film is on the page from the
+          start and is running when the hero opens; it plays to its end
+          and then hands over to the next picture. A phone keeps the
           photograph, and never downloads the film at all. */}
       <div className="absolute inset-0 grid select-none">
         {slides.map((s, i) => (
@@ -234,11 +289,15 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   }`}
                   style={{ objectPosition: s.image_position }}
                 />
-                {/* The film. It is in the page from the very first byte, so
-                    it is already running when the hero opens instead of
-                    swapping in over the photograph a moment later.
+                {/* The film. The film on the slide the hero opens on is in
+                    the page from the very first byte, so it is already
+                    running when the hero opens instead of swapping in over
+                    the photograph a moment later. The others are fetched
+                    when the carousel reaches them — their poster is the
+                    film's own first frame, so the picture on screen does
+                    not change when the film takes over.
 
-                    Its poster is the film's own first frame, so the picture
+                    The poster is the film's own first frame, so the picture
                     on screen does not change when the film takes over from
                     the still — the hero opens on the scene the film opens
                     on, and simply starts moving.
@@ -253,28 +312,30 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     so a phone — and a reader who has asked for less
                     movement — never downloads the film at all. */}
                 <video
-                  ref={i === videoSlide ? videoRef : undefined}
+                  ref={(el) => {
+                    videoRefs.current[i] = el;
+                  }}
                   poster={s.video_poster ?? s.image}
                   aria-hidden="true"
-                  autoPlay
+                  autoPlay={i === openingFilm}
                   muted
                   playsInline
-                  preload="auto"
+                  preload={i === openingFilm ? "auto" : "metadata"}
                   tabIndex={-1}
                   onEnded={() => {
                     // The film has run to its end: hand over to the next
                     // picture, which is what the shopper sees next.
                     if (i !== index) return;
-                    endedSeen.current = true;
+                    endedSeen.current.add(s.id);
                     setIndex((n) => (n + 1) % count);
                   }}
                   onLoadedMetadata={(e) => {
                     const d = e.currentTarget.duration;
-                    if (Number.isFinite(d)) setFilmLength(d);
+                    if (Number.isFinite(d)) setFilm(s.id, { length: d });
                   }}
-                  onError={() => setFilmFailed(true)}
+                  onError={() => setFilm(s.id, { failed: true })}
                   className={`hero-film absolute inset-0 h-full w-full bg-ink object-cover ${
-                    filmFailed ? "opacity-0" : ""
+                    films[s.id]?.failed ? "opacity-0" : ""
                   }`}
                   style={{ objectPosition: s.image_position }}
                 >
@@ -282,7 +343,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     src={s.video}
                     type="video/mp4"
                     media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"
-                    onError={() => setFilmFailed(true)}
+                    onError={() => setFilm(s.id, { failed: true })}
                   />
                 </video>
               </>

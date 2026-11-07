@@ -57,6 +57,37 @@ try {
   const third = await cdp.evaluate(read);
   console.log(`\n3. back on the first slide : paused=${third.paused} t=${third.t}s`);
   console.log(`   ${third.paused === false ? "✓ the film plays again" : "✗ the film did not resume"}`);
+
+  // The hero carries a second film. It has to take over when its slide
+  // comes up, and the first film has to stop while it is on screen.
+  await cdp.evaluate(
+    `document.querySelector('[aria-label="Next slide"]')?.click()`
+  );
+  await sleep(1000);
+  await cdp.evaluate(
+    `document.querySelector('[aria-label="Next slide"]')?.click()`
+  );
+  await sleep(2500);
+
+  const fourth = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const videos = [...section.querySelectorAll('video')];
+    const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    return {
+      slide: slide?.getAttribute('aria-label') ?? null,
+      first: videos[0] ? { paused: videos[0].paused, t: Number(videos[0].currentTime.toFixed(2)) } : null,
+      second: videos[1] ? { paused: videos[1].paused, t: Number(videos[1].currentTime.toFixed(2)) } : null,
+    };
+  })()`);
+  console.log(`\n4. on the second film's slide: slide ${fourth.slide}`);
+  console.log(`   first film  : paused=${fourth.first?.paused} t=${fourth.first?.t}s`);
+  console.log(`   second film : paused=${fourth.second?.paused} t=${fourth.second?.t}s`);
+  console.log(
+    `   ${fourth.second?.paused === false ? "✓ the second film is playing" : "✗ the second film is not playing"}`
+  );
+  console.log(
+    `   ${fourth.first?.paused === true ? "✓ the first film stopped" : "✗ the first film is still playing"}`
+  );
 } finally {
   chrome.kill();
 }

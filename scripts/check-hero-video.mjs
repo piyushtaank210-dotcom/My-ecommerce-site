@@ -192,6 +192,53 @@ try {
   check(handover.ended === true, "the film ran to its end");
   check(handover.slide === "2 of 5", "the next picture came up on its own");
 
+  /* --------------------------------------------------------- the two films */
+
+  console.log("\n— the second film —");
+
+  // The hero carries more than one film. The second one has to be a
+  // film of its own: it plays on its own slide, and the first film is
+  // still while it is on screen.
+  await cdp.evaluate(
+    `document.querySelector('[aria-label="Next slide"]')?.click()`
+  );
+  await sleep(2500);
+
+  const second = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const videos = [...section.querySelectorAll('video')];
+    const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    return {
+      slide: slide?.getAttribute('aria-label') ?? null,
+      count: videos.length,
+      playing: videos.map((v) => !v.paused),
+      posters: videos.map((v) => v.getAttribute('poster')),
+      sources: videos.map((v) => v.querySelector('source')?.getAttribute('src')),
+    };
+  })()`);
+  console.log(`   slide            : ${second.slide}`);
+  console.log(`   films on the page: ${second.count}`);
+  console.log(`   playing          : ${JSON.stringify(second.playing)}`);
+  console.log(`   posters          : ${JSON.stringify(second.posters)}`);
+  check(second.count === 2, "the hero carries two films");
+  check(second.slide === "3 of 5", "the carousel reached the second film");
+  check(
+    second.playing[1] === true,
+    "the second film is playing on its own slide"
+  );
+  check(
+    second.playing[0] === false,
+    "the first film is still while the second one is on screen"
+  );
+  check(
+    Boolean(second.posters[1]) && second.posters[1] !== "/hero/hero-neon.jpg",
+    "the second film's poster is its own first frame, not the photograph"
+  );
+  check(
+    second.sources[0] !== second.sources[1],
+    "the two films are two different films"
+  );
+
   /* ------------------------------------------------------- the film is away */
 
   console.log("\n— the film cannot be downloaded —");
