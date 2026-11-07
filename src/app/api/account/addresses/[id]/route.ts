@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // A bare "make this the default" call carries no address fields.
   if (body.isDefault !== undefined && !body.address1) {
-    setDefaultAddress(addressId, guard.user.id);
+    await setDefaultAddress(addressId, guard.user.id);
     return json(getAddress(addressId, guard.user.id));
   }
 
@@ -33,7 +33,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return fail("An address needs a street, a city and a PIN code.", 400);
   }
 
-  const updated = updateAddress(addressId, guard.user.id, {
+  const updated = await updateAddress(addressId, guard.user.id, {
     label: body.label ?? "Home",
     name: body.name ?? "",
     phone: body.phone ?? "",

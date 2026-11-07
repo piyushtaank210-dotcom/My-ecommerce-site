@@ -29,6 +29,7 @@ import {
   type ReplacementOption,
   DEFAULT_RETURN_WINDOW_DAYS,
   RETURN_WINDOW_DAYS,
+  RETURN_TYPE_LABEL,
   REPLACEMENT_DELIVERY_LABEL,
 } from "./return-status";
 import { getReturnWindowDays } from "./settings";
@@ -43,8 +44,8 @@ export function generateReturnId(): string {
 
 /**
  * Calculates the exact return deadline in Indian Standard Time (UTC+5:30).
- * Default return window is 5 calendar days from delivery date.
- * If delivered on 10 November, return deadline is end of day 15 November (23:59:59.999 IST).
+ * Default return window is 7 calendar days from delivery date.
+ * If delivered on 10 November, return deadline is end of day 17 November (23:59:59.999 IST).
  */
 export function calculateReturnDeadline(deliveredAt: string | null): {
   deadline: Date;
@@ -305,6 +306,7 @@ function mapReturnRow(r: Row): ReturnRequest {
     return_id: str(im.return_id),
     path: str(im.path),
     caption: strOrNull(im.caption),
+    kind: (str(im.kind) as ReturnImage["kind"]) || "photo",
     created_at: str(im.created_at),
   }));
 
@@ -354,6 +356,13 @@ function mapReturnRow(r: Row): ReturnRequest {
       (strOrNull(r.replacement_delivery_status) as ReturnRequest["replacement_delivery_status"]) ??
       null,
     replacement_delivered_at: strOrNull(r.replacement_delivered_at),
+    serial_number: strOrNull(r.serial_number),
+    sealed_state:
+      (strOrNull(r.sealed_state) as ReturnRequest["sealed_state"]) ?? null,
+    missing_accessories: strOrNull(r.missing_accessories),
+    accessories_courier: strOrNull(r.accessories_courier),
+    accessories_tracking: strOrNull(r.accessories_tracking),
+    accessories_dispatched_at: strOrNull(r.accessories_dispatched_at),
     created_at: str(r.created_at),
     updated_at: str(r.updated_at),
     items,
@@ -590,7 +599,18 @@ export type CreateReturnInput = {
   type: ReturnType;
   reason: string;
   customerNotes?: string | null;
-  imagePaths?: string[];
+  /**
+   * The evidence the customer sent. A photograph and an unboxing video
+   * are both evidence, and they are kept apart so the back office can
+   * tell which is which.
+   */
+  evidence?: { path: string; kind: "photo" | "video" }[];
+  /** The serial number of the unit, where the customer has given one. */
+  serialNumber?: string | null;
+  /** Whether the customer says the unit is still sealed. */
+  sealedState?: "sealed" | "opened" | null;
+  /** What the customer says is missing from the box. */
+  missingAccessories?: string | null;
   items: {
     orderItemId: number;
     productSlug: string;
@@ -618,8 +638,9 @@ export function createReturnRequest(input: CreateReturnInput): string {
 
     db.prepare(
       `INSERT INTO return_requests
-        (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
-       VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?)`
+        (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status,
+         serial_number, sealed_state, missing_accessories)
+       VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       returnId,
       input.orderId,
@@ -628,7 +649,10 @@ export function createReturnRequest(input: CreateReturnInput): string {
       input.reason,
       input.customerNotes || null,
       refundEst,
-      input.type === "return" ? "pending" : "none"
+      input.type === "return" ? "pending" : "none",
+      input.serialNumber || null,
+      input.sealedState || null,
+      input.missingAccessories || null
     );
 
     // 2. Insert items
@@ -651,13 +675,13 @@ export function createReturnRequest(input: CreateReturnInput): string {
       );
     }
 
-    // 3. Insert images if provided
-    if (input.imagePaths && input.imagePaths.length > 0) {
+    // 3. Insert the evidence, photographs and videos alike
+    if (input.evidence && input.evidence.length > 0) {
       const insImg = db.prepare(
-        "INSERT INTO return_images (return_id, path) VALUES (?, ?)"
+        "INSERT INTO return_images (return_id, path, kind) VALUES (?, ?, ?)"
       );
-      for (const p of input.imagePaths) {
-        if (p && p.trim()) insImg.run(returnId, p.trim());
+      for (const e of input.evidence) {
+        if (e.path && e.path.trim()) insImg.run(returnId, e.path.trim(), e.kind);
       }
     }
 
@@ -668,7 +692,7 @@ export function createReturnRequest(input: CreateReturnInput): string {
     ).run(
       returnId,
       input.userId,
-      `Customer initiated a ${input.type === "replacement" ? "replacement" : "return & refund"} request.`
+      `Customer initiated a ${RETURN_TYPE_LABEL[input.type] ?? "return"} request.`
     );
   });
 
@@ -1184,6 +1208,73 @@ export function markCompleted(
     );
 
     return { ok: true, message: "Request completed." };
+  });
+}
+
+/**
+ * Sends the missing accessories to the customer.
+ *
+ * The unit stays where it is — nothing is collected and nothing is
+ * refunded. The parts go out with a courier and a tracking number, and
+ * the case is closed when they have been sent. The customer keeps the
+ * console, the controller, and the receipt for what they were sent.
+ */
+export function dispatchMissingAccessories(
+  id: string,
+  staffUser: { id: number; name: string },
+  input: { courier: string; tracking: string; notes?: string }
+): { ok: boolean; message: string } {
+  const db = getDb();
+  const courier = input.courier.trim();
+  const tracking = input.tracking.trim();
+
+  if (!courier) return { ok: false, message: "Say which courier the parts went with." };
+  if (!tracking) return { ok: false, message: "Give the tracking number for the parts." };
+
+  return withTransaction(db, () => {
+    const req = db
+      .prepare("SELECT status, type FROM return_requests WHERE id = ?")
+      .get(id) as { status?: string; type?: string } | undefined;
+
+    if (!req) return { ok: false, message: "Request not found." };
+    if (str(req.type) !== "accessories") {
+      return {
+        ok: false,
+        message: "This is not a missing-accessories request.",
+      };
+    }
+    if (req.status === "completed" || req.status === "rejected") {
+      return { ok: false, message: `Request is already '${req.status}'.` };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    db.prepare(
+      `UPDATE return_requests
+       SET status = 'completed',
+           accessories_courier = ?,
+           accessories_tracking = ?,
+           accessories_dispatched_at = ?,
+           updated_at = ?
+       WHERE id = ?`
+    ).run(courier, tracking, nowIso, nowIso, id);
+
+    db.prepare(
+      `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
+       VALUES (?, 'completed', 'staff', ?, ?, ?)`
+    ).run(
+      id,
+      staffUser.id,
+      staffUser.name,
+      input.notes?.trim()
+        ? `Missing accessories dispatched with ${courier} (${tracking}). ${input.notes.trim()}`
+        : `Missing accessories dispatched with ${courier} (${tracking}).`
+    );
+
+    return {
+      ok: true,
+      message: "The missing accessories have been sent to the customer.",
+    };
   });
 }
 

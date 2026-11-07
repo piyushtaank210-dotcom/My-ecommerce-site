@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { parseBackorderPolicy, type BackorderPolicy } from "./variations";
+import { RETURN_WINDOW_DAYS, RETURN_WINDOW_SETTING } from "./return-policy";
 
 /**
  * The store's own settings.
@@ -13,7 +14,7 @@ import { parseBackorderPolicy, type BackorderPolicy } from "./variations";
 export const BACKORDER_SETTING = "backorder_policy";
 
 /** The key the return window duration (in days) is stored under. */
-export const RETURN_WINDOW_SETTING = "return_window_days";
+export { RETURN_WINDOW_SETTING };
 
 export function getSetting(key: string, fallback = ""): string {
   const row = getDb()
@@ -31,10 +32,16 @@ export function setSetting(key: string, value: string): void {
     .run(key, value);
 }
 
-/** The default return window in calendar days from delivery. */
-export const DEFAULT_RETURN_WINDOW_DAYS = 5;
+/**
+ * The default return window in calendar days from delivery.
+ *
+ * Seven days, and it is the same seven days for every kind of claim: a
+ * damaged or faulty unit, a wrong item, a missing accessory, and a
+ * voluntary return on a sealed unit.
+ */
+export const DEFAULT_RETURN_WINDOW_DAYS = RETURN_WINDOW_DAYS;
 
-/** Returns the configured return window duration in days (default 5). */
+/** Returns the configured return window duration in days (default 7). */
 export function getReturnWindowDays(): number {
   const val = getSetting(RETURN_WINDOW_SETTING, String(DEFAULT_RETURN_WINDOW_DAYS));
   const parsed = parseInt(val, 10);

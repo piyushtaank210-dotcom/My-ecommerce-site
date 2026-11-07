@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "./auth";
 import { getOrder } from "./orders";
-import { saveUpload } from "./uploads";
+import { saveUpload, saveVideoUpload } from "./uploads";
 import {
   createReturnRequest,
   cancelReturnRequest,
@@ -13,6 +13,10 @@ import {
   isProductReturnable,
   type ReturnType,
 } from "./returns";
+import {
+  checkRequestAllowed,
+  policyForReason,
+} from "./return-policy";
 
 export type ReturnActionState = {
   ok: boolean;
@@ -20,6 +24,17 @@ export type ReturnActionState = {
   errors?: Record<string, string>;
   returnId?: string;
 };
+
+/** How many photographs a claim may carry. */
+const MAX_PHOTOS = 6;
+
+/** How many videos a claim may carry. */
+const MAX_VIDEOS = 2;
+
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
 
 /**
  * Customer Server Action: Submit a Return or Replacement Request
@@ -34,6 +49,9 @@ export async function createReturnRequestAction(
   const reason = String(formData.get("reason") ?? "").trim();
   const customerNotes = String(formData.get("customerNotes") ?? "").trim();
   const rawItems = String(formData.get("items") ?? "").trim();
+  const serialNumber = String(formData.get("serialNumber") ?? "").trim();
+  const missingAccessories = String(formData.get("missingAccessories") ?? "").trim();
+  const sealedState = String(formData.get("sealedState") ?? "").trim();
 
   if (!orderId) {
     return { ok: false, message: "Order ID is missing." };
@@ -71,6 +89,20 @@ export async function createReturnRequestAction(
       errors: { reason: "Please choose a reason for the return or replacement." },
       message: "Please choose a reason.",
     };
+  }
+
+  // The rules for this reason decide what may be asked for. A request
+  // for a remedy the rules do not allow is refused here, on the server,
+  // and not only in the form.
+  const policy = policyForReason(reason);
+
+  const allowed = checkRequestAllowed({
+    reason,
+    type,
+    sealedConfirmed: sealedState === "sealed",
+  });
+  if (!allowed.ok) {
+    return { ok: false, message: allowed.message };
   }
 
   let parsedItems: {
@@ -114,41 +146,62 @@ export async function createReturnRequestAction(
     }
   }
 
-  // Handle uploaded evidence photos with secure validation (up to 4 images, max 5MB, valid image format)
-  const imageFiles = formData.getAll("photos") as File[];
-  const validFiles = imageFiles.filter(
+  // The evidence: photographs and, where the customer has one, an
+  // unboxing video. Both are saved and kept apart.
+  const files = formData.getAll("evidence") as File[];
+  const validFiles = files.filter(
     (f) => f && f.size > 0 && typeof f.arrayBuffer === "function"
   );
 
-  if (validFiles.length > 4) {
+  const photos = validFiles.filter((f) => PHOTO_TYPES.includes(f.type));
+  const videos = validFiles.filter((f) => VIDEO_TYPES.includes(f.type));
+
+  if (photos.length > MAX_PHOTOS) {
     return {
       ok: false,
-      message: "You can upload a maximum of 4 evidence photographs.",
+      message: `You can upload a maximum of ${MAX_PHOTOS} evidence photographs.`,
+    };
+  }
+  if (videos.length > MAX_VIDEOS) {
+    return {
+      ok: false,
+      message: `You can upload a maximum of ${MAX_VIDEOS} videos.`,
     };
   }
 
-  const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
-  const maxBytes = 5 * 1024 * 1024; // 5MB
+  const unsupported = validFiles.filter(
+    (f) => !PHOTO_TYPES.includes(f.type) && !VIDEO_TYPES.includes(f.type)
+  );
+  if (unsupported.length) {
+    return {
+      ok: false,
+      message:
+        "One of the files is not a photograph or a video we can play. Use JPG, PNG or WebP for a photograph, and MP4, WebM or MOV for a video.",
+    };
+  }
 
-  const imagePaths: string[] = [];
-  for (const file of validFiles) {
-    if (!allowedMimes.includes(file.type)) {
+  const evidence: { path: string; kind: "photo" | "video" }[] = [];
+
+  for (const file of photos) {
+    if (file.size > MAX_PHOTO_BYTES) {
       return {
         ok: false,
-        message: `Invalid file type (${file.type || "unknown"}). Only JPG, PNG, and WebP images are allowed.`,
+        message: `File "${file.name}" exceeds the 5MB size limit. Please upload a smaller photograph.`,
       };
     }
-    if (file.size > maxBytes) {
+    const saved = await saveUpload("returns", file);
+    if (saved.ok) evidence.push({ path: saved.path, kind: "photo" });
+  }
+
+  for (const file of videos) {
+    if (file.size > MAX_VIDEO_BYTES) {
       return {
         ok: false,
-        message: `File "${file.name}" exceeds the 5MB size limit. Please upload a smaller image.`,
+        message: `File "${file.name}" exceeds the 60MB size limit. Please upload a shorter video.`,
       };
     }
-
-    const uploadRes = await saveUpload("returns", file);
-    if (uploadRes.ok) {
-      imagePaths.push(uploadRes.path);
-    }
+    const saved = await saveVideoUpload("returns", file);
+    if (saved.ok) evidence.push({ path: saved.path, kind: "video" });
   }
 
   let returnId: string;
@@ -156,10 +209,13 @@ export async function createReturnRequestAction(
     returnId = createReturnRequest({
       orderId,
       userId: user?.id ?? order.user_id,
-      type: type === "replacement" ? "replacement" : "return",
+      type: (type === "replacement" ? "replacement" : type === "accessories" ? "accessories" : "return") as ReturnType,
       reason,
       customerNotes: customerNotes || null,
-      imagePaths,
+      serialNumber: serialNumber || null,
+      sealedState: policy.requiresSealed ? "sealed" : sealedState ? sealedState : null,
+      missingAccessories: missingAccessories || null,
+      evidence,
       items: parsedItems,
     });
   } catch (err) {

@@ -52,7 +52,7 @@ export async function updateProfileAction(
   }
 
   // The address on the account is unique — another person may have it.
-  const clash = findUserByEmail(parsed.data.email);
+  const clash = await findUserByEmail(parsed.data.email);
   if (clash && clash.id !== user.id) {
     return {
       ok: false,
@@ -61,7 +61,7 @@ export async function updateProfileAction(
     };
   }
 
-  updateUserProfile(user.id, {
+  await updateUserProfile(user.id, {
     name: parsed.data.name,
     email: parsed.data.email,
     phone: parsed.data.phone || "",
@@ -108,7 +108,7 @@ export async function changePasswordAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  const record = findUserByEmail(user.email);
+  const record = await findUserByEmail(user.email);
   if (!record || !verifyPassword(parsed.data.current, record.password_hash)) {
     return {
       ok: false,
@@ -117,7 +117,7 @@ export async function changePasswordAction(
     };
   }
 
-  updateUserPassword(user.id, parsed.data.password);
+  await updateUserPassword(user.id, parsed.data.password);
   return { ok: true, message: "Your password has been changed." };
 }
 
@@ -182,12 +182,12 @@ export async function saveAddressAction(
 
   if (d.id) {
     const id = Number(d.id);
-    const updated = updateAddress(id, user.id, input);
+    const updated = await updateAddress(id, user.id, input);
     if (!updated) {
       return { ok: false, message: "That address no longer exists." };
     }
   } else {
-    createAddress(user.id, input);
+    await createAddress(user.id, input);
   }
 
   revalidatePath("/account/addresses");
@@ -203,7 +203,7 @@ export async function deleteAddressAction(
   if (!Number.isInteger(id) || id <= 0) {
     return { ok: false, message: "That address no longer exists." };
   }
-  deleteAddress(id, user.id);
+  await deleteAddress(id, user.id);
   revalidatePath("/account/addresses");
   return { ok: true, message: "Address removed." };
 }
@@ -217,7 +217,7 @@ export async function makeDefaultAddressAction(
   if (!Number.isInteger(id) || id <= 0) {
     return { ok: false, message: "That address no longer exists." };
   }
-  setDefaultAddress(id, user.id);
+  await setDefaultAddress(id, user.id);
   revalidatePath("/account/addresses");
   return { ok: true, message: "Default address updated." };
 }

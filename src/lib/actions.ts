@@ -67,7 +67,7 @@ export async function registerAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  if (findUserByEmail(parsed.data.email)) {
+  if (await findUserByEmail(parsed.data.email)) {
     return {
       ok: false,
       errors: { email: "An account with this email already exists." },
@@ -75,7 +75,7 @@ export async function registerAction(
     };
   }
 
-  const user = createUser(parsed.data.name, parsed.data.email, parsed.data.password);
+  const user = await createUser(parsed.data.name, parsed.data.email, parsed.data.password);
   await startSession(user.id);
   revalidatePath("/", "layout");
   redirect(safeNext(String(formData.get("next") ?? "")));
@@ -104,7 +104,7 @@ export async function loginAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  const user = findUserByEmail(parsed.data.email);
+  const user = await findUserByEmail(parsed.data.email);
   if (!user || !verifyPassword(parsed.data.password, user.password_hash)) {
     // Deliberately vague: don't reveal whether the email exists.
     return {
@@ -256,7 +256,7 @@ export async function sendContactMessageAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  createContactMessage({
+  await createContactMessage({
     name: parsed.data.name,
     email: parsed.data.email,
     subject: parsed.data.subject,
@@ -367,7 +367,7 @@ export async function placeOrderAction(
   if (parsed.data.saveAddress) {
     const user = await getCurrentUser();
     if (user) {
-      createAddress(user.id, {
+      await createAddress(user.id, {
         label: "Checkout",
         name: parsed.data.name,
         phone: parsed.data.phone,

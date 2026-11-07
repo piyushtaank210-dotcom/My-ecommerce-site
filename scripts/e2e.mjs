@@ -704,17 +704,16 @@ try {
     },
     {
       path: "/refund-policy",
-      label: "Refund and Return Policy",
+      label: "Return, Refund and Replacement Rules",
       must: [
-        "Return Eligibility",
-        "Return Window",
-        "Refund Processing Time",
-        "Damaged or Defective Products",
-        "Missing Items",
-        "Non-Returnable Items",
-        "Refund Method",
+        "Damaged, Defective or Incorrect Products",
+        "Refund for Sealed and Unopened Products",
+        "No Change-of-Mind Refund for Opened or Used Products",
+        "Order Cancellation",
+        "Missing Accessories",
+        "The Return Window",
+        "How a Refund Is Processed",
         "Return Shipping Costs",
-        "Order Cancellations",
         "How to Request a Return",
         "Contact Information",
       ],
@@ -758,6 +757,35 @@ try {
   check(
     "refund policy has no placeholder left in it",
     !/\[INSERT /.test(refundText)
+  );
+
+  // The rules themselves: a seven-day window on every claim, a
+  // replacement first where a unit is damaged or wrong, an unboxing video
+  // that is recommended rather than required, and no clause that stands
+  // in the way of the customer's statutory rights.
+  check(
+    "refund policy states the seven-day window",
+    /7 calendar days/.test(refundText),
+    refundText.match(/7 calendar days[^.]*/i)?.[0] ?? "not found"
+  );
+  check(
+    "refund policy says a replacement comes first",
+    /first thing we do[^.]*replacement/i.test(refundText),
+    refundText.match(/first thing we do[^.]*/i)?.[0] ?? "not found"
+  );
+  check(
+    "refund policy does not make an unboxing video a condition",
+    /never refused because you could not record an unboxing video/i.test(
+      refundText
+    )
+  );
+  check(
+    "refund policy leaves the statutory rights alone",
+    /consumer protection laws/i.test(refundText)
+  );
+  check(
+    "refund policy says a refund waits for the inspection",
+    /inspected first/i.test(refundText)
   );
   await cdp.shot("15-policies", true);
 

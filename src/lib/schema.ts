@@ -1,8 +1,50 @@
 /**
  * Single source of truth for the database schema.
  * Imported by both the Next.js app (src/lib/db.ts) and the seed script (scripts/seed.mjs).
+ *
+ * The shop's timestamps are kept as text rather than as dates. They are
+ * written in one format — UTC, ISO 8601, to the millisecond — so they
+ * sort as they are, they read the same way on every page, and the code
+ * that compares them keeps working the way it always has.
+ *
+ * The schema is written once and built for whichever database the shop
+ * is on. PostgreSQL is where the shop's data belongs — one database that
+ * every instance shares — and the SQLite file is what the shop kept its
+ * data in before, and is still what a machine with no PostgreSQL to point
+ * at uses. Only three things differ between them, and they are all
+ * spelled out here.
  */
-export const SCHEMA_SQL = `
+
+/** The database the shop is running on. */
+export type Dialect = "postgres" | "sqlite";
+
+/**
+ * The schema, built for one database or the other.
+ */
+export function schemaSql(dialect: Dialect = "postgres"): string {
+  // A row that numbers itself. SQLite does it with a rowid; PostgreSQL
+  // needs to be told.
+  const identity =
+    dialect === "postgres"
+      ? "${identity}"
+      : "INTEGER PRIMARY KEY AUTOINCREMENT";
+
+  // The shop's clock. PostgreSQL's own timestamp format does not read the
+  // same way on every machine, so the shop writes its own: UTC, ISO 8601,
+  // to the millisecond.
+  const clock =
+    dialect === "postgres"
+      ? `CREATE OR REPLACE FUNCTION shop_now() RETURNS text
+LANGUAGE sql VOLATILE AS $$
+  SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+$$;`
+      : "";
+
+  const now =
+    dialect === "postgres" ? "${now}" : "DEFAULT (datetime('now'))";
+
+  return `
+${clock}
 CREATE TABLE IF NOT EXISTS categories (
   slug        TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
@@ -131,13 +173,13 @@ CREATE TABLE IF NOT EXISTS hero_slides (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  id            ${identity},
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
   phone         TEXT,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'member',
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -147,18 +189,18 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE TABLE IF NOT EXISTS cart_items (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id           ${identity},
   session_id   TEXT NOT NULL,
   product_slug TEXT NOT NULL REFERENCES products(slug) ON DELETE CASCADE,
   variant_id   TEXT REFERENCES variants(id) ON DELETE SET NULL,
   quantity     INTEGER NOT NULL DEFAULT 1,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at   TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS orders (
   id             TEXT PRIMARY KEY,
   user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at     TEXT NOT NULL ${now},
   name           TEXT NOT NULL,
   email          TEXT NOT NULL,
   phone          TEXT NOT NULL,
@@ -177,7 +219,7 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id           ${identity},
   order_id     TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   product_slug TEXT NOT NULL,
   variant_id   TEXT,
@@ -199,7 +241,7 @@ CREATE TABLE IF NOT EXISTS order_items (
  * deduct twice for the same order.
  */
 CREATE TABLE IF NOT EXISTS inventory_movements (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  id                ${identity},
   stock_key         TEXT NOT NULL,
   product_slug      TEXT NOT NULL REFERENCES products(slug) ON DELETE CASCADE,
   variant_id        TEXT REFERENCES variants(id) ON DELETE SET NULL,
@@ -211,11 +253,11 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   note              TEXT,
   order_id          TEXT REFERENCES orders(id) ON DELETE SET NULL,
   user_id           INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at        TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS contact_messages (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         ${identity},
   name       TEXT NOT NULL,
   email      TEXT NOT NULL,
   subject    TEXT NOT NULL,
@@ -224,11 +266,11 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   status     TEXT NOT NULL DEFAULT 'new',
   handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   handled_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS addresses (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         ${identity},
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   label      TEXT NOT NULL DEFAULT 'Home',
   name       TEXT NOT NULL,
@@ -239,7 +281,7 @@ CREATE TABLE IF NOT EXISTS addresses (
   state      TEXT NOT NULL,
   pincode    TEXT NOT NULL,
   is_default INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS return_requests (
@@ -271,12 +313,24 @@ CREATE TABLE IF NOT EXISTS return_requests (
   replacement_dispatch_date TEXT,
   replacement_delivery_status TEXT,
   replacement_delivered_at TEXT,
-  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+  -- The serial number of the unit that came back, as the customer reads it
+  -- off the product. It is what a replacement is matched against.
+  serial_number      TEXT,
+  -- Whether the customer says the unit is still sealed: 'sealed',
+  -- 'opened', or NULL where the claim does not depend on it.
+  sealed_state       TEXT,
+  -- What the customer says is missing from the box.
+  missing_accessories TEXT,
+  -- Where the missing accessories went, when we sent them.
+  accessories_courier TEXT,
+  accessories_tracking TEXT,
+  accessories_dispatched_at TEXT,
+  created_at           TEXT NOT NULL ${now},
+  updated_at           TEXT NOT NULL ${now}
 );
 
 CREATE TABLE IF NOT EXISTS return_items (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  id            ${identity},
   return_id     TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
   order_item_id INTEGER REFERENCES order_items(id) ON DELETE SET NULL,
   product_slug  TEXT NOT NULL,
@@ -292,22 +346,53 @@ CREATE TABLE IF NOT EXISTS return_items (
 );
 
 CREATE TABLE IF NOT EXISTS return_images (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         ${identity},
   return_id  TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
   path       TEXT NOT NULL,
   caption    TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  -- Whether this file is a photograph or a video: 'photo' or 'video'.
+  -- A photograph is a still of something; an unboxing video is a
+  -- continuous take of the box being opened.
+  kind       TEXT NOT NULL DEFAULT 'photo',
+  created_at TEXT NOT NULL ${now}
 );
 
+-- A request to cancel an order.
+--
+-- Cancellation is its own thing and not a return: an order that has not
+-- left the warehouse is cancelled, and an order that has been delivered
+-- is dealt with under the return rules. The request is kept so that the
+-- decision, the reason and the money are all on the record.
+CREATE TABLE IF NOT EXISTS order_cancellations (
+  id               TEXT PRIMARY KEY,
+  order_id         TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- Whether the order had left the warehouse when the request was made.
+  dispatch_state   TEXT NOT NULL DEFAULT 'before_dispatch',
+  reason           TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'requested',
+  admin_notes      TEXT,
+  rejection_reason TEXT,
+  refund_amount    INTEGER NOT NULL DEFAULT 0,
+  refund_status    TEXT NOT NULL DEFAULT 'none',
+  refund_reference TEXT,
+  decided_at       TEXT,
+  created_at       TEXT NOT NULL ${now},
+  updated_at       TEXT NOT NULL ${now}
+);
+
+CREATE INDEX IF NOT EXISTS idx_cancellations_order ON order_cancellations(order_id);
+CREATE INDEX IF NOT EXISTS idx_cancellations_status ON order_cancellations(status);
+
 CREATE TABLE IF NOT EXISTS return_events (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         ${identity},
   return_id  TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
   status     TEXT NOT NULL,
   actor_type TEXT NOT NULL,
   actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
   actor_name TEXT,
   note       TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL ${now}
 );
 
 CREATE INDEX IF NOT EXISTS idx_products_category    ON products(category_slug);
@@ -351,3 +436,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_one_sale
   ON inventory_movements(order_id, stock_key)
   WHERE movement_type = 'sale' AND order_id IS NOT NULL;
 `;
+}
+
+/**
+ * The schema for PostgreSQL, which is where the shop's data belongs.
+ */
+export const SCHEMA_SQL = schemaSql("postgres");
+
+/**
+ * The schema for the SQLite file, which is what a machine with no
+ * PostgreSQL to point at uses.
+ */
+export const SCHEMA_SQL_SQLITE = schemaSql("sqlite");

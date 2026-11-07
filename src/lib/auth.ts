@@ -51,33 +51,33 @@ function mapUser(r: Row): User {
   };
 }
 
-export function findUserByEmail(
+export async function findUserByEmail(
   email: string
-): (User & { password_hash: string }) | null {
-  const row = getDb()
+): Promise<(User & { password_hash: string }) | null> {
+  const row = (await getDb()
     .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.trim().toLowerCase()) as Row | undefined;
+    .get(email.trim().toLowerCase())) as Row | undefined;
   if (!row) return null;
   return { ...mapUser(row), password_hash: str(row.password_hash) };
 }
 
-export function getUserById(id: number): User | null {
-  const row = getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as
-    | Row
-    | undefined;
+export async function getUserById(id: number): Promise<User | null> {
+  const row = (await getDb()
+    .prepare("SELECT * FROM users WHERE id = ?")
+    .get(id)) as Row | undefined;
   return row ? mapUser(row) : null;
 }
 
-export function createUser(
+export async function createUser(
   name: string,
   email: string,
   password: string,
   role: Role = "member"
-): User {
+): Promise<User> {
   const db = getDb();
-  const info = db
+  const info = await db
     .prepare(
-      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)"
+      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?) RETURNING id"
     )
     .run(
       name.trim(),
@@ -96,11 +96,11 @@ export function createUser(
 }
 
 /** Changes the name, email and phone on an account. */
-export function updateUserProfile(
+export async function updateUserProfile(
   id: number,
   patch: { name: string; email: string; phone?: string }
-): void {
-  getDb()
+): Promise<void> {
+  await getDb()
     .prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?")
     .run(
       patch.name.trim(),
@@ -111,14 +111,17 @@ export function updateUserProfile(
 }
 
 /** Replaces the password after the current one has been verified. */
-export function updateUserPassword(id: number, password: string): void {
-  getDb()
+export async function updateUserPassword(
+  id: number,
+  password: string
+): Promise<void> {
+  await getDb()
     .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .run(hashPassword(password), id);
 }
 
-export function setUserRole(id: number, role: Role): void {
-  getDb().prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+export async function setUserRole(id: number, role: Role): Promise<void> {
+  await getDb().prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
 }
 
 /* -------------------------------------------------------------- sessions */
@@ -137,7 +140,7 @@ export function safeNext(next?: string | null): string {
 export async function startSession(userId: number): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const expiresAt = Date.now() + MAX_AGE * 1000;
-  getDb()
+  await getDb()
     .prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
     .run(token, userId, new Date(expiresAt).toISOString());
   const store = await cookies();
@@ -156,7 +159,7 @@ export async function endSession(): Promise<void> {
     // The cookie may be signed or may be a bare token; either way the token
     // is the first part.
     const token = raw.split(".")[1] ?? raw;
-    getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+    await getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
   }
   store.delete(COOKIE);
 }
@@ -170,18 +173,18 @@ export async function getCurrentUser(): Promise<User | null> {
   const signed = verifySession(raw);
   const token = signed?.token ?? raw;
 
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       `SELECT u.id, u.name, u.email, u.phone, u.role, u.created_at, s.expires_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token = ?`
     )
-    .get(token) as Row | undefined;
+    .get(token)) as Row | undefined;
 
   if (row) {
     if (new Date(str(row.expires_at)).getTime() < Date.now()) {
       console.warn(`[auth] the session for ${row.email} had expired`);
-      getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+      await getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
       return null;
     }
     return mapUser(row);
@@ -202,7 +205,7 @@ export async function getCurrentUser(): Promise<User | null> {
   // The fallback is deliberately not used on a normal install, where it
   // would only take away the meaning of signing out.
   if (signed && usesPrivateDatabaseCopy()) {
-    const user = getUserById(signed.userId);
+    const user = await getUserById(signed.userId);
     if (user) {
       console.warn(
         `[auth] the session row for ${user.email} was not on this instance — ` +

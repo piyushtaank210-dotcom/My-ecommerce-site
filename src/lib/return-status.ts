@@ -6,12 +6,15 @@
  * bundle is not supported.
  */
 
-export const RETURN_TYPES = ["return", "replacement"] as const;
+import { RETURN_WINDOW_DAYS } from "./return-policy";
+
+export const RETURN_TYPES = ["return", "replacement", "accessories"] as const;
 export type ReturnType = (typeof RETURN_TYPES)[number];
 
 export const RETURN_TYPE_LABEL: Record<ReturnType, string> = {
   return: "Return for Refund",
   replacement: "Replacement",
+  accessories: "Missing Accessories",
 };
 
 export const RETURN_STATUSES = [
@@ -109,22 +112,25 @@ export const REPLACEMENT_DELIVERY_TONE: Record<
 };
 
 export const RETURN_REASONS = [
-  { value: "product_damaged", label: "Product damaged" },
+  { value: "product_damaged", label: "Product arrived damaged" },
   { value: "wrong_product_received", label: "Wrong product received" },
-  { value: "missing_parts", label: "Missing parts or accessories" },
-  { value: "product_not_working", label: "Product not working" },
-  { value: "defective_product", label: "Defective product" },
-  { value: "different_from_description", label: "Different from description" },
-  { value: "other", label: "Other" },
+  { value: "missing_parts", label: "Missing accessories" },
+  { value: "product_not_working", label: "Product does not work" },
+  { value: "defective_product", label: "Product is defective" },
+  { value: "different_from_description", label: "Different from the description" },
+  { value: "change_of_mind", label: "Changed my mind — sealed and unused" },
+  { value: "other", label: "Something else" },
 ] as const;
 
 export type ReturnReason = (typeof RETURN_REASONS)[number]["value"];
 
 const LEGACY_REASON_MAP: Record<string, string> = {
-  defective: "Defective product",
-  damaged: "Product damaged",
+  defective: "Product is defective",
+  damaged: "Product arrived damaged",
   wrong_item: "Wrong product received",
-  changed_mind: "Different from description",
+  // A change of mind used to be filed as "different from description",
+  // which is a different claim entirely and had the wrong rules on it.
+  changed_mind: "Changed my mind — sealed and unused",
 };
 
 export function returnReasonLabel(reason: string): string {
@@ -134,19 +140,32 @@ export function returnReasonLabel(reason: string): string {
   return reason;
 }
 
-export const DEFAULT_RETURN_WINDOW_DAYS = 5;
-export const RETURN_WINDOW_DAYS = 5;
+export { RETURN_WINDOW_DAYS };
+export const DEFAULT_RETURN_WINDOW_DAYS = RETURN_WINDOW_DAYS;
 
 /**
  * Returns dynamic timeline stages relevant to the request type.
  * Timeline:
  * Request Submitted → Under Review → Approved → Pickup Scheduled → Product Received → Inspection Completed → Refund Initiated / Replacement Dispatched → Completed
+ *
+ * A missing-accessories case never travels: the unit stays with the
+ * customer and the missing parts are sent to them.
  */
 export function getTimelineStages(type: ReturnType): {
   key: string;
   label: string;
   description: string;
 }[] {
+  if (type === "accessories") {
+    return [
+      { key: "requested", label: "Request Submitted", description: "Your request has been received" },
+      { key: "under_review", label: "Under Review", description: "We are checking what is missing" },
+      { key: "approved", label: "Approved", description: "We are sending the missing parts" },
+      { key: "settlement", label: "Accessories Dispatched", description: "The missing parts are on their way to you" },
+      { key: "completed", label: "Completed", description: "Case resolved successfully" },
+    ];
+  }
+
   return [
     { key: "requested", label: "Request Submitted", description: "Your request has been received" },
     { key: "under_review", label: "Under Review", description: "Our team is reviewing the claim" },
@@ -214,6 +233,8 @@ export type ReturnImage = {
   return_id: string;
   path: string;
   caption: string | null;
+  /** Whether this file is a photograph or a video. */
+  kind: "photo" | "video";
   created_at: string;
 };
 
@@ -261,6 +282,22 @@ export type ReturnRequest = {
   replacement_delivery_status: ReplacementDeliveryStatus | null;
   /** When it was delivered. */
   replacement_delivered_at: string | null;
+  /**
+   * The serial number of the unit, as the customer reads it off the
+   * product.
+   */
+  serial_number: string | null;
+  /**
+   * Whether the customer says the unit is still sealed. `null` where the
+   * claim does not depend on it.
+   */
+  sealed_state: "sealed" | "opened" | null;
+  /** What the customer says is missing from the box. */
+  missing_accessories: string | null;
+  /** Where the missing accessories went, when we sent them. */
+  accessories_courier: string | null;
+  accessories_tracking: string | null;
+  accessories_dispatched_at: string | null;
   created_at: string;
   updated_at: string;
   items: ReturnItem[];

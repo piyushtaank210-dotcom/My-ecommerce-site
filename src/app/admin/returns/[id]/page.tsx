@@ -24,6 +24,7 @@ import {
 } from "@/lib/returns";
 import { getOrder } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
+import { evidenceSatisfied, policyForReason } from "@/lib/return-policy";
 import { ReturnAdminActions } from "@/components/admin/returns/ReturnAdminActions";
 
 export const metadata: Metadata = { title: "Manage Return" };
@@ -48,6 +49,21 @@ export default async function AdminReturnDetailPage({
   // What could be sent in place of what came back, and what is on the shelf.
   const candidates =
     ret.type === "replacement" ? replacementCandidates(ret.id) : [];
+
+  // The rules this claim is judged against, and what has arrived against
+  // them. A claim is never turned away only because a photograph or an
+  // unboxing video is missing, so this is a prompt to ask — not a bar.
+  const policy = policyForReason(ret.reason);
+  const onFile = {
+    photographs: ret.images.filter((i) => i.kind === "photo").length,
+    videos: ret.images.filter((i) => i.kind === "video").length,
+    description: Boolean(ret.customer_notes),
+    serialNumber: Boolean(ret.serial_number),
+    missingList: Boolean(ret.missing_accessories),
+  };
+  const missingRequired = policy.evidence
+    .filter((e) => e.required && !evidenceSatisfied(e, onFile))
+    .map((e) => e.label);
 
   return (
     <div className="mx-auto max-w-[1300px]">
@@ -100,6 +116,32 @@ export default async function AdminReturnDetailPage({
                 <span className="font-semibold text-ink">Reason: </span>
                 <span className="text-gray-700">{returnReasonLabel(ret.reason)}</span>
               </div>
+              <div>
+                <span className="font-semibold text-ink">What the rules say: </span>
+                <p className="mt-1 text-[13px] text-gray-600">{policy.summary}</p>
+              </div>
+              {ret.serial_number && (
+                <div>
+                  <span className="font-semibold text-ink">Serial number: </span>
+                  <span className="tnum text-gray-700">{ret.serial_number}</span>
+                </div>
+              )}
+              {ret.sealed_state && (
+                <div>
+                  <span className="font-semibold text-ink">Customer says the unit is: </span>
+                  <span className="text-gray-700">
+                    {ret.sealed_state === "sealed" ? "sealed and unused" : "opened"}
+                  </span>
+                </div>
+              )}
+              {ret.missing_accessories && (
+                <div>
+                  <span className="font-semibold text-ink">What is missing: </span>
+                  <p className="mt-1 whitespace-pre-line rounded-lg bg-gray-50 p-3 text-[13px] text-gray-700">
+                    {ret.missing_accessories}
+                  </p>
+                </div>
+              )}
               {ret.customer_notes && (
                 <div>
                   <span className="font-semibold text-ink">Customer Comments: </span>
@@ -124,30 +166,101 @@ export default async function AdminReturnDetailPage({
               )}
             </div>
 
-            {/* Photo Evidence */}
-            {ret.images.length > 0 && (
+            {/* The evidence: photographs and unboxing videos, and what
+                the rules say we still need. */}
+            {(ret.images.length > 0 || policy.evidence.length > 0) && (
               <div className="mt-5 border-t border-gray-100 pt-4">
                 <h3 className="mb-3 text-[13px] font-semibold text-ink">
-                  Uploaded Evidence ({ret.images.length})
+                  Evidence ({ret.images.length})
                 </h3>
-                <div className="flex flex-wrap gap-3">
-                  {ret.images.map((img) => (
-                    <a
-                      key={img.id}
-                      href={img.path}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.path}
-                        alt="Evidence"
-                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                      />
-                    </a>
-                  ))}
-                </div>
+
+                {ret.images.length > 0 && (
+                  <div className="flex flex-wrap gap-3">
+                    {ret.images.map((img) =>
+                      img.kind === "video" ? (
+                        <a
+                          key={img.id}
+                          href={img.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <video
+                            src={img.path}
+                            className="h-full w-full object-cover"
+                            muted
+                            playsInline
+                          />
+                          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            VIDEO
+                          </span>
+                        </a>
+                      ) : (
+                        <a
+                          key={img.id}
+                          href={img.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.path}
+                            alt="Evidence"
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                        </a>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* What the rules ask for, and what has arrived. */}
+                <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+                  {policy.evidence.map((e) => {
+                    const has = evidenceSatisfied(e, {
+                      photographs: ret.images.filter((i) => i.kind === "photo").length,
+                      videos: ret.images.filter((i) => i.kind === "video").length,
+                      description: Boolean(ret.customer_notes),
+                      serialNumber: Boolean(ret.serial_number),
+                      missingList: Boolean(ret.missing_accessories),
+                    });
+                    return (
+                      <li key={e.id} className="flex items-start gap-2.5">
+                        <span
+                          className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
+                            has
+                              ? "bg-green-50 text-green-700"
+                              : e.required
+                                ? "bg-red-50 text-red-700"
+                                : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {has ? "On file" : e.required ? "Needed" : "Helpful"}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[12.5px] font-medium text-ink">
+                            {e.label}
+                          </span>
+                          <span className="block text-[11.5px] text-gray-500">
+                            {e.hint}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {missingRequired.length > 0 && (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12.5px] text-amber-800">
+                    {missingRequired.join(" and ")}{" "}
+                    {missingRequired.length === 1 ? "is" : "are"} still missing.
+                    Ask the customer for it, or go on with the claim on what
+                    you have — a claim is never turned away only because a
+                    photograph or an unboxing video is missing.
+                  </p>
+                )}
               </div>
             )}
           </section>

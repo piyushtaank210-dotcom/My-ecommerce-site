@@ -16,7 +16,7 @@ export default async function AccountPage() {
   const user = await requireUser("/account");
 
   const orders = getOrdersForUser(user.id);
-  const addresses = listAddresses(user.id);
+  const addresses = await listAddresses(user.id);
 
   const spend = orders
     .filter((o) => o.status !== "cancelled")

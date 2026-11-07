@@ -1,205 +1,234 @@
 import type { Metadata } from "next";
 import { PolicyPage, type PolicyDoc } from "@/components/policy/PolicyPage";
+import { RETURN_WINDOW_DAYS } from "@/lib/return-policy";
 
 export const metadata: Metadata = {
-  title: "Refund and Return Policy",
+  title: "Return, Refund and Replacement Rules",
   description:
-    "How to return a console, controller or accessory from ConsoleSeller, and when to expect your refund — generally within 7 to 15 days of approval.",
+    "Our rules for damaged, faulty, incorrect and incomplete products, for voluntary returns on a sealed unit, for cancelling an order, and for missing accessories.",
 };
 
 const doc: PolicyDoc = {
-  title: "Refund and Return Policy",
+  title: "Return, Refund and Replacement Rules",
   eyebrow: "Customer Support",
   intro:
-    "This policy explains when you can return something you have bought from us, how to start the process, who pays for return shipping, and how long a refund takes. Refunds are generally processed within 7–15 days of a request being approved.",
-  updated: "April 2026",
+    "These are the rules we work to when something is wrong with an order, and the rules we work to when an order is simply not what you wanted. They are set out in full so you know exactly where you stand before you send anything back. They are applied subject to the consumer protection laws that apply in India — nothing in these rules takes away a right you have under those laws, and where the law requires something different from what is written here, the law is what we follow.",
+  updated: "November 2026",
   sections: [
     {
-      id: "return-eligibility",
-      heading: "A. Return Eligibility",
+      id: "damaged-or-defective",
+      heading: "A. Damaged, Defective or Incorrect Products",
       blocks: [
         {
           kind: "p",
-          text: "You can ask us to return or refund an item where any of the following applies:",
+          text: "If any of the following is what arrived, tell us. A physically damaged gaming console. A broken controller. A defective product. A product that does not function properly. A wrong product. A product with missing accessories. A product damaged during shipping.",
+        },
+        {
+          kind: "note",
+          tone: "brand",
+          text: `You must report the issue within ${RETURN_WINDOW_DAYS} calendar days of delivery. The window is the same for every kind of claim in this section.`,
+        },
+        {
+          kind: "h3",
+          text: "What to send us",
         },
         {
           kind: "ul",
           items: [
-            "The product is defective — it does not work as it should, or has a fault that the manufacturer's warranty would not cover.",
-            "The product arrived damaged, either visibly broken or in a way that only shows when it is switched on.",
-            "The product is not what you ordered — a different model, variant, colour or capacity from the one on your order confirmation.",
-            "The product is incomplete, for example a console or controller that arrived without a listed accessory or component.",
-            "The product is otherwise returnable under this policy, because you changed your mind and the return window has not passed.",
+            "An unboxing video showing the original package and its condition.",
+            "Clear photographs of the shipping package.",
+            "Clear photographs of the damaged or defective product.",
+            "A photograph of the product serial number, wherever the unit carries one.",
+            "Your order ID.",
+            "A description of the problem.",
           ],
         },
         {
           kind: "p",
-          text: "Some products are not eligible for a change-of-mind return. Those are set out in section F, and the exclusions there do not affect your rights for a product that is defective, damaged, incorrect or incomplete — those are always dealt with under sections D and E, and under your statutory rights.",
+          text: "The unboxing video is strongly recommended, because it is usually the quickest way for us to see what happened and to settle a disagreement without delay. It is not a condition of the claim. A genuine damage, defect or wrong-item claim is never refused because you could not record an unboxing video, and we will not refuse a claim because the packaging had been opened to look the product over.",
+        },
+        {
+          kind: "h3",
+          text: "What happens next",
+        },
+        {
+          kind: "p",
+          text: "Where we can, the first thing we do for a damaged, faulty or incorrect product is send you a replacement. A replacement is provided without additional cost wherever the law requires us to provide it, and where a suitable replacement is available.",
+        },
+        {
+          kind: "p",
+          text: "If a replacement is not available, we review the case and give you the remedy the law requires — which may be a refund. We will tell you which one we are doing and why.",
         },
         {
           kind: "note",
-          text: "Products bought during a sale or with a promotional bundle are not automatically excluded from returns. If a specific promotion states different terms, they apply to that promotion and are shown at the time you buy.",
+          text: "Nothing in these rules is intended to prevent you from exercising your rights under the consumer protection laws that apply in India. We do not apply a blanket clause to turn a complaint away, and we do not treat the absence of a photograph or a video as a reason on its own to refuse a genuine claim.",
+        },
+      ],
+    },
+    {
+      id: "sealed-returns",
+      heading: "B. Refund for Sealed and Unopened Products",
+      blocks: [
+        {
+          kind: "p",
+          text: "A voluntary change-of-mind refund is available only where every one of the following is true.",
+        },
+        {
+          kind: "ul",
+          items: [
+            "The product is completely sealed.",
+            "The original manufacturer packaging is intact.",
+            "The security seals are not broken.",
+            "The product has not been activated, registered, used or tampered with.",
+            "All original accessories, documents and packaging are present.",
+            "You have sent clear photographs of all sides of the sealed package.",
+            "You have sent a continuous video showing the sealed product and its condition.",
+            "The order is eligible under the published return conditions.",
+            "The request was made within 7 calendar days of delivery.",
+          ],
+        },
+        {
+          kind: "note",
+          tone: "brand",
+          text: "The refund is not issued the moment you upload photographs or a video. The product has to come back to us and be inspected first. Our team looks at it, checks that it is sealed and untouched, and approves the refund after that. We will only skip the physical return where the law requires us to.",
+        },
+        {
+          kind: "p",
+          text: "Where a seal is broken, or the product has been activated or used, a voluntary change-of-mind refund may be declined. That decision does not affect any right you have in respect of a product that is damaged, faulty, incorrect or misrepresented.",
+        },
+      ],
+    },
+    {
+      id: "opened-products",
+      heading: "C. No Change-of-Mind Refund for Opened or Used Products",
+      blocks: [
+        {
+          kind: "p",
+          text: "ConsoleSeller does not offer voluntary change-of-mind refunds for opened, activated, registered or used gaming consoles and controllers. Once a unit has been opened and set up, we cannot sell it on as new, and that is the reason for the rule.",
+        },
+        {
+          kind: "p",
+          text: "This rule does not apply to a product that is defective, damaged, incorrect or misrepresented. Those are handled on their own terms under section A, and on your statutory rights, and they are not affected by anything in this section.",
+        },
+        {
+          kind: "p",
+          text: "If a unit is not sealed but something is wrong with it — it does not work, it arrived damaged, it is not what you ordered, or parts are missing — please raise it under that reason rather than a change of mind, and we will put it right.",
+        },
+      ],
+    },
+    {
+      id: "cancellations",
+      heading: "D. Order Cancellation",
+      blocks: [
+        {
+          kind: "p",
+          text: "Where the order is decides how your request is handled.",
+        },
+        {
+          kind: "ul",
+          items: [
+            "Before dispatch — you can ask us to cancel, and we cancel the order.",
+            "After dispatch — a cancellation request is subject to the shipping and return process, because the goods are already on their way to you.",
+            "After delivery — the order is not cancelled. The return and replacement rules in sections A to E apply instead.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "We approve or decline every cancellation request, and we give you a reason either way. If the order has already shipped when you ask, we will tell you plainly that it can no longer be called off and what the next step is.",
+        },
+        {
+          kind: "p",
+          text: "Where payment has already been collected and we approve the cancellation, the refund is processed in accordance with applicable law and the timelines of our payment provider. Approving the refund is our promise to pay it back; the money has actually gone back once the payment provider confirms it, and we confirm that to you with a reference.",
+        },
+      ],
+    },
+    {
+      id: "missing-accessories",
+      heading: "E. Missing Accessories",
+      blocks: [
+        {
+          kind: "p",
+          text: "If something listed for the product never arrived in the box, tell us and we will send it. We ask you for:",
+        },
+        {
+          kind: "ul",
+          items: [
+            "Your order ID.",
+            "Photographs of the product.",
+            "Photographs of the package.",
+            "A list of the accessories that are missing.",
+            "An unboxing video, if you have one.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "The unboxing video is helpful here too, but it is not a condition of the claim. Once we have checked the claim, we approve the dispatch of the missing accessories, or we give you another remedy that the law allows — a refund of what the missing parts were worth, for instance, if we cannot send them.",
+        },
+        {
+          kind: "p",
+          text: "You keep the console or the controller. Nothing is collected from you for a missing-accessories claim.",
         },
       ],
     },
     {
       id: "return-window",
-      heading: "B. Return Window",
+      heading: "F. The Return Window",
       blocks: [
         {
-          kind: "p",
-          text: "A return request must be raised within 7 days of the delivery date shown on your order. Once this window has passed we are generally unable to accept a change-of-mind return, because the product may have been opened, used, or resold by then.",
+          kind: "note",
+          tone: "brand",
+          text: `${RETURN_WINDOW_DAYS} calendar days from delivery, for every kind of claim in these rules. The day of delivery counts as day one, and the window closes at the end of the seventh day.`,
         },
         {
           kind: "p",
-          text: "The return window applies to change-of-mind returns only. If a product is defective, damaged, incorrect or incomplete, please raise it with us as soon as you reasonably can — a claim made later may still be considered where the problem was not obvious on delivery, but tell us promptly so that we can agree how to put it right.",
+          text: "The window is measured from the delivery date shown on your order, not from the date you opened the box. If the product was left with a neighbour or with the courier's depot, the delivery date on your order is still the date we measure from.",
+        },
+        {
+          kind: "p",
+          text: "The window applies to every claim — damaged, faulty, incorrect, incomplete, and voluntary returns on a sealed unit. It is a short window because a console or controller that has been opened and used cannot be sold on as new, and because the evidence of what arrived is at its clearest soon after delivery.",
         },
       ],
     },
     {
       id: "refund-processing-time",
-      heading: "C. Refund Processing Time",
+      heading: "G. How a Refund Is Processed",
       blocks: [
         {
           kind: "note",
-          text: "Approved refunds are generally processed within 7–15 days. This 7–15 day period begins on the date we approve your refund request — not on the date you ask, and not on the date the returned product reaches us.",
+          text: "Approved refunds are generally processed within 7–15 days. That period begins on the date we approve the refund — not the date you asked, and not the date the returned product reaches us.",
         },
         {
           kind: "p",
-          text: "Where a return is required, the timeline is therefore:",
+          text: "Where a physical return is needed, the timeline is:",
         },
         {
           kind: "ol",
           items: [
-            "You send us the return request, with the order number and the reason.",
+            "You send us the request, with the order number and the reason.",
             "We assess the request and confirm whether it is approved. Approval starts the 7–15 day refund clock.",
-            "If a physical return is needed, we send you the return instructions and the address to send it to.",
+            "If a physical return is needed, we send you the return instructions and the address.",
             "You return the product, and we receive and inspect it.",
-            "We issue the refund, and the 7–15 day clock is running during this period.",
-            "The money reaches your account, subject to how long your bank or payment provider takes to process it once we have released it.",
+            "We raise the refund, and the 7–15 day clock is running during this period.",
+            "The money reaches your account, subject to how long your bank or payment provider takes once we have released it.",
           ],
         },
         {
           kind: "p",
-          text: "So the 7–15 days covers our processing of the refund. On top of that, allow 2–5 working days for your bank, card issuer or UPI provider to reflect the credit once it has been released. We will send you a confirmation with the bank reference (UTR) when we release the refund, and you can quote the reference if it has not reached you by the end of that period.",
+          text: "On top of the 7–15 days, allow 2–5 working days for your bank, card issuer or UPI provider to reflect the credit. We send you a confirmation with the bank reference (UTR) when we release the refund, and you can quote it if the money has not reached you by the end of that period.",
         },
         {
           kind: "p",
-          text: "Where a refund is approved but no physical return is required — for example, a damaged item we are replacing — the 7–15 day period starts as soon as we approve the request.",
-        },
-      ],
-    },
-    {
-      id: "damaged-or-defective",
-      heading: "D. Damaged or Defective Products",
-      blocks: [
-        {
-          kind: "p",
-          text: "If a product arrives damaged or is not working, tell us straight away — quote your order number, describe the fault, and let us know what has happened.",
+          text: "Where a refund is approved but no physical return is required — a damaged item we are replacing, for example — the 7–15 day period starts as soon as we approve the request.",
         },
         {
           kind: "p",
-          text: "We will usually ask for photographs, and sometimes a short video, of the product and its packaging. This is to establish what went wrong and whether the fault is ours, the courier's, or the manufacturer's — it is not a condition of help, and we will not refuse a claim simply because you could not take a photograph.",
-        },
-        {
-          kind: "p",
-          text: "Once we have confirmed the problem, we will arrange a replacement, a repair where that is more sensible, or a full refund of the price you paid, together with the return shipping where the fault is ours. If we ask you to send the faulty item back, we will cover the cost — see section I.",
-        },
-        {
-          kind: "p",
-          text: "Where the manufacturer offers a warranty on the product, we will help you raise the claim with them and share whatever information they need from us. That is on top of, and does not replace, your right to a refund or replacement from us for a product that is defective on arrival.",
-        },
-      ],
-    },
-    {
-      id: "missing-items",
-      heading: "E. Missing Items",
-      blocks: [
-        {
-          kind: "p",
-          text: "If your parcel is short — an item is missing from the box, a bundled accessory has not been included, or the order itself is incomplete — contact us within 48 hours of delivery, quoting your order number.",
-        },
-        {
-          kind: "p",
-          text: "Please photograph the opened box and the contents so that we can confirm what was in the parcel when it left us. We check this against the picking list for your order, which lets us establish quickly whether the item was omitted by us or lost in transit — in which case we will claim against the courier and keep you informed.",
-        },
-        {
-          kind: "p",
-          text: "Where an item is confirmed missing, we will dispatch the missing item or refund it in full, and we will bear any return shipping that becomes necessary.",
-        },
-      ],
-    },
-    {
-      id: "non-returnable",
-      heading: "F. Non-Returnable Items",
-      blocks: [
-        {
-          kind: "p",
-          text: "The following are not eligible for a change-of-mind return, because they cannot be resold or returned to the manufacturer once opened:",
-        },
-        {
-          kind: "ul",
-          items: [
-            "Consoles and controllers whose seal, serial number or tamper label has been broken, or which have been registered to an online account.",
-            "Download codes, digital licences, gift cards and prepaid balances, once the code has been revealed or the balance has been added to an account.",
-            "Headsets, controllers and other peripherals that have been used and show signs of use, or that are missing the accessories supplied with them.",
-            "Software, and any digital content, once it has been downloaded or activated.",
-          ],
-        },
-        {
-          kind: "p",
-          text: "This list is limited to items where a return genuinely cannot be accepted. It does not apply to a product that is defective, damaged in transit, faulty on arrival, incorrect, or missing parts — those are dealt with under sections D and E whatever their condition, and your rights under the Consumer Protection Act, 2019 are unaffected by this section.",
-        },
-      ],
-    },
-    {
-      id: "condition-and-packaging",
-      heading: "G. Product Condition and Packaging",
-      blocks: [
-        {
-          kind: "p",
-          text: "For a change-of-mind return, please return the product:",
-        },
-        {
-          kind: "ul",
-          items: [
-            "In a condition that allows us to resell it — complete, working, and with no marks that would prevent it being sold as new.",
-            "With its original packaging, box and any insert or protective material.",
-            "With every accessory that came with it — the charging cable, the stand, the manual, the box.",
-            "With any promotional or gift item that was included with it.",
-          ],
-        },
-        {
-          kind: "p",
-          text: "Please include proof of purchase — your order number is enough, and we can find the order from that. You do not need to produce a paper invoice.",
-        },
-        {
-          kind: "p",
-          text: "Where an item is returned without its packaging or accessories, or in a condition that means we cannot resell it, we may reduce the refund to reflect that, or decline the return. We will always tell you the reason and, where we can, offer you the alternative of a repair, a replacement, or a partial refund. This does not apply where the problem is ours or the manufacturer's.",
-        },
-      ],
-    },
-    {
-      id: "refund-method",
-      heading: "H. Refund Method",
-      blocks: [
-        {
-          kind: "p",
-          text: "Approved refunds are generally returned to the original payment method, so that the money goes back to the account or card you paid from. Where that is not possible — for example, if the original method has expired, or if you paid cash on delivery — we will agree an alternative with you.",
-        },
-        {
-          kind: "p",
-          text: "Refunds are issued for the amount you actually paid for the item, together with any delivery you paid for the order where the whole order is being returned, and including applicable taxes. Where an item was reduced by a promotion, we do not refund the discount.",
-        },
-        {
-          kind: "p",
-          text: "The refund is subject to the limits of our payment provider, which may not permit a refund to a different card, or a partial refund in certain cases. Where we cannot refund the original method, we will explain why and offer you the next best option.",
+          text: "Refunds are returned to the original payment method, so the money goes back to the account or card you paid from. Where that is not possible — the original method has expired, or you paid cash on delivery — we agree an alternative with you. Refunds cover what you actually paid for the item, including applicable taxes and any delivery you paid on the order where the whole order is returned.",
         },
       ],
     },
     {
       id: "return-shipping",
-      heading: "I. Return Shipping Costs",
+      heading: "H. Return Shipping Costs",
       blocks: [
         {
           kind: "p",
@@ -208,96 +237,45 @@ const doc: PolicyDoc = {
         {
           kind: "ul",
           items: [
-            "Faulty, damaged in transit, incorrect or incomplete products — we pay. We will provide a prepaid label or arrange a pickup via Delhivery.",
-            "Change-of-mind returns — the customer bears the return shipping cost, or our actual return courier fee of ₹250 is deducted from the refund.",
-            "A product that is returned outside the return window, or that does not meet the condition requirements in section G — returned back to the customer, or assessed for a partial restocking fee where agreed in writing.",
-            "Large or heavy items such as a console — collected from your delivery address via Delhivery pickup.",
+            "Faulty, damaged in transit, incorrect or incomplete products — we pay. We provide a prepaid label or arrange a pickup.",
+            "Change-of-mind returns — the customer bears the return shipping cost, or our actual return courier fee is deducted from the refund.",
+            "Large or heavy items such as a console — collected from your delivery address.",
           ],
         },
         {
           kind: "p",
-          text: "Where a return shipping cost is deducted from the refund, we will show you the amount before you confirm. Please note that a product returned to us at our fault is always refunded in full, without a deduction for shipping.",
-        },
-      ],
-    },
-    {
-      id: "cancellations",
-      heading: "J. Order Cancellations",
-      blocks: [
-        {
-          kind: "p",
-          text: "You can ask us to cancel an order at any time before it is dispatched, by contacting our support team with your order number. Once an order has been handed to the courier it can no longer be cancelled and is instead handled as a return.",
-        },
-        {
-          kind: "p",
-          text: "Where we accept a cancellation, the refund is processed in the same way and on the same timeline as any other approved refund — generally within 7–15 days of the cancellation being approved, subject to our payment provider's processing time.",
-        },
-        {
-          kind: "p",
-          text: "We may decline a cancellation request where the order has already been dispatched, where it would deprive us of the opportunity to sell the item, or where we have already incurred costs that we cannot recover and which are greater than the value of the order. We will tell you if that is the case and, where the order has been dispatched, offer to help you with a return instead.",
-        },
-        {
-          kind: "p",
-          text: "We may cancel an order ourselves, with a full refund, where an item turns out to be unavailable, where the price was listed incorrectly, or where we cannot lawfully supply it.",
-        },
-      ],
-    },
-    {
-      id: "refund-exceptions",
-      heading: "K. Refund Exceptions",
-      blocks: [
-        {
-          kind: "p",
-          text: "In a small number of circumstances a refund may not be available, or may be limited. These are set out below, and they are exceptions to the change-of-mind return, not to your statutory rights:",
-        },
-        {
-          kind: "ul",
-          items: [
-            "Digital items — codes, licences and downloaded content — once the code has been revealed, the licence activated, or the content downloaded, because it cannot be returned.",
-            "Items listed in section F as non-returnable, once they have been opened and cannot be resold.",
-            "Products that were returned after the return window in section B had passed.",
-            "Products returned without the packaging, accessories or proof of purchase needed under section G.",
-            "Where a refund has already been issued for the same order, or where the item was refunded by the manufacturer against a warranty claim.",
-          ],
-        },
-        {
-          kind: "p",
-          text: "None of these exceptions applies to a product that is defective, damaged, incorrect or missing parts, and none of them limits a remedy you have under the Consumer Protection Act, 2019. Where a product is not of satisfactory quality or not as described, we will put it right — with a replacement, a repair, or a refund — regardless of these exceptions.",
+          text: "Where a return shipping cost is deducted from the refund, we show you the amount before you confirm. A product returned to us at our fault is always refunded in full, without a deduction for shipping.",
         },
       ],
     },
     {
       id: "how-to-request",
-      heading: "L. How to Request a Return or Refund",
+      heading: "I. How to Request a Return, Replacement or Cancellation",
       blocks: [
-        {
-          kind: "p",
-          text: "The process is the same whether you want to return something you do not want, or to report something that is wrong:",
-        },
         {
           kind: "ol",
           items: [
-            "Contact our customer support team — use the contact form on this website, or email consoleseller.in@gmail.com.",
-            "Give us your order number and the reason for the request. The order number is on your order confirmation and in the Orders section of your account.",
-            "Share supporting photographs or videos where they are relevant — for example the damage, the fault, or the contents of the box.",
-            "Wait for our confirmation. We will tell you whether the request is approved and, if a return is needed, where to send the product.",
-            "Return the product if required, using the instructions we give you, and keep your proof of dispatch.",
-            "Receive updates on the approved refund. We will confirm when the refund has been released, and it should reach you within the 7–15 day processing period described in section C, plus the time your bank takes to show it.",
+            "Open the order in your account — My Orders — and choose the order.",
+            "Choose the item, the reason, and how you would like it put right. The form shows you exactly what to send with your claim.",
+            "Add your photographs, and your unboxing video if you have one.",
+            "Send it. We confirm what we have and what happens next.",
+            "Where a return is needed, we arrange the pickup and send you the address.",
+            "We inspect the product, and we raise the refund or the replacement.",
           ],
         },
         {
           kind: "p",
-          text: "We aim to acknowledge every request within one working day. You can track the progress of a request on this website by quoting your order number.",
+          text: "You can also raise anything of this kind by writing to us with your order number. The form is quicker, because it shows you the evidence we need for the reason you pick.",
         },
       ],
     },
     {
       id: "contact",
-      heading: "M. Contact Information",
+      heading: "J. Contact Information",
       blocks: [
         {
           kind: "p",
-          text: "For all returns, refunds and warranty queries:",
+          text: "For all returns, refunds, replacements and warranty queries:",
         },
         {
           kind: "ul",

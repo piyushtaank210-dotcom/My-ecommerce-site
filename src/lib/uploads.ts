@@ -18,8 +18,24 @@ export const ALLOWED_IMAGE_TYPES: Record<string, string> = {
   "image/avif": ".avif",
 };
 
+/**
+ * The kinds of video the store accepts as evidence.
+ *
+ * An unboxing video is the one piece of evidence that cannot be replaced
+ * by a photograph — it shows the box being opened — so it is accepted
+ * here and kept apart from the photographs.
+ */
+export const ALLOWED_VIDEO_TYPES: Record<string, string> = {
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+};
+
 /** How big a photograph may be. */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+/** How big a video may be. */
+export const MAX_VIDEO_UPLOAD_BYTES = 60 * 1024 * 1024;
 
 /** Where uploaded photographs are kept. */
 export const UPLOAD_ROOT = join(process.cwd(), "public", "uploads");
@@ -64,6 +80,48 @@ export async function saveUpload(
     };
   }
 
+  return writeUpload(folder, file, ext);
+}
+
+/**
+ * Saves one video and returns the path it will be served from.
+ */
+export async function saveVideoUpload(
+  folder: string,
+  file: File
+): Promise<UploadResult> {
+  const ext = ALLOWED_VIDEO_TYPES[file.type];
+  if (!ext) {
+    return {
+      ok: false,
+      reason: `${
+        file.name || "That file"
+      } is not a video we can play. Use an MP4, WebM or MOV file.`,
+    };
+  }
+  if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
+    return {
+      ok: false,
+      reason: `${
+        file.name || "That file"
+      } is too big. A video may be up to 60 MB.`,
+    };
+  }
+
+  return writeUpload(folder, file, ext);
+}
+
+/**
+ * Writes the file out under a name of our own making.
+ *
+ * The name that came with the upload is never used as a path, so nothing
+ * a browser sends can decide where a file lands.
+ */
+async function writeUpload(
+  folder: string,
+  file: File,
+  ext: string
+): Promise<UploadResult> {
   const dir = join(UPLOAD_ROOT, folder);
   await mkdir(dir, { recursive: true });
 

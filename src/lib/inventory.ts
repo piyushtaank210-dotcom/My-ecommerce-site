@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "./db";
 import { getDb } from "./db";
 import {
   stockLevel,
@@ -53,7 +53,7 @@ export class InventoryError extends Error {
  * open a second transaction on top of the first.
  */
 export function withTransaction<T>(
-  db: DatabaseSync,
+  db: Db,
   work: () => T
 ): T {
   if (db.isTransaction) return work();

@@ -1,39 +1,84 @@
-import type { DatabaseSync } from "node:sqlite";
 // The extension matters: this file is imported by the seed script, which runs
 // on plain Node rather than through Next's bundler, and Node will not guess
 // that "./sku" means "./sku.ts".
 import { skuFromSlug, uniqueSku } from "./sku.ts";
 import { PRODUCT_GALLERY } from "./product-gallery.ts";
+import {
+  RETURN_WINDOW_DAYS,
+  RETURN_WINDOW_POLICY_MARKER,
+  RETURN_WINDOW_SETTING,
+} from "./return-policy.ts";
+import type { Db } from "./db.ts";
 
 /** A number out of a row. */
 const num = (v: unknown): number => Number(v ?? 0);
 
 /**
+ * Whether a table is there.
+ *
+ * PostgreSQL keeps its tables in `information_schema`, where SQLite kept
+ * them in `sqlite_master`.
+ */
+async function tableExists(db: Db, table: string): Promise<boolean> {
+  const row =
+    db.dialect === "postgres"
+      ? await db
+          .prepare(
+            "SELECT 1 AS n FROM information_schema.tables WHERE table_name = ? LIMIT 1"
+          )
+          .get(table)
+      : await db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+          )
+          .get(table);
+  return Boolean(row);
+}
+
+/**
+ * Whether a table has a column.
+ */
+async function hasColumn(
+  db: Db,
+  table: string,
+  column: string
+): Promise<boolean> {
+  const row =
+    db.dialect === "postgres"
+      ? await db
+          .prepare(
+            "SELECT 1 AS n FROM information_schema.columns WHERE table_name = ? AND column_name = ? LIMIT 1"
+          )
+          .get(table, column)
+      : (
+          (await db.prepare(`PRAGMA table_info(${table})`).all()) as {
+            name: string;
+          }[]
+        ).some((c) => c.name === column);
+  return Boolean(row);
+}
+
+/**
  * Columns added since the schema was first written.
  *
- * SQLite's `CREATE TABLE IF NOT EXISTS` leaves an existing table exactly as
- * it was, so a fresh column has to be added with `ALTER TABLE`. Each one is
- * checked first, which makes this safe to run on every connection — it runs
- * once, when the database is first opened.
+ * PostgreSQL's `CREATE TABLE IF NOT EXISTS` leaves an existing table
+ * exactly as it was, so a fresh column has to be added with `ALTER
+ * TABLE`. PostgreSQL can add one without being told whether it is there,
+ * so each one is safe to run on every connection — it runs once, when the
+ * database is first opened.
  */
-export function applyMigrations(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
-
-  const has = (table: string, column: string): boolean =>
-    tableExists(table) &&
-    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some(
-      (c) => c.name === column
-    );
+export async function applyMigrations(db: Db): Promise<void> {
+  const statements: string[] = [];
 
   const add = (table: string, column: string, ddl: string): void => {
-    if (has(table, column)) return;
-    if (!tableExists(table)) return; // a fresh database gets it from SCHEMA_SQL
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    // PostgreSQL can add a column without being told whether it is
+    // there; SQLite cannot, and the column is checked before its
+    // statement runs.
+    statements.push(
+      db.dialect === "postgres"
+        ? `ALTER TABLE IF EXISTS ${table} ADD COLUMN IF NOT EXISTS ${ddl}`
+        : `ALTER TABLE IF EXISTS ${table} ADD COLUMN ${ddl}`
+    );
   };
 
   // Three account types, and a phone number on the account.
@@ -123,111 +168,74 @@ export function applyMigrations(db: DatabaseSync): void {
   add("order_items", "variant_id", "variant_id TEXT");
   add("order_items", "stock_state", "stock_state TEXT NOT NULL DEFAULT 'settled'");
   add("order_items", "stock_state_note", "stock_state_note TEXT");
-  // How many of the units the shopper ordered are not on the shelf. This is
-  // only ever above zero when the store takes backorders.
-  add("order_items", "backordered", "backordered INTEGER NOT NULL DEFAULT 0");
 
-  // A product's variations are described by its attributes — "Colour",
-  // "Storage", "Edition" — and each option carries its own code, photograph
-  // and barcode.
-  add("products", "attributes", "attributes TEXT DEFAULT '{}'");
-  add("variants", "sku", "sku TEXT");
-  add("variants", "image", "image TEXT");
-  add("variants", "barcode", "barcode TEXT");
-  add("variants", "attributes", "attributes TEXT DEFAULT '{}'");
+  // The evidence a claim carries: a serial number says which unit came
+  // back, a sealed state says whether a voluntary return is even
+  // possible, the missing list says what an incomplete box is short of,
+  // and the last three record where the missing accessories went.
+  add("return_requests", "serial_number", "serial_number TEXT");
+  add("return_requests", "sealed_state", "sealed_state TEXT");
+  add("return_requests", "missing_accessories", "missing_accessories TEXT");
+  add("return_requests", "accessories_courier", "accessories_courier TEXT");
+  add("return_requests", "accessories_tracking", "accessories_tracking TEXT");
+  add("return_requests", "accessories_dispatched_at", "accessories_dispatched_at TEXT");
 
-  // What a category asks its products about.
-  add("categories", "spec_fields", "spec_fields TEXT DEFAULT '[]'");
-  add("orders", "delivered_at", "delivered_at TEXT");
-  add("return_requests", "replacement_courier", "replacement_courier TEXT");
-  add("return_requests", "replacement_tracking", "replacement_tracking TEXT");
+  // An unboxing video is evidence too, and it is not a photograph.
+  add("return_images", "kind", "kind TEXT NOT NULL DEFAULT 'photo'");
 
-  // The tables the backfills below need. They are also in the schema, for a
-  // database built from scratch — but the migration runs before it, so an
-  // existing database needs them here.
-  db.exec(`CREATE TABLE IF NOT EXISTS subcategories (
-    slug          TEXT PRIMARY KEY,
-    category_slug TEXT NOT NULL REFERENCES categories(slug) ON DELETE CASCADE,
-    name          TEXT NOT NULL,
-    position      INTEGER DEFAULT 0
-  )`);
-  db.exec(`CREATE TABLE IF NOT EXISTS brands (
-    slug     TEXT PRIMARY KEY,
-    name     TEXT NOT NULL,
-    blurb    TEXT,
-    position INTEGER DEFAULT 0
-  )`);
+  // The statements are run together, one after the other.
+  for (const statement of statements) {
+    if (db.dialect === "postgres") {
+      await db.exec(statement);
+      continue;
+    }
+    // SQLite has no IF NOT EXISTS on ADD COLUMN, so the column is
+    // checked before the statement runs.
+    const match = /^ALTER TABLE (\w+) ADD COLUMN (\w+)/.exec(statement);
+    if (match && (await hasColumn(db, match[1], match[2]))) continue;
+    await db.exec(statement);
+  }
 
-  // Returns, replacements and refunds
-  db.exec(`CREATE TABLE IF NOT EXISTS return_requests (
-    id                   TEXT PRIMARY KEY,
-    order_id             TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    user_id              INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    type                 TEXT NOT NULL DEFAULT 'return',
-    status               TEXT NOT NULL DEFAULT 'requested',
-    reason               TEXT NOT NULL,
-    customer_notes       TEXT,
-    admin_notes          TEXT,
-    rejection_reason     TEXT,
-    pickup_courier       TEXT,
-    pickup_tracking      TEXT,
-    pickup_date          TEXT,
-    received_at          TEXT,
-    qc_status            TEXT NOT NULL DEFAULT 'pending',
-    qc_notes             TEXT,
-    refund_amount        INTEGER NOT NULL DEFAULT 0,
-    refund_status        TEXT NOT NULL DEFAULT 'none',
-    refund_method        TEXT,
-    refund_reference     TEXT,
-    refund_processed_at  TEXT,
-    replacement_order_id TEXT,
-    replacement_courier  TEXT,
-    replacement_tracking TEXT,
-    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
-  )`);
-  db.exec(`CREATE TABLE IF NOT EXISTS return_items (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    return_id     TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
-    order_item_id INTEGER REFERENCES order_items(id) ON DELETE SET NULL,
-    product_slug  TEXT NOT NULL,
-    variant_id    TEXT,
-    name          TEXT NOT NULL,
-    price         INTEGER NOT NULL,
-    quantity      INTEGER NOT NULL,
-    reason_detail TEXT,
-    qc_decision   TEXT NOT NULL DEFAULT 'pending'
-  )`);
-  db.exec(`CREATE TABLE IF NOT EXISTS return_images (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    return_id  TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
-    path       TEXT NOT NULL,
-    caption    TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )`);
-  db.exec(`CREATE TABLE IF NOT EXISTS return_events (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    return_id  TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
-    status     TEXT NOT NULL,
-    actor_type TEXT NOT NULL,
-    actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    actor_name TEXT,
-    note       TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_returns_order ON return_requests(order_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_returns_user ON return_requests(user_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_returns_status ON return_requests(status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_return_items_return ON return_items(return_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_return_images_return ON return_images(return_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_return_events_return ON return_events(return_id)`);
+  await applyReturnWindowPolicy(db);
+  await backfillOrderVariantIds(db);
+  await backfillVariantSkus(db);
+  await backfillProductSkus(db);
+  await backfillBrands(db);
+  await backfillSubcategories(db);
+  await seedProductImages(db);
+}
 
-  backfillOrderVariantIds(db);
-  backfillVariantSkus(db);
-  backfillProductSkus(db);
-  backfillBrands(db);
-  backfillSubcategories(db);
-  seedProductImages(db);
+/**
+ * Brings the stored return window onto the published policy.
+ *
+ * The shop's rules say seven calendar days for every kind of claim — a
+ * damaged or faulty unit, a wrong item, a missing accessory and a
+ * voluntary return on a sealed unit all get the same seven days. The
+ * setting was left at the old default, so it is moved once. A marker row
+ * records that this has been done, so a window the back office sets
+ * afterwards is left alone.
+ */
+async function applyReturnWindowPolicy(db: Db): Promise<void> {
+  if (!(await tableExists(db, "store_settings"))) return;
+
+  const marker = await db
+    .prepare("SELECT value FROM store_settings WHERE key = ?")
+    .get(RETURN_WINDOW_POLICY_MARKER);
+  if (marker) return;
+
+  await db
+    .prepare(
+      `INSERT INTO store_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(RETURN_WINDOW_SETTING, String(RETURN_WINDOW_DAYS));
+
+  await db
+    .prepare(
+      `INSERT INTO store_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(RETURN_WINDOW_POLICY_MARKER, String(RETURN_WINDOW_DAYS));
 }
 
 /**
@@ -237,47 +245,41 @@ export function applyMigrations(db: DatabaseSync): void {
  * names into a list the back office can manage. It records what is there —
  * it does not make a brand up.
  */
-function backfillBrands(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
+async function backfillBrands(db: Db): Promise<void> {
+  if (!(await tableExists(db, "brands"))) return;
+  if (!(await tableExists(db, "products"))) return;
 
-  if (!tableExists("brands") || !tableExists("products")) return;
-
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT DISTINCT brand FROM products
        WHERE brand IS NOT NULL AND TRIM(brand) != ''
-       ORDER BY brand COLLATE NOCASE`
+       ORDER BY lower(brand)`
     )
-    .all() as { brand: string }[];
+    .all()) as { brand: string }[];
 
   // The brands that are already in the list, by name. A brand that is
   // already there is left alone — this runs every time the database is
   // opened, so it has to be safe to run again and again.
   const known = new Set(
-    (db.prepare("SELECT name FROM brands").all() as { name: string }[]).map(
+    ((await db.prepare("SELECT name FROM brands").all()) as { name: string }[]).map(
       (r) => r.name.trim().toLowerCase()
     )
   );
 
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO brands (slug, name, position) VALUES (?, ?, ?)"
+    "INSERT INTO brands (slug, name, position) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
   );
   const taken = new Set<string>(
-    (db.prepare("SELECT slug FROM brands").all() as { slug: string }[]).map(
+    ((await db.prepare("SELECT slug FROM brands").all()) as { slug: string }[]).map(
       (r) => r.slug
     )
   );
 
   let position = num(
     (
-      db.prepare("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM brands").get() as {
-        n: number;
-      }
+      (await db
+        .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM brands")
+        .get()) as { n: number }
     ).n
   );
 
@@ -298,7 +300,7 @@ function backfillBrands(db: DatabaseSync): void {
     }
     taken.add(slug);
     known.add(key);
-    insert.run(slug, name, position);
+    await insert.run(slug, name, position);
     position++;
   }
 }
@@ -310,17 +312,11 @@ function backfillBrands(db: DatabaseSync): void {
  * the back office can manage. It records what is there — it does not make
  * a subcategory up.
  */
-function backfillSubcategories(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
+async function backfillSubcategories(db: Db): Promise<void> {
+  if (!(await tableExists(db, "subcategories"))) return;
+  if (!(await tableExists(db, "products"))) return;
 
-  if (!tableExists("subcategories") || !tableExists("products")) return;
-
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT DISTINCT p.subcategory AS name, p.category_slug AS category_slug
        FROM products p
@@ -328,14 +324,16 @@ function backfillSubcategories(db: DatabaseSync): void {
          AND TRIM(p.subcategory) != ''
          AND p.category_slug IS NOT NULL`
     )
-    .all() as { name: string; category_slug: string }[];
+    .all()) as { name: string; category_slug: string }[];
 
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO subcategories (slug, category_slug, name, position) VALUES (?, ?, ?, ?)"
+    "INSERT INTO subcategories (slug, category_slug, name, position) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING"
   );
   const taken = new Set<string>(
     (
-      db.prepare("SELECT slug FROM subcategories").all() as { slug: string }[]
+      (await db.prepare("SELECT slug FROM subcategories").all()) as {
+        slug: string;
+      }[]
     ).map((r) => r.slug)
   );
 
@@ -344,9 +342,11 @@ function backfillSubcategories(db: DatabaseSync): void {
   // run again and again.
   const known = new Set(
     (
-      db
-        .prepare("SELECT category_slug, name FROM subcategories")
-        .all() as { category_slug: string; name: string }[]
+      (
+        await db
+          .prepare("SELECT category_slug, name FROM subcategories")
+          .all()
+      ) as { category_slug: string; name: string }[]
     ).map((r) => `${r.category_slug}::${r.name.trim().toLowerCase()}`)
   );
 
@@ -368,7 +368,7 @@ function backfillSubcategories(db: DatabaseSync): void {
     }
     taken.add(slug);
     known.add(key);
-    insert.run(slug, r.category_slug, name, position);
+    await insert.run(slug, r.category_slug, name, position);
     position++;
   }
 }
@@ -380,36 +380,26 @@ function backfillSubcategories(db: DatabaseSync): void {
  * two options of the same product never look alike. A collision is
  * resolved with a numeric suffix rather than being allowed to fail.
  */
-function backfillVariantSkus(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
-
-  if (!tableExists("variants") || !tableExists("products")) return;
-
-  const columns = (db.prepare("PRAGMA table_info(variants)").all() as {
-    name: string;
-  }[]).map((c) => c.name);
-  if (!columns.includes("sku")) return;
+async function backfillVariantSkus(db: Db): Promise<void> {
+  if (!(await tableExists(db, "variants"))) return;
+  if (!(await tableExists(db, "products"))) return;
+  if (!(await hasColumn(db, "variants", "sku"))) return;
 
   const taken = new Set<string>();
-  for (const r of db
+  for (const r of (await db
     .prepare("SELECT sku FROM products WHERE sku IS NOT NULL")
-    .all() as { sku: string }[]) {
+    .all()) as { sku: string }[]) {
     taken.add(r.sku);
   }
-  for (const r of db
+  for (const r of (await db
     .prepare("SELECT sku FROM variants WHERE sku IS NOT NULL")
-    .all() as { sku: string }[]) {
+    .all()) as { sku: string }[]) {
     taken.add(r.sku);
   }
 
-  const rows = db
+  const rows = (await db
     .prepare("SELECT id, product_slug, name, sku FROM variants")
-    .all() as {
+    .all()) as {
     id: string;
     product_slug: string;
     name: string;
@@ -422,7 +412,7 @@ function backfillVariantSkus(db: DatabaseSync): void {
     const base = skuFromSlug(`${r.product_slug}-${r.name}`);
     const sku = uniqueSku(base, (candidate) => taken.has(candidate));
     taken.add(sku);
-    update.run(sku, r.id);
+    await update.run(sku, r.id);
   }
 }
 
@@ -433,22 +423,12 @@ function backfillVariantSkus(db: DatabaseSync): void {
  * so the option is found by that name. A line for a product with no
  * options has no name to match and is left alone.
  */
-function backfillOrderVariantIds(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
+async function backfillOrderVariantIds(db: Db): Promise<void> {
+  if (!(await tableExists(db, "order_items"))) return;
+  if (!(await tableExists(db, "variants"))) return;
+  if (!(await hasColumn(db, "order_items", "variant_id"))) return;
 
-  if (!tableExists("order_items") || !tableExists("variants")) return;
-
-  const columns = (db.prepare("PRAGMA table_info(order_items)").all() as {
-    name: string;
-  }[]).map((c) => c.name);
-  if (!columns.includes("variant_id")) return;
-
-  db.exec(`
+  await db.exec(`
     UPDATE order_items
     SET variant_id = (
       SELECT v.id FROM variants v
@@ -473,56 +453,35 @@ function backfillOrderVariantIds(db: DatabaseSync): void {
  * back office can reorder and add to them like any other picture, and so
  * there is one place a product's pictures live rather than two.
  */
-export function seedProductImages(db: DatabaseSync): void {
-  // The table is also in the schema, for a database built from scratch. It
-  // is created here too because the migration runs before the schema.
-  db.exec(`CREATE TABLE IF NOT EXISTS product_images (
-    id           TEXT PRIMARY KEY,
-    product_slug TEXT NOT NULL REFERENCES products(slug) ON DELETE CASCADE,
-    path         TEXT NOT NULL,
-    alt          TEXT,
-    position     INTEGER DEFAULT 0
-  )`);
-  db.exec(
-    "CREATE INDEX IF NOT EXISTS idx_product_images ON product_images(product_slug)"
-  );
+export async function seedProductImages(db: Db): Promise<void> {
+  if (!(await tableExists(db, "products"))) return;
 
-  const hasProducts = !!db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .get("products");
-  if (!hasProducts) return;
-
-  const products = db
+  const products = (await db
     .prepare("SELECT slug, name, image FROM products")
-    .all() as { slug: string; name: string; image: string | null }[];
+    .all()) as { slug: string; name: string; image: string | null }[];
 
   const insert = db.prepare(
-    `INSERT OR IGNORE INTO product_images (id, product_slug, path, alt, position)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO product_images (id, product_slug, path, alt, position)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO NOTHING`
   );
 
   for (const p of products) {
-    const existing = db
+    const existing = (await db
       .prepare("SELECT COUNT(*) n FROM product_images WHERE product_slug = ?")
-      .get(p.slug) as { n: number };
+      .get(p.slug)) as { n: number };
     if (existing.n > 0) continue;
 
     const gallery = PRODUCT_GALLERY[p.slug];
     if (gallery?.length) {
-      gallery.forEach((img, i) => {
-        insert.run(
-          `${p.slug}::${i}`,
-          p.slug,
-          img.src,
-          img.alt,
-          i
-        );
-      });
+      for (const [i, img] of gallery.entries()) {
+        await insert.run(`${p.slug}::${i}`, p.slug, img.src, img.alt, i);
+      }
       continue;
     }
 
     if (p.image) {
-      insert.run(`${p.slug}::0`, p.slug, p.image, p.name, 0);
+      await insert.run(`${p.slug}::0`, p.slug, p.image, p.name, 0);
     }
   }
 }
@@ -535,24 +494,13 @@ export function seedProductImages(db: DatabaseSync): void {
  * different slugs differing only in punctuation, say — a collision is
  * resolved with a numeric suffix rather than being allowed to fail.
  */
-function backfillProductSkus(db: DatabaseSync): void {
-  const tableExists = (table: string): boolean =>
-    !!db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-      )
-      .get(table);
+async function backfillProductSkus(db: Db): Promise<void> {
+  if (!(await tableExists(db, "products"))) return;
+  if (!(await hasColumn(db, "products", "sku"))) return;
 
-  if (!tableExists("products")) return;
-
-  const columns = (db.prepare("PRAGMA table_info(products)").all() as {
-    name: string;
-  }[]).map((c) => c.name);
-  if (!columns.includes("sku")) return;
-
-  const rows = db
+  const rows = (await db
     .prepare("SELECT slug, sku FROM products")
-    .all() as { slug: string; sku: string | null }[];
+    .all()) as { slug: string; sku: string | null }[];
 
   // Reserve every SKU that is already spoken for before handing out new ones.
   const taken = new Set<string>();
@@ -565,6 +513,6 @@ function backfillProductSkus(db: DatabaseSync): void {
     if (r.sku) continue;
     const sku = uniqueSku(skuFromSlug(r.slug), (s) => taken.has(s));
     taken.add(sku);
-    update.run(sku, r.slug);
+    await update.run(sku, r.slug);
   }
 }

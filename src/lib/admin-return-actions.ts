@@ -12,6 +12,7 @@ import {
   confirmRefundPaid,
   rejectRefund,
   markCompleted,
+  dispatchMissingAccessories,
   markProductReceived,
   requestMoreInformation,
   dispatchReplacement,
@@ -417,6 +418,43 @@ export async function dispatchReplacementAction(
     }
     throw err;
   }
+}
+
+/**
+ * Send the missing accessories to the customer.
+ *
+ * The unit stays with them, nothing is collected and nothing is
+ * refunded. The parts go out with a courier and a tracking number.
+ */
+export async function dispatchMissingAccessoriesAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const courier = String(formData.get("courier") ?? "").trim();
+  const tracking = String(formData.get("tracking") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId || !courier || !tracking) {
+    return {
+      ok: false,
+      message: "Enter the courier and the tracking number for the accessories.",
+    };
+  }
+
+  const result = dispatchMissingAccessories(
+    returnId,
+    { id: staff.id, name: staff.name },
+    { courier, tracking, notes: notes || undefined }
+  );
+
+  if (result.ok) revalidateAll(returnId);
+  return result;
 }
 
 /**

@@ -6,7 +6,7 @@ export async function GET() {
   const guard = await requireApiUser();
   if ("error" in guard) return guard.error;
 
-  return json({ addresses: listAddresses(guard.user.id) });
+  return json({ addresses: await listAddresses(guard.user.id) });
 }
 
 /** POST /api/account/addresses — save a new address. */
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return fail("PIN code must be 6 digits.", 400);
   }
 
-  const address = createAddress(guard.user.id, {
+  const address = await createAddress(guard.user.id, {
     label: body.label?.trim() || "Home",
     name: body.name,
     phone: body.phone,

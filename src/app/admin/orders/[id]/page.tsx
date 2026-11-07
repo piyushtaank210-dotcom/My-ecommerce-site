@@ -9,6 +9,8 @@ import { money, formatDate } from "@/lib/format";
 import { STOCK_STATE_LABEL } from "@/lib/stock";
 import { getUserById } from "@/lib/auth";
 import { OrderStatusSelect } from "@/components/admin/OrderStatusSelect";
+import { getCancellationForOrder } from "@/lib/cancellations";
+import { OrderCancellationPanel } from "@/components/admin/OrderCancellationPanel";
 
 export const metadata = { title: "Order" };
 
@@ -22,8 +24,9 @@ export default async function AdminOrderDetailPage({
   const order = getOrder(id);
   if (!order) notFound();
 
-  const customer = order.user_id ? getUserById(order.user_id) : null;
+  const customer = order.user_id ? await getUserById(order.user_id) : null;
   const returns = getReturnRequestsForOrder(order.id);
+  const cancellation = getCancellationForOrder(order.id);
 
   return (
     <div className="mx-auto max-w-[1100px]">
@@ -144,6 +147,14 @@ export default async function AdminOrderDetailPage({
         </section>
 
         <div className="space-y-5">
+          {cancellation && (
+            <OrderCancellationPanel
+              cancellation={cancellation}
+              orderTotal={order.total}
+              canDecide={can(user.role, "orders.update")}
+            />
+          )}
+
           <section className="rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
               <MapPin className="h-4 w-4 text-brand" />

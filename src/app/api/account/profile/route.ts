@@ -7,7 +7,7 @@ export async function GET() {
   const guard = await requireApiUser();
   if ("error" in guard) return guard.error;
 
-  const { password_hash: _hash, ...safe } = findUserByEmail(guard.user.email) ?? {
+  const { password_hash: _hash, ...safe } = await findUserByEmail(guard.user.email) ?? {
     ...guard.user,
     password_hash: "",
   };
@@ -33,11 +33,11 @@ export async function PATCH(request: Request) {
   if (name.length < 2) return fail("Enter your full name.", 400);
   if (!email.includes("@")) return fail("Enter a valid email address.", 400);
 
-  const clash = findUserByEmail(email);
+  const clash = await findUserByEmail(email);
   if (clash && clash.id !== guard.user.id) {
     return fail("An account with this email already exists.", 409);
   }
 
-  updateUserProfile(guard.user.id, { name, email, phone });
+  await updateUserProfile(guard.user.id, { name, email, phone });
   return json({ id: guard.user.id, name, email, phone: phone || null });
 }

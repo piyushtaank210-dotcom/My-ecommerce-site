@@ -50,6 +50,7 @@ const TABS: {
   { key: "all", label: "All Requests", params: {} },
   { key: "returns", label: "Returns", params: { type: "return" } },
   { key: "replacements", label: "Replacements", params: { type: "replacement" } },
+  { key: "accessories", label: "Missing Accessories", params: { type: "accessories" } },
   { key: "pending_review", label: "Pending Review", params: { status: "requested" } },
   { key: "approved", label: "Approved", params: { status: "approved" } },
   { key: "pickup_pending", label: "Pickup Pending", params: { status: "pickup_scheduled" } },

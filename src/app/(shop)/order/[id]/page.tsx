@@ -23,6 +23,11 @@ import { getProduct } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/auth";
 import { isStaff } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
+import {
+  cancellationEligibility,
+  getCancellationForOrder,
+} from "@/lib/cancellations";
+import { CancellationRequestForm } from "@/components/orders/CancellationRequestForm";
 
 export async function generateMetadata({
   params,
@@ -67,6 +72,11 @@ export default async function OrderPage({
   const step = ORDER_TIMELINE.findIndex((s) => s.status === status);
   const returnRequests = getReturnRequestsForOrder(order.id);
   const eligibility = getOrderReturnEligibility(order);
+
+  // Cancellation is its own thing and not a return. Where the order is
+  // decides whether it can be asked for at all.
+  const cancellation = getCancellationForOrder(order.id);
+  const cancelEligibility = cancellationEligibility(order);
 
   return (
     <div className="container-x py-10">
@@ -393,6 +403,17 @@ export default async function OrderPage({
             </p>
           </section>
         ) : null}
+
+        {/* Cancellation — its own thing, and not a return. It is only
+            offered while the order can still be called off. */}
+        {!cancelled && (
+          <CancellationRequestForm
+            orderId={order.id}
+            orderStatus={status}
+            dispatchState={cancelEligibility.dispatchState}
+            existing={cancellation}
+          />
+        )}
 
         <div className="mt-8 flex flex-col items-center gap-4">
           <Link href="/account/orders" className="btn btn-outline">

@@ -6,7 +6,7 @@ export const metadata = { title: "Saved addresses" };
 
 export default async function AccountAddressesPage() {
   const user = await requireUser("/account/addresses");
-  const addresses = listAddresses(user.id);
+  const addresses = await listAddresses(user.id);
 
   return (
     <div>

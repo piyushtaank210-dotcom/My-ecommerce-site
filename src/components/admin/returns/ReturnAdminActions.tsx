@@ -13,6 +13,7 @@ import {
   markReceivedAction,
   requestMoreInfoAction,
   dispatchReplacementAction,
+  dispatchMissingAccessoriesAction,
   setReplacementDeliveryAction,
   addStaffNoteAction,
   type AdminReturnState,
@@ -154,6 +155,12 @@ export function ReturnAdminActions({
   // 9. Closing the request
   const [completeState, completeAction, isCompletePending] = useActionState(
     markCompletedAction,
+    initial
+  );
+
+  // 10. Sending the missing accessories out.
+  const [accessoriesState, accessoriesAction, isAccessoriesPending] = useActionState(
+    dispatchMissingAccessoriesAction,
     initial
   );
 
@@ -967,6 +974,117 @@ export function ReturnAdminActions({
           </form>
         </section>
       )}
+      {/* 6b. THE MISSING ACCESSORIES GOING OUT */}
+      {ret.type === "accessories" && ret.status !== "completed" && ret.status !== "rejected" && (
+        <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Truck className="h-4 w-4 text-blue-700" />
+            Send the Missing Accessories
+          </h2>
+          <p className="mt-1 text-[12.5px] text-gray-600">
+            The customer keeps the console or controller. Nothing is
+            collected and nothing is refunded — the parts go out to them,
+            and the request closes when they have been sent.
+          </p>
+
+          {ret.missing_accessories && (
+            <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-[11.5px] font-bold uppercase tracking-wide text-gray-500">
+                What the customer says is missing
+              </p>
+              <p className="mt-1 whitespace-pre-line text-[13px] text-gray-700">
+                {ret.missing_accessories}
+              </p>
+            </div>
+          )}
+
+          {accessoriesState.message && (
+            <p className={`mt-3 text-[13px] ${accessoriesState.ok ? "text-green-700" : "text-red-600"}`}>
+              {accessoriesState.message}
+            </p>
+          )}
+
+          <form action={accessoriesAction} className="mt-4 space-y-4">
+            <input type="hidden" name="returnId" value={ret.id} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600">
+                  Courier *
+                </label>
+                <input
+                  name="courier"
+                  required
+                  placeholder="Delhivery, Blue Dart..."
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600">
+                  Tracking number *
+                </label>
+                <input
+                  name="tracking"
+                  required
+                  placeholder="The number the customer will track"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600">
+                Notes for the customer
+              </label>
+              <textarea
+                name="notes"
+                rows={2}
+                placeholder="What is in the parcel, and when to expect it."
+                className="mt-1 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isAccessoriesPending}
+              className="btn btn-primary btn-sm"
+            >
+              {isAccessoriesPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Recording the shipment...
+                </>
+              ) : (
+                "Record the shipment and close the request"
+              )}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {/* 6c. Where the missing accessories have got to. */}
+      {ret.type === "accessories" && ret.accessories_dispatched_at && (
+        <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Flag className="h-4 w-4 text-green-700" />
+            The Accessories Have Been Sent
+          </h2>
+          <dl className="mt-3 space-y-2 text-[13px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Courier</dt>
+              <dd className="font-medium text-ink">{ret.accessories_courier}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Tracking</dt>
+              <dd className="tnum font-medium text-ink">{ret.accessories_tracking}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-gray-500">Sent on</dt>
+              <dd className="font-medium text-ink">
+                {ret.accessories_dispatched_at?.slice(0, 10)}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
+
       {/* 7. CLOSING THE REQUEST */}
       {(ret.status === "refund_pending" || ret.status === "replacement_pending") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">

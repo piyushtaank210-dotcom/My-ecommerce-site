@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { id } = await params;
-  const user = getUserById(Number(id));
+  const user = await getUserById(Number(id));
   if (!user) return fail("No such account.", 404);
 
   return json(user);
@@ -28,7 +28,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const { id } = await params;
   const userId = Number(id);
-  const target = getUserById(userId);
+  const target = await getUserById(userId);
   if (!target) return fail("No such account.", 404);
 
   let body: { role?: string; password?: string };
@@ -44,17 +44,17 @@ export async function PATCH(request: Request, { params }: Params) {
     if (target.id === guard.user.id && body.role !== "admin") {
       return fail("You cannot remove your own admin access.", 400);
     }
-    setUserRole(target.id, body.role);
+    await setUserRole(target.id, body.role);
   }
 
   if (body.password !== undefined) {
     if (body.password.length < 8) {
       return fail("Use at least 8 characters.", 400);
     }
-    updateUserPassword(target.id, body.password);
+    await updateUserPassword(target.id, body.password);
   }
 
-  return json(getUserById(target.id));
+  return json(await getUserById(target.id));
 }
 
 /** DELETE /api/admin/users/[id] — remove an account. */
@@ -67,7 +67,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (userId === guard.user.id) {
     return fail("You cannot delete your own account.", 400);
   }
-  if (!getUserById(userId)) return fail("No such account.", 404);
+  if (!await getUserById(userId)) return fail("No such account.", 404);
 
   getDb().prepare("DELETE FROM users WHERE id = ?").run(userId);
   return json({ deleted: userId });

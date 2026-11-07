@@ -26,8 +26,8 @@ export type ContactMessage = {
 };
 
 /** Records an enquiry from the contact page. */
-export function createContactMessage(input: ContactMessage): void {
-  getDb()
+export async function createContactMessage(input: ContactMessage): Promise<void> {
+  await getDb()
     .prepare(
       `INSERT INTO contact_messages (name, email, subject, order_id, message)
        VALUES (?,?,?,?,?)`

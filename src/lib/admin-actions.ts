@@ -872,7 +872,7 @@ export async function setUserRoleAction(
     return { ok: false, message: "You cannot remove your own admin access." };
   }
 
-  setUserRole(id, role as "member" | "support" | "admin");
+  await setUserRole(id, role as "member" | "support" | "admin");
   revalidatePath("/admin/users");
   return { ok: true, message: "Role updated." };
 }
@@ -919,7 +919,7 @@ export async function resetUserPasswordAction(
     return { ok: false, message: "Use at least 8 characters." };
   }
 
-  updateUserPassword(id, password);
+  await updateUserPassword(id, password);
   revalidatePath("/admin/users");
   return { ok: true, message: "Password reset." };
 }

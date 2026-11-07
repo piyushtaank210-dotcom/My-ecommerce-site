@@ -19,7 +19,7 @@ export default async function CheckoutPage() {
   if (cart.lines.length === 0) redirect("/cart");
 
   const user = await getCurrentUser();
-  const savedAddresses = user ? listAddresses(user.id) : [];
+  const savedAddresses = user ? await listAddresses(user.id) : [];
 
   return (
     <div className="container-x py-8">

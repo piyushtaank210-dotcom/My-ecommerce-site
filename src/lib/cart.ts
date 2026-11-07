@@ -24,7 +24,7 @@ export async function getCart(): Promise<Cart> {
   if (!sessionId) return empty;
 
   const db = getDb();
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT ci.id AS line_id, ci.quantity AS line_qty,
               p.*, ${PRODUCT_STOCK_COLUMNS_SQL},
@@ -39,7 +39,7 @@ export async function getCart(): Promise<Cart> {
        WHERE ci.session_id = ? AND p.listed = 1
        ORDER BY ci.id DESC`
     )
-    .all(sessionId) as Row[];
+    .all(sessionId)) as Row[];
 
   const lines: CartLine[] = rows.map((r) => {
     const product = mapProduct(r);
@@ -95,10 +95,10 @@ export async function getCart(): Promise<Cart> {
 export async function getCartCount(): Promise<number> {
   const sessionId = await readSessionId();
   if (!sessionId) return 0;
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       "SELECT COALESCE(SUM(quantity), 0) AS n FROM cart_items WHERE session_id = ?"
     )
-    .get(sessionId) as Row | undefined;
+    .get(sessionId)) as Row | undefined;
   return num(row?.n);
 }

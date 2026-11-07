@@ -129,7 +129,81 @@ export default async function CustomerReturnDetailPage({
 
   // Construct the exact 8 stages:
   // Request Submitted → Under Review → Approved → Pickup Scheduled → Product Received → Inspection Completed → Refund Initiated / Replacement Dispatched → Completed
-  const timelineStages: TimelineStage[] = [
+  const timelineStages: TimelineStage[] =
+    ret.type === "accessories"
+      ? [
+          {
+            key: "requested",
+            label: "Request Submitted",
+            description: "Your request has been received",
+            status: "completed",
+            date: formatDate(ret.created_at),
+            note: "Request logged in our system.",
+          },
+          {
+            key: "under_review",
+            label: "Under Review",
+            description: "We are checking what is missing",
+            status:
+              UNDER_REVIEW.includes(ret.status)
+                ? "current"
+                : PAST_REVIEW.includes(ret.status)
+                  ? "completed"
+                  : "pending",
+            date:
+              UNDER_REVIEW.includes(ret.status)
+                ? "In progress"
+                : findEventDate("under_review") ||
+                  findEventDate("approved") ||
+                  formatDate(ret.created_at),
+            note:
+              ret.status === "info_requested"
+                ? ret.admin_notes || "We have asked you for more information."
+                : "We are looking at the photographs you sent.",
+          },
+          {
+            key: "approved",
+            label: "Approved",
+            description: "We are sending the missing parts",
+            status:
+              UNDER_REVIEW.includes(ret.status)
+                ? "pending"
+                : ret.status === "approved"
+                  ? "current"
+                  : PAST_APPROVAL.includes(ret.status)
+                    ? "completed"
+                    : "pending",
+            date: findEventDate("approved"),
+            note:
+              ret.status === "info_requested"
+                ? null
+                : ret.admin_notes ||
+                  (ret.status === "approved"
+                    ? "The parts will be on their way to you shortly."
+                    : null),
+          },
+          {
+            key: "settlement",
+            label: "Accessories Dispatched",
+            description: "The missing parts are on their way to you",
+            status: ret.accessories_dispatched_at ? "completed" : "pending",
+            date: ret.accessories_dispatched_at
+              ? formatDate(ret.accessories_dispatched_at)
+              : null,
+            note: ret.accessories_tracking
+              ? `${ret.accessories_courier} — ${ret.accessories_tracking}.`
+              : null,
+          },
+          {
+            key: "completed",
+            label: "Completed",
+            description: "Case closed successfully",
+            status: ret.status === "completed" ? "completed" : "pending",
+            date: findEventDate("completed"),
+            note: null,
+          },
+        ]
+      : [
     {
       key: "requested",
       label: "Request Submitted",
@@ -793,32 +867,87 @@ export default async function CustomerReturnDetailPage({
               <p className="text-gray-600 leading-relaxed">{ret.customer_notes}</p>
             </div>
           )}
+
+          {ret.serial_number && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">Serial:</span>
+              <p className="tnum text-gray-600 leading-relaxed">{ret.serial_number}</p>
+            </div>
+          )}
+
+          {ret.sealed_state && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">Unit is:</span>
+              <p className="text-gray-600 leading-relaxed">
+                {ret.sealed_state === "sealed" ? "sealed and unused" : "opened"}
+              </p>
+            </div>
+          )}
+
+          {ret.missing_accessories && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">Missing:</span>
+              <p className="whitespace-pre-line text-gray-600 leading-relaxed">
+                {ret.missing_accessories}
+              </p>
+            </div>
+          )}
+
+          {ret.accessories_tracking && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">Sent:</span>
+              <p className="text-gray-600 leading-relaxed">
+                {ret.accessories_courier} — {ret.accessories_tracking}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Uploaded Evidence Photos */}
+        {/* The evidence — photographs and unboxing videos. */}
         {ret.images.length > 0 && (
           <div className="mt-5 border-t border-gray-100 pt-4">
             <h3 className="mb-2.5 text-[13px] font-bold text-ink">
-              Uploaded Evidence Photos ({ret.images.length})
+              Your Evidence ({ret.images.length})
             </h3>
             <div className="flex flex-wrap gap-3">
-              {ret.images.map((img) => (
-                <a
-                  key={img.id}
-                  href={img.path}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-brand transition-colors"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.path}
-                    alt="Return photo"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                  <span className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </a>
-              ))}
+              {ret.images.map((img) =>
+                img.kind === "video" ? (
+                  <a
+                    key={img.id}
+                    href={img.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-brand transition-colors"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <video
+                      src={img.path}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                    />
+                    <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      VIDEO
+                    </span>
+                  </a>
+                ) : (
+                  <a
+                    key={img.id}
+                    href={img.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-brand transition-colors"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.path}
+                      alt="Return photo"
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    <span className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                )
+              )}
             </div>
           </div>
         )}

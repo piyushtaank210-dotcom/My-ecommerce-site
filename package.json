@@ -13,6 +13,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "seed": "node scripts/seed.mjs",
+    "db:migrate": "node scripts/migrate-to-postgres.mjs",
     "db:checkpoint": "node scripts/checkpoint-db.mjs",
     "sync-hero": "node scripts/sync-hero.mjs",
     "encode:hero": "node scripts/encode-hero-video.mjs",
@@ -37,6 +38,8 @@
     "check:mobile": "node scripts/audit-mobile.mjs && node scripts/check-labels.mjs",
     "check:admin-nav": "node scripts/check-admin-flow.mjs && node scripts/check-admin-walk.mjs && node scripts/check-admin-redirect.mjs && node scripts/check-signout.mjs",
     "check:admin-returns": "node scripts/check-admin-returns.mjs",
+    "check:return-policy": "node scripts/check-return-policy.mjs",
+    "check:returns": "node scripts/check-returns.mjs && node scripts/check-return-policy.mjs",
     "check:hero": "node scripts/check-hero-video.mjs && node scripts/check-hero-pause.mjs",
     "clean:e2e": "node scripts/clean-e2e-accounts.mjs",
     "shot": "node scripts/screenshot.mjs",
@@ -48,6 +51,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.63.0",
     "next": "^16.4.3",
+    "pg": "^8.16.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"
@@ -55,6 +59,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.19.2",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
