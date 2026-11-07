@@ -23,7 +23,8 @@ type FilmInfo = {
 export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const count = slides.length;
   const [index, setIndex] = useState(0);
-  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [keyboard, setKeyboard] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [wideEnough, setWideEnough] = useState(false);
@@ -44,11 +45,33 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
    */
   const endedSeen = useRef(new Set<string>());
 
-  // Hover, focus and a backgrounded tab all pause the carousel, so a
-  // shopper reading the copy does not have the slide change under them.
-  // A film is not one of them: it is the picture on the slide, and it
-  // plays through whatever the cursor is doing.
-  const paused = hovered || hidden;
+  // A cursor over the hero never stops the carousel. A shopper watching
+  // the film is sitting right there with the pointer over it, and a
+  // carousel that stops when the pointer arrives never gets past its
+  // second slide — the film hands over to a picture, and the picture
+  // sits there for good.
+  //
+  // The keyboard does stop it, and only the keyboard. A shopper moving
+  // through the slides with the keyboard needs the slide to hold still
+  // while they are on it, and it is the one way to hold the carousel
+  // still. A mouse user who clicked a dot has already said where they
+  // want to be, and the hero must not hold them there.
+  const paused = (focused && keyboard) || hidden;
+
+  /**
+   * Whether the shopper is on the keyboard.
+   *
+   * A key press anywhere says so, and a press of the pointer says the
+   * opposite. Only the keys that move between things count — a shopper
+   * who types into the search box has not asked the hero to hold still.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab" || e.key.startsWith("Arrow")) setKeyboard(true);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const active = slides[index];
   /** Whether the slide on screen carries a film. */
@@ -221,6 +244,9 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }, [index, slides, wideEnough, reduced, films, setFilm]);
 
   function onPointerDown(e: React.PointerEvent) {
+    // The pointer has the shopper's attention, so the keyboard is not
+    // holding the carousel still.
+    setKeyboard(false);
     swipeStart.current = e.clientX;
   }
 
@@ -239,10 +265,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       aria-roledescription="carousel"
       aria-label="Featured"
       className="relative isolate flex min-h-[30rem] touch-pan-y flex-col overflow-hidden bg-ink sm:min-h-[36rem] lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocusCapture={() => setHovered(true)}
-      onBlurCapture={() => setHovered(false)}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={() => setFocused(false)}
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft") {
           e.preventDefault();

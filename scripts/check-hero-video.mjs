@@ -211,6 +211,23 @@ try {
   check(handover.ended === true, "the film ran to its end");
   check(handover.slide === "2 of 5", "the next picture came up on its own");
 
+  // The cursor is still over the hero, and the picture it handed over to
+  // has to carry on by itself. A carousel that stops when the pointer
+  // arrives never gets past this slide: the shopper is watching the
+  // film with their cursor right there.
+  await sleep(7000);
+  const carriedOn = await cdp.evaluate(`(() => {
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const slide = [...section.querySelectorAll('[aria-roledescription=slide]')]
+      .find((s) => s.getAttribute('aria-hidden') !== 'true');
+    return slide?.getAttribute('aria-label') ?? null;
+  })()`);
+  console.log(`   with the cursor still there: slide ${carriedOn}`);
+  check(
+    carriedOn !== handover.slide,
+    "the carousel keeps moving with the cursor on the hero"
+  );
+
   /* --------------------------------------------------------- the two films */
 
   console.log("\n— the second film —");
