@@ -16,7 +16,7 @@
     "db:checkpoint": "node scripts/checkpoint-db.mjs",
     "sync-hero": "node scripts/sync-hero.mjs",
     "encode:hero": "node scripts/encode-hero-video.mjs",
-    "hero:posters": "node scripts/hero-frame.mjs public/hero/hero-showcase-web.mp4 public/hero/hero-showcase-web-poster.jpg 0 1280 614 && node scripts/hero-frame.mjs public/hero/hero-controller-web.mp4 public/hero/hero-controller-web-poster.jpg 0 1280 614",
+    "hero:posters": "node scripts/hero-frame.mjs public/hero/hero-console-web.mp4 public/hero/hero-console-web-poster.jpg 0 1280 614 && node scripts/hero-frame.mjs public/hero/hero-controller-web.mp4 public/hero/hero-controller-web-poster.jpg 0 1280 614",
     "hero:build": "npm run encode:hero && npm run hero:posters",
     "sync-categories": "node scripts/sync-categories.mjs",
     "sync-variants": "node scripts/sync-variants.mjs",

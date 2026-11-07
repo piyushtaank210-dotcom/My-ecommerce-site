@@ -110,8 +110,10 @@ try {
 
   const opening = await cdp.evaluate(`(() => {
     const v = document.querySelector('section[aria-roledescription=carousel] video');
+    const still = document.querySelector('section[aria-roledescription=carousel] img');
     return {
       poster: v?.getAttribute('poster') ?? null,
+      still: still?.getAttribute('src') ?? null,
       playing: v ? !v.paused : null,
       t: v ? Number(v.currentTime.toFixed(2)) : null,
       background: v ? getComputedStyle(v).backgroundColor : null,
@@ -119,11 +121,18 @@ try {
   })()`);
   console.log(`   film playing     : ${opening.playing ? "yes" : "no"} (t=${opening.t}s)`);
   console.log(`   poster           : ${opening.poster}`);
+  console.log(`   the slide's still: ${opening.still}`);
   console.log(`   film background  : ${opening.background}`);
   check(opening.playing === true, "the film is already running when the hero opens");
   check(
-    Boolean(opening.poster) && opening.poster !== "/hero/hero-showcase.jpg",
-    "the poster is the film's own first frame, not the photograph"
+    Boolean(opening.poster) && /-poster\.jpg$/.test(opening.poster),
+    "the poster is the film's own first frame, not a separate picture"
+  );
+  // The hero opens on a film, and there is no separate photograph under
+  // it: the still a phone shows is the film's own first frame.
+  check(
+    opening.still === opening.poster,
+    "the first slide's still is the film's own frame — there is no separate image"
   );
   // A film is see-through until it has a poster or a frame, and the
   // photograph underneath arrives after the first paint. Without a
@@ -139,13 +148,23 @@ try {
   // interval, so the two stay together.
   const bar = await cdp.evaluate(`(() => {
     const el = document.querySelector('.hero-progress');
+    const v = document.querySelector('section[aria-roledescription=carousel] video');
     if (!el) return null;
     const s = getComputedStyle(el);
-    return { state: s.animationPlayState, duration: s.animationDuration };
+    return {
+      state: s.animationPlayState,
+      duration: s.animationDuration,
+      film: v ? v.duration : null,
+    };
   })()`);
-  console.log(`   progress bar     : ${bar?.state} over ${bar?.duration}`);
+  console.log(
+    `   progress bar     : ${bar?.state} over ${bar?.duration}` +
+      (bar?.film ? ` (film is ${bar.film.toFixed(2)}s)` : "")
+  );
   check(
-    bar !== null && parseFloat(bar.duration) > 8,
+    bar !== null &&
+      bar.film > 0 &&
+      Math.abs(parseFloat(bar.duration) - bar.film) < 0.5,
     "the progress bar fills over the length of the film",
     bar?.duration ?? "none"
   );
@@ -199,6 +218,27 @@ try {
   // The hero carries more than one film. The second one has to be a
   // film of its own: it plays on its own slide, and the first film is
   // still while it is on screen.
+  //
+  // The page is loaded again with the network watched, so the films
+  // that were fetched up front can be counted: a film that is only
+  // fetched when its slide arrives has to wait, and a visitor sees that
+  // as the hero stuttering.
+  const fetched = [];
+  cdp.on?.("Network.requestWillBeSent", (p) => {
+    if (p.request?.url?.includes(".mp4")) fetched.push(p.request.url);
+  });
+  await cdp.goto(`${BASE}/`);
+  await sleep(2500);
+  console.log(`   films fetched     : ${fetched.length}`);
+  check(
+    fetched.length >= 2,
+    "both films are fetched up front, so neither buffers when its slide arrives"
+  );
+
+  await cdp.evaluate(
+    `document.querySelector('[aria-label="Next slide"]')?.click()`
+  );
+  await sleep(900);
   await cdp.evaluate(
     `document.querySelector('[aria-label="Next slide"]')?.click()`
   );

@@ -292,10 +292,14 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 {/* The film. The film on the slide the hero opens on is in
                     the page from the very first byte, so it is already
                     running when the hero opens instead of swapping in over
-                    the photograph a moment later. The others are fetched
-                    when the carousel reaches them — their poster is the
-                    film's own first frame, so the picture on screen does
-                    not change when the film takes over.
+                    the photograph a moment later.
+
+                    Every film is fetched whole, not just the one on screen.
+                    A film that is fetched only when the carousel reaches it
+                    has to download before it can start, and a visitor
+                    sees that as the hero stuttering. Fetching both up
+                    front means neither ever waits — a phone still fetches
+                    neither, because the source rules them out there.
 
                     The poster is the film's own first frame, so the picture
                     on screen does not change when the film takes over from
@@ -320,7 +324,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   autoPlay={i === openingFilm}
                   muted
                   playsInline
-                  preload={i === openingFilm ? "auto" : "metadata"}
+                  preload="auto"
                   tabIndex={-1}
                   onEnded={() => {
                     // The film has run to its end: hand over to the next
