@@ -21,7 +21,7 @@
  *
  *   3. The bitrate has to be a sane one, and the frame a shade sharper.
  *      The film arrived at nearly 3,000 kb/s — close to transparent, and
- *      three times what the picture needs. At 1,200 kb/s it is the same
+ *      three times what the picture needs. At 2,400 kb/s it is the same
  *      picture on the wire, and the sharpen puts back the crispness the
  *      smaller file would otherwise lose when a wide screen blows it up.
  *
@@ -44,16 +44,17 @@ const HERO = join(ROOT, "public", "hero");
 /**
  * The films.
  *
- * `console` is the reveal at the end of the console master: the shot with
- * both consoles, the disc and the controller. It is the picture of the
- * whole range in one frame, so it is the one the hero opens on. The
- * master runs it in two and a half seconds, which is too quick to read,
- * so it is slowed and the frames in between are interpolated — the pull
- * back becomes a drift rather than a rush, and the film is smooth
- * instead of stuttering through duplicated frames.
+ * `console` is the owner's own film, and the hero plays it whole. The
+ * master opens on a fade up from black, so the first 0.8s of it is cut:
+ * the poster is the film's own first frame, and the still a phone shows
+ * is that frame too, so a film that opened on black would put a black
+ * box at the top of the shop. The rest of the master runs to its end.
  *
- * `controller` is the detail shot on the white controller, cropped in far
- * enough to be a different picture from the console film.
+ * The second film on the hero — the detail shot on the white controller —
+ * is a committed asset now. Its master was removed when the old films
+ * were cleared out, so it cannot be re-cut from footage; if it ever has
+ * to change, the master has to come back first. Its poster can still be
+ * made at any time, because a poster is drawn from the film itself.
  */
 const FILMS = [
   {
@@ -61,22 +62,21 @@ const FILMS = [
     source: "hero-console-master.mp4",
     out: "hero-console-web.mp4",
     poster: "hero-console-web-poster.jpg",
-    start: 7.45,
-    length: 2.6,
-    speed: 1.8,
-    fps: 48,
+    start: 0.8,
+    // No length: the film runs to the end of the master.
+    length: null,
     crop: "iw:round(ih*0.854):0:round((ih-ih*0.854)/2)",
   },
-  {
-    id: "controller",
-    source: "hero-showcase-controller.mp4",
-    out: "hero-controller-web.mp4",
-    poster: "hero-controller-web-poster.jpg",
-    start: 6.6,
-    length: 3.4,
-    crop: "820:394:460:100",
-    scale: "1280:614",
-  },
+];
+
+/**
+ * Every film the hero carries, and the poster that goes with it. The
+ * poster of a film is drawn from the film itself, so this list is about
+ * the posters rather than about what can be encoded.
+ */
+const POSTERS = [
+  ["hero-console-web.mp4", "hero-console-web-poster.jpg"],
+  ["hero-controller-web.mp4", "hero-controller-web-poster.jpg"],
 ];
 
 /**
@@ -127,23 +127,13 @@ for (const film of FILMS) {
     continue;
   }
 
-  // The chain: cut to the hero's shape, slow it if it is too quick, put the
-  // frames in between, then sharpen.
+  // The chain: cut to the hero's shape, then sharpen.
   const filters = [`crop=${film.crop}`];
-  if (film.speed && film.speed !== 1) {
-    filters.push(`setpts=${film.speed}*PTS`);
-  }
   if (film.scale) filters.push(`scale=${film.scale}`);
-  if (film.speed && film.speed !== 1 && film.fps) {
-    // The frames in between a slowed film, worked out from the motion
-    // between one frame and the next.
-    filters.push(
-      "minterpolate=fps=" +
-        film.fps +
-        ":mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
-    );
-  }
   filters.push(SHARPEN);
+
+  // A film with no length runs to the end of its master.
+  const trim = film.length ? ["-t", String(film.length)] : [];
 
   const result = spawnSync(
     FFMPEG,
@@ -152,7 +142,7 @@ for (const film of FILMS) {
       "-hide_banner",
       "-loglevel", "error",
       "-ss", String(film.start),
-      "-t", String(film.length),
+      ...trim,
       "-i", source,
       "-an",
       "-c:v", ENC,
@@ -171,20 +161,21 @@ for (const film of FILMS) {
     continue;
   }
 
-  const seconds = film.length * (film.speed ?? 1);
   console.log(
     `✓ public/hero/${film.out}  ` +
       `${Math.round(statSync(target).size / 1024)}KB  ` +
-      `${seconds.toFixed(2)}s from ${film.start}s`
+      (film.length
+        ? `${film.length}s from ${film.start}s`
+        : `from ${film.start}s to the end of the master`)
   );
 }
 
 if (failed) process.exit(1);
 
 console.log("\n  the posters must be regenerated from each film's own first frame");
-for (const film of FILMS) {
+for (const [film, poster] of POSTERS) {
   console.log(
-    `  node scripts/hero-frame.mjs public/hero/${film.out} ` +
-      `public/hero/${film.poster} 0 1280 614`
+    `  node scripts/hero-frame.mjs public/hero/${film} ` +
+      `public/hero/${poster} 0 1280 614`
   );
 }
