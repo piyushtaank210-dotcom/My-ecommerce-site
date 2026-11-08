@@ -32,7 +32,7 @@ export default async function ShopPage({
 }) {
   const sp = await searchParams;
 
-  const categories = getCategories();
+  const categories = (await getCategories());
   const slugs = categories.map((c) => c.slug);
 
   // An unknown category in the URL is ignored rather than emptying the grid.
@@ -43,13 +43,17 @@ export default async function ShopPage({
   const page = Math.max(1, parseInt(one(sp.page) || "1", 10));
 
   const query = { category, sort };
-  const total = countProducts(query);
-  const products = getProducts({
-    ...query,
-    limit: PER_PAGE,
-    offset: (page - 1) * PER_PAGE,
-  });
-  const brands = getBrands(category);
+  // The three are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [total, products, brands] = await Promise.all([
+    countProducts(query),
+    getProducts({
+      ...query,
+      limit: PER_PAGE,
+      offset: (page - 1) * PER_PAGE,
+    }),
+    getBrands(category),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

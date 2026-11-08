@@ -9,7 +9,7 @@ export async function GET() {
   const guard = await requireApiPermission("catalog.view");
   if ("error" in guard) return guard.error;
 
-  return json({ categories: listCategories() });
+  return json({ categories: (await listCategories()) });
 }
 
 /**
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const name = String(body.name ?? "").trim();
   if (name.length < 2) return fail("Give the category a name.", 400);
 
-  const result = createCategory({
+  const result = (await createCategory({
     name,
     slug: body.slug ? String(body.slug) : undefined,
     blurb: body.blurb ? String(body.blurb) : null,
@@ -45,14 +45,14 @@ export async function POST(request: Request) {
     specFields: Array.isArray(body.specFields)
       ? body.specFields.map((f) => String(f))
       : [],
-  });
+  }));
 
   if (!result.ok) {
     return fail(result.reason ?? "That category could not be added.", 409);
   }
 
   return json(
-    listCategories().find((c) => c.slug === result.slug),
+    (await listCategories()).find((c) => c.slug === result.slug),
     201
   );
 }

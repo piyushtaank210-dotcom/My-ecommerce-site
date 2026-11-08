@@ -28,7 +28,7 @@ export default async function OrderReturnRequestPage({
   const { id } = await params;
   const { itemId, type } = await searchParams;
 
-  const order = getOrder(id);
+  const order = (await getOrder(id));
   if (!order) notFound();
 
   const user = await getCurrentUser();
@@ -41,17 +41,19 @@ export default async function OrderReturnRequestPage({
     notFound();
   }
 
-  const eligibility = getOrderReturnEligibility(order);
+  const eligibility = (await getOrderReturnEligibility(order));
 
   // Augment items with product images and item-level eligibility
-  const enrichedItems = order.items.map((it) => {
-    const key = it.id ?? 0;
-    return {
-      ...it,
-      image: getProduct(it.product_slug)?.image ?? null,
-      eligibility: eligibility.itemEligibilities[key],
-    };
-  });
+  const enrichedItems = await Promise.all(
+    order.items.map(async (it) => {
+      const key = it.id ?? 0;
+      return {
+        ...it,
+        image: (await getProduct(it.product_slug))?.image ?? null,
+        eligibility: eligibility.itemEligibilities[key],
+      };
+    })
+  );
 
   return (
     <div className="container-x py-10">

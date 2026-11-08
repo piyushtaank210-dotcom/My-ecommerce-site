@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { id } = await params;
-  const order = getOrder(id);
+  const order = (await getOrder(id));
   if (!order) return fail("No such order.", 404);
 
   return json(order);
@@ -39,10 +39,10 @@ export async function PATCH(request: Request, { params }: Params) {
     return fail("Pick a valid status.", 400);
   }
 
-  const result = applyOrderStatus(id, body.status as OrderStatus, guard.user.id);
+  const result = (await applyOrderStatus(id, body.status as OrderStatus, guard.user.id));
   if (!result.ok) {
     return fail(result.message ?? "That order could not be changed.", 409);
   }
 
-  return json(getOrder(id));
+  return json((await getOrder(id)));
 }

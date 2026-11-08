@@ -18,7 +18,7 @@ const TONE: Record<string, string> = {
 
 export default async function AccountOrdersPage() {
   const user = await requireUser("/account/orders");
-  const orders = getOrdersForUser(user.id);
+  const orders = (await getOrdersForUser(user.id));
 
   if (orders.length === 0) {
     return (
@@ -39,9 +39,9 @@ export default async function AccountOrdersPage() {
 
   return (
     <div className="space-y-4">
-      {orders.map((o) => {
-        const retReqs = getReturnRequestsForOrder(o.id);
-        const eligible = isReturnEligible(o);
+      {orders.map(async (o) => {
+        const retReqs = (await getReturnRequestsForOrder(o.id));
+        const eligible = (await isReturnEligible(o));
 
         return (
           <article

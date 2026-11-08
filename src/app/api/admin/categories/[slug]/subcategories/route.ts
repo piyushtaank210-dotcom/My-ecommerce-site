@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const category = listCategories().find((c) => c.slug === slug);
+  const category = (await listCategories()).find((c) => c.slug === slug);
   if (!category) return fail("No such category.", 404);
 
   return json({ subcategories: category.subcategories });
@@ -36,10 +36,10 @@ export async function POST(request: Request, { params }: Params) {
     return fail("Send a JSON body.", 400);
   }
 
-  const result = createSubcategory(slug, String(body.name ?? ""));
+  const result = (await createSubcategory(slug, String(body.name ?? "")));
   if (!result.ok) {
     return fail(result.reason ?? "That subcategory could not be added.", 409);
   }
 
-  return json(listCategories().find((c) => c.slug === slug), 201);
+  return json((await listCategories()).find((c) => c.slug === slug), 201);
 }

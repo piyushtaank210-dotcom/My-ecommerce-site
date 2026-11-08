@@ -15,7 +15,7 @@ export async function GET() {
   if ("error" in guard) return guard.error;
 
   const isAdmin = guard.user.role === "admin";
-  const csv = exportCatalogue(isAdmin);
+  const csv = (await exportCatalogue(isAdmin));
 
   return new Response(csv, {
     status: 200,

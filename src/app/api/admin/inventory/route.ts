@@ -20,8 +20,8 @@ export async function GET(request: Request) {
   const level = url.searchParams.get("level") ?? "all";
 
   return json({
-    summary: inventorySummary(),
-    buckets: listStockBuckets({ q, level }),
-    pendingChecks: pendingStockChecks(),
+    summary: (await inventorySummary()),
+    buckets: (await listStockBuckets({ q, level })),
+    pendingChecks: (await pendingStockChecks()),
   });
 }

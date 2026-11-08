@@ -15,7 +15,7 @@ export async function POST(request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug, variantId } = await params;
-  if (!getVariant(slug, variantId)) return fail("No such option.", 404);
+  if (!(await getVariant(slug, variantId))) return fail("No such option.", 404);
 
   let formData: FormData;
   try {
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: Params) {
   const saved = await saveUpload(`${slug}/variants`, file);
   if (!saved.ok) return fail(saved.reason, 415);
 
-  const result = updateVariant(slug, variantId, { image: saved.path }, guard.user.id);
+  const result = (await updateVariant(slug, variantId, { image: saved.path }, guard.user.id));
   if (!result.ok) return fail(result.reason ?? "That option could not be changed.", 409);
 
   return json(result.variant);

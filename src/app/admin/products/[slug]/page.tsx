@@ -22,15 +22,15 @@ export default async function AdminProductEditPage({
   const { slug } = await params;
 
   const isNew = slug === "new";
-  const product = isNew ? null : getProduct(slug);
+  const product = isNew ? null : (await getProduct(slug));
   if (!isNew && !product) notFound();
 
-  const categories = getCategories().map((c) => ({
+  const categories = (await getCategories()).map((c) => ({
     slug: c.slug,
     name: c.name,
     specFields: c.spec_fields,
   }));
-  const subcategories = listCategories().flatMap((c) =>
+  const subcategories = (await listCategories()).flatMap((c) =>
     c.subcategories.map((s) => ({
       category_slug: c.slug,
       name: s.name,
@@ -39,9 +39,9 @@ export default async function AdminProductEditPage({
   // The brand names, once each. The back office may hold more than one row
   // for a name — a brand that was renamed and added back — and the picker
   // only wants the names.
-  const brands = [...new Set(listBrands().map((b) => b.name))];
+  const brands = [...new Set((await listBrands()).map((b) => b.name))];
 
-  const gallery = isNew ? [] : listProductGallery(slug);
+  const gallery = isNew ? [] : (await listProductGallery(slug));
 
   return (
     <div className="mx-auto max-w-[1100px]">

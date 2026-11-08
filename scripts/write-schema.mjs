@@ -13,7 +13,7 @@ import { SCHEMA_SQL } from "../src/lib/schema.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const header = `-- PlayForge store schema (SQLite).
+const header = `-- ConsoleSeller store schema (PostgreSQL).
 --
 -- Generated from src/lib/schema.ts by scripts/write-schema.mjs, which is the
 -- single source of truth. Edit that file, then run:

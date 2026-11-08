@@ -21,15 +21,15 @@ export async function PATCH(request: Request, { params }: Params) {
     return fail("Send a JSON body.", 400);
   }
 
-  const result = updateBrand(slug, {
+  const result = (await updateBrand(slug, {
     name: body.name !== undefined ? String(body.name) : undefined,
     blurb: body.blurb !== undefined ? String(body.blurb ?? "") : undefined,
-  });
+  }));
   if (!result.ok) {
     return fail(result.reason ?? "That brand could not be changed.", 409);
   }
 
-  return json(listBrands().find((b) => b.slug === slug));
+  return json((await listBrands()).find((b) => b.slug === slug));
 }
 
 /**
@@ -42,7 +42,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const result = deleteBrand(slug);
+  const result = (await deleteBrand(slug));
   if (!result.ok) {
     return fail(result.reason ?? "That brand could not be removed.", 409);
   }

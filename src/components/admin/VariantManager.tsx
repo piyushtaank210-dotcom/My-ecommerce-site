@@ -85,7 +85,7 @@ export function VariantManager({
 
   /* ---------------------------------------------------------- attributes */
 
-  function setAttributeName(oldName: string, nextName: string) {
+  async function setAttributeName(oldName: string, nextName: string) {
     setAttributes((prev) => {
       const out: ProductAttributes = {};
       for (const [name, values] of Object.entries(prev)) {
@@ -95,7 +95,7 @@ export function VariantManager({
     });
   }
 
-  function setAttributeValues(name: string, raw: string) {
+  async function setAttributeValues(name: string, raw: string) {
     const values = raw
       .split(",")
       .map((v) => v.trim())
@@ -103,7 +103,7 @@ export function VariantManager({
     setAttributes((prev) => ({ ...prev, [name]: values }));
   }
 
-  function removeAttribute(name: string) {
+  async function removeAttribute(name: string) {
     setAttributes((prev) => {
       const out = { ...prev };
       delete out[name];
@@ -310,7 +310,7 @@ export function VariantManager({
               <li key={name} className="flex flex-wrap items-center gap-2">
                 <input
                   value={name}
-                  onChange={(e) => setAttributeName(name, e.target.value)}
+                  onChange={async (e) => (await setAttributeName(name, e.target.value))}
                   disabled={!canManage || busy}
                   placeholder="Attribute"
                   aria-label="Attribute name"
@@ -318,7 +318,7 @@ export function VariantManager({
                 />
                 <input
                   value={(attributes[name] ?? []).join(", ")}
-                  onChange={(e) => setAttributeValues(name, e.target.value)}
+                  onChange={async (e) => (await setAttributeValues(name, e.target.value))}
                   disabled={!canManage || busy}
                   placeholder="Value, Value, Value"
                   aria-label={`Values for ${name}`}
@@ -327,7 +327,7 @@ export function VariantManager({
                 {canManage && (
                   <button
                     type="button"
-                    onClick={() => removeAttribute(name)}
+                    onClick={async () => (await removeAttribute(name))}
                     disabled={busy}
                     aria-label={`Remove the ${name} attribute`}
                     className="grid h-9 w-9 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
@@ -344,7 +344,7 @@ export function VariantManager({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() =>
+              onClick={async () =>
                 setAttributes((prev) => ({
                   ...prev,
                   [`Attribute ${names.length + 1}`]: [],

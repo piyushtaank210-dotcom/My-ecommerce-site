@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: Params) {
   }
   if (!reason) return fail("Say why.", 400);
 
-  const result = resolveStockCheck(id, action, reason, guard.user.id);
+  const result = (await resolveStockCheck(id, action, reason, guard.user.id));
   if (!result.ok) return fail(result.message, 409);
 
   return json({ ok: true, message: result.message });

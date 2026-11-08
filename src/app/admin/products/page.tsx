@@ -61,7 +61,7 @@ export default async function AdminProductsPage({
   const statusParam = one(sp.status).trim();
   const page = Math.max(1, parseInt(one(sp.page) || "1", 10));
 
-  const categories = getCategories();
+  const categories = (await getCategories());
   const categorySlugs = new Set(categories.map((c) => c.slug));
 
   // A filter that the catalogue does not know is ignored rather than
@@ -75,7 +75,7 @@ export default async function AdminProductsPage({
     : "all";
 
   // Best selling only means something once something has sold.
-  const canSortBySales = hasSalesData();
+  const canSortBySales = (await hasSalesData());
 
   // The sort key goes into an ORDER BY, so it is checked against the list
   // of known keys rather than passed through — and against the very list
@@ -95,7 +95,7 @@ export default async function AdminProductsPage({
   // brand that cannot be in the list. The brand already chosen stays on it
   // even when the category rules it out, or the filter would vanish
   // without saying why.
-  const brandsInCategory = getBrands(category, { includeUnlisted: true });
+  const brandsInCategory = (await getBrands(category, { includeUnlisted: true }));
   const brands =
     brand && !brandsInCategory.includes(brand)
       ? [...brandsInCategory, brand]
@@ -109,19 +109,23 @@ export default async function AdminProductsPage({
   // The back office sees the whole catalogue — drafts, archived products and
   // delisted ones — and narrows it with the filters below. The shop only
   // ever sees the published, un-delisted ones.
-  const products = listAdminProducts({
-    ...query,
-    sort,
-    limit: PER_PAGE,
-    offset: (page - 1) * PER_PAGE,
-  });
-  const total = countProducts(query);
-  const catalogueTotal = countProducts({ includeUnlisted: true });
+  //
+  // The four are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [products, total, catalogueTotal, facets] = await Promise.all([
+    listAdminProducts({
+      ...query,
+      sort,
+      limit: PER_PAGE,
+      offset: (page - 1) * PER_PAGE,
+    }),
+    countProducts(query),
+    countProducts({ includeUnlisted: true }),
+    // How many products each filter would leave, so the numbers beside the
+    // dropdowns are the real ones rather than a guess.
+    catalogueFacets(query),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-
-  // How many products each filter would leave, so the numbers beside the
-  // dropdowns are the real ones rather than a guess.
-  const facets = catalogueFacets(query);
 
   const isFiltered =
     Boolean(q || category || brand) ||

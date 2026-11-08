@@ -10,15 +10,32 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
-import { DatabaseSync } from "node:sqlite";
+import { Pool } from "pg";
+import { databaseUrl, sslOption } from "../src/lib/database-url.ts";
 import {
   clickByText,
   launchChrome,
   setCheckbox,
   setInput,
+  waitFor,
 } from "./lib/browser.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * The shop's database, for the few things the suite has to ask it itself.
+ *
+ * Everything else the suite does goes through the shop — through its
+ * pages and its own endpoints — so that what is tested is what a person
+ * would use.
+ */
+let pool;
+async function query(text, params = []) {
+  const url = databaseUrl();
+  pool ??= new Pool({ connectionString: url, ssl: sslOption(url) });
+  const result = await pool.query(text, params);
+  return result.rows;
+}
 const SHOTS = join(ROOT, ".shots");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9222;
@@ -46,12 +63,18 @@ const ACCOUNT = {
  */
 const stockFound = { products: [], variants: [] };
 {
-  const store = new DatabaseSync(join(ROOT, "data/store.db"));
-  stockFound.products = store.prepare("SELECT slug, stock FROM products").all();
-  stockFound.variants = store
-    .prepare("SELECT id, product_slug, stock FROM variants")
-    .all();
-  store.close();
+  // The shop's database, read the way the shop itself reads it.
+  const url = databaseUrl();
+  const pool = new Pool({ connectionString: url, ssl: sslOption(url) });
+  const client = await pool.connect();
+  stockFound.products = (
+    await client.query("SELECT slug, stock FROM products")
+  ).rows;
+  stockFound.variants = (
+    await client.query("SELECT id, product_slug, stock FROM variants")
+  ).rows;
+  client.release();
+  await pool.end();
 }
 
 /**
@@ -295,7 +318,14 @@ try {
 
   /* ---- 4. Add to cart ---- */
   await cdp.evaluate(clickByText("Add to cart"));
-  await sleep(1500);
+  await waitFor(
+    cdp,
+    `(() => {
+       const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
+       const m = link && link.textContent.match(/(\d+)/);
+       return m && m[1] === '1' ? '1' : '';
+     })()`
+  );
   const badge = await cdp.evaluate(`
     (() => {
       const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
@@ -345,7 +375,7 @@ try {
   await sleep(250);
 
   await cdp.evaluate(clickByText("Place order"));
-  await sleep(3000);
+  await waitFor(cdp, `location.pathname.startsWith('/order/') ? location.pathname : ''`);
 
   const orderUrl = await cdp.evaluate("location.pathname");
   const orderBody = await cdp.evaluate("document.body.innerText");
@@ -577,7 +607,14 @@ try {
     })()
   `);
   await cdp.evaluate(clickByText("Add to cart"));
-  await sleep(1600);
+  await waitFor(
+    cdp,
+    `(() => {
+       const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
+       const m = link && link.textContent.match(/(\d+)/);
+       return m && m[1] === '1' ? '1' : '';
+     })()`
+  );
   const badgeAfter = await cdp.evaluate(`
     (() => {
       const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
@@ -841,9 +878,8 @@ try {
   const ADMIN_EMAIL =
     process.env.PF_ADMIN_EMAIL ??
     localEnv.match(/^PF_ADMIN_EMAIL="(.*)"/m)?.[1] ??
-    new DatabaseSync(join(ROOT, "data/store.db"))
-      .prepare("SELECT email FROM users WHERE role = 'admin' ORDER BY id LIMIT 1")
-      .get()?.email ??
+    (await query("SELECT email FROM users WHERE role = 'admin' ORDER BY id LIMIT 1"))[0]
+      ?.email ??
     "consoleseller.in@gmail.com";
   const ADMIN_PASSWORD =
     process.env.PF_ADMIN_PASSWORD ??
@@ -855,7 +891,7 @@ try {
   await cdp.evaluate(setInput("password", ADMIN_PASSWORD));
   await sleep(200);
   await cdp.evaluate(clickByText("Sign in"));
-  await sleep(3000);
+  await waitFor(cdp, `location.pathname !== '/login' ? location.pathname : ''`);
   check(
     "the admin can sign in",
     (await cdp.evaluate("location.pathname")) === "/",
@@ -965,6 +1001,13 @@ try {
   // The row itself has to show the new state, not the one it had before
   // the bulk action — a control that holds its own copy of the value would
   // still read "Delisted" here.
+  await waitFor(
+    cdp,
+    `(() => {
+       const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('PlayStation Portal'));
+       return row && row.innerText.includes('Delisted') ? 'delisted' : '';
+     })()`
+  );
   const bulkRow = await cdp.evaluate(`(() => {
     const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('PlayStation Portal'));
     return row ? row.innerText.replace(/\\s+/g, ' ') : '';
@@ -1086,7 +1129,10 @@ try {
   await cdp.evaluate(
     `document.querySelector('[aria-label="Duplicate DualSense Edge Wireless Controller"]')?.click()`
   );
-  await sleep(3000);
+  await waitFor(
+    cdp,
+    `location.pathname === '/admin/products/dualsense-edge-copy' ? location.pathname : ''`
+  );
   const copyPath = await cdp.evaluate("location.pathname");
   check(
     "duplicating opens the copy",
@@ -1106,7 +1152,10 @@ try {
 
   // The copy is removed again, through the catalogue's own delete action.
   await cdp.goto(`${BASE}/admin/products?q=DUALSENSE-EDGE-COPY`);
-  await sleep(1500);
+  await waitFor(
+    cdp,
+    `document.querySelectorAll('tbody tr').length === 1 ? 'one row' : ''`
+  );
   const copyRows = await cdp.evaluate(
     "document.querySelectorAll('tbody tr').length"
   );
@@ -1117,6 +1166,10 @@ try {
   await sleep(600);
   await cdp.evaluate(clickByText("Delete", "button"));
   await sleep(3000);
+  await waitFor(
+    cdp,
+    `document.querySelectorAll('tbody tr').length === 0 ? 'gone' : ''`
+  );
   const copiesLeft = await cdp.evaluate(
     "document.querySelectorAll('tbody tr').length"
   );
@@ -1146,7 +1199,14 @@ try {
   await cdp.evaluate(
     `document.querySelector('[aria-label="Archive PlayStation Portal Remote Player"]')?.click()`
   );
-  await sleep(3000);
+  await waitFor(
+    cdp,
+    `(() => {
+       const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('PlayStation Portal'));
+       const sel = row?.querySelector('select');
+       return sel && sel.value === 'archived' ? 'archived' : '';
+     })()`
+  );
   const archivedStatus = await portalStatus();
   check(
     "the row shows the product archived",
@@ -1175,27 +1235,25 @@ try {
     { length: 22 },
     (_, i) => `zz-e2e-page-${String(i + 1).padStart(2, "0")}`
   );
-  const store = new DatabaseSync(join(ROOT, "data/store.db"));
-  const insPager = store.prepare(
-    `INSERT INTO products
-       (slug, sku, name, brand, category_slug, price, mrp, rating, reviews, stock,
-        badge, short_desc, specs, image, listed, status, position)
-     VALUES (?,?,?,?,?,?,?,0,0,?,NULL,NULL,'{}',NULL,1,'published',?)`
-  );
-  pagerSlugs.forEach((slug, i) => {
-    insPager.run(
-      slug,
-      slug.toUpperCase(),
-      `Pager Test Product ${i + 1}`,
-      PAGER_BRAND,
-      "consoles",
-      1000 + i,
-      1000 + i,
-      5,
-      9500 + i
+  for (const [i, slug] of pagerSlugs.entries()) {
+    await query(
+      `INSERT INTO products
+         (slug, sku, name, brand, category_slug, price, mrp, rating, reviews, stock,
+          badge, short_desc, specs, image, listed, status, position)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,$8,NULL,NULL,'{}',NULL,1,'published',$9)`,
+      [
+        slug,
+        slug.toUpperCase(),
+        `Pager Test Product ${i + 1}`,
+        PAGER_BRAND,
+        "consoles",
+        1000 + i,
+        1000 + i,
+        5,
+        9500 + i,
+      ]
     );
-  });
-  store.close();
+  }
 
   try {
     await cdp.goto(`${BASE}/admin/products?brand=${PAGER_BRAND}`);
@@ -1250,7 +1308,12 @@ try {
     await cdp.evaluate(clickByText("Delist"));
     await sleep(500);
     await cdp.evaluate(clickByText("Yes,"));
-    await sleep(4000);
+    await waitFor(
+      cdp,
+      `fetch('/api/admin/products?brand=${PAGER_BRAND}&limit=100')
+         .then(r => r.json())
+         .then(d => d.rows.filter(p => !p.listed).length === ${pagerSlugs.length} ? 'yes' : '')`
+    );
     const delistedCount = await cdp.evaluate(
       `fetch('/api/admin/products?brand=${PAGER_BRAND}&limit=100')
          .then(r => r.json())
@@ -1425,7 +1488,10 @@ try {
   );
 
   await cdp.evaluate(clickByText("Publish product", "button"));
-  await sleep(3000);
+  await waitFor(
+    cdp,
+    `location.pathname === '/admin/products/e2e-test-console' ? location.pathname : ''`
+  );
   check(
     "the product is created and opened",
     (await cdp.evaluate("location.pathname")) === "/admin/products/e2e-test-console",
@@ -1512,7 +1578,10 @@ try {
   );
   await sleep(600);
   await cdp.evaluate(clickByText("Delete", "button"));
-  await sleep(2500);
+  await waitFor(
+    cdp,
+    `document.querySelectorAll('tbody tr').length === 0 ? 'gone' : ''`
+  );
   const leftOver = await cdp.evaluate(
     "document.querySelectorAll('tbody tr').length"
   );
@@ -1662,9 +1731,9 @@ try {
     if (!/^e2e\d+@example\.com$/.test(ACCOUNT.email)) {
       throw new Error(`refusing to remove ${ACCOUNT.email}`);
     }
-    const admin = new DatabaseSync(join(ROOT, "data/store.db"))
-      .prepare("SELECT id FROM users WHERE email = ?")
-      .get(ACCOUNT.email);
+    const admin = (
+      await query("SELECT id FROM users WHERE email = $1", [ACCOUNT.email])
+    )[0];
     if (admin) {
       await cdp.evaluate(
         `fetch('/api/admin/users/${admin.id}', { method: 'DELETE' }).then(r => r.text()).then(() => 'OK')`
@@ -1676,6 +1745,10 @@ try {
   }
   chrome?.kill();
   await sleep(300);
+  if (pool) {
+    await pool.end();
+    pool = undefined;
+  }
   // The Chrome profile the run used is left where it is. It is scratch
   // space, it is ignored by git, and the next run reuses it.
 }

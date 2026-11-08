@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const category = listCategories().find((c) => c.slug === slug);
+  const category = (await listCategories()).find((c) => c.slug === slug);
   if (!category) return fail("No such category.", 404);
 
   return json(category);
@@ -41,20 +41,20 @@ export async function PATCH(request: Request, { params }: Params) {
     return fail("Send a JSON body.", 400);
   }
 
-  const result = updateCategory(slug, {
+  const result = (await updateCategory(slug, {
     name: body.name !== undefined ? String(body.name) : undefined,
     blurb: body.blurb !== undefined ? String(body.blurb ?? "") : undefined,
     icon: body.icon !== undefined ? String(body.icon ?? "") : undefined,
     specFields: Array.isArray(body.specFields)
       ? body.specFields.map((f) => String(f))
       : undefined,
-  });
+  }));
 
   if (!result.ok) {
     return fail(result.reason ?? "That category could not be changed.", 409);
   }
 
-  return json(listCategories().find((c) => c.slug === slug));
+  return json((await listCategories()).find((c) => c.slug === slug));
 }
 
 /**
@@ -67,7 +67,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const result = deleteCategory(slug);
+  const result = (await deleteCategory(slug));
   if (!result.ok) {
     return fail(result.reason ?? "That category could not be removed.", 409);
   }

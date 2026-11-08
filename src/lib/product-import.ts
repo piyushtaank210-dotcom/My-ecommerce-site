@@ -216,10 +216,10 @@ type Context = {
 };
 
 /** Reads the store, so the file can be checked against it. */
-function buildContext(isAdmin: boolean): Context {
+async function buildContext(isAdmin: boolean): Promise<Context> {
   const db = getDb();
   const categories = new Set(
-    (db.prepare("SELECT slug FROM categories").all() as { slug: string }[]).map(
+    ((await db.prepare("SELECT slug FROM categories").all()) as { slug: string }[]).map(
       (r) => r.slug
     )
   );
@@ -230,7 +230,7 @@ function buildContext(isAdmin: boolean): Context {
   >();
   const skus = new Map<string, string>();
 
-  for (const p of listAdminProducts()) {
+  for (const p of (await listAdminProducts())) {
     products.set(p.slug, {
       sku: p.sku,
       name: p.name,
@@ -558,12 +558,12 @@ function describeChanges(
  * Nothing is written. The administrator sees the whole file — every row,
  * what it would do and what is wrong with it — before anything happens.
  */
-export function previewImport(
+export async function previewImport(
   filename: string,
   text: string,
   isAdmin: boolean
-): ImportPreview {
-  const context = buildContext(isAdmin);
+): Promise<ImportPreview> {
+  const context = (await buildContext(isAdmin));
   const parsed = parseCsv(text);
 
   const known = new Set(PRODUCT_COLUMNS.map((c) => c.key));
@@ -617,13 +617,13 @@ export function previewImport(
  * Only the rows that are usable are applied; the rest are reported and
  * left alone. A product that is not in the file is not touched.
  */
-export function applyImport(
+export async function applyImport(
   filename: string,
   text: string,
   isAdmin: boolean,
   userId: number | null
-): { preview: ImportPreview; summary: ImportSummary } {
-  const context = buildContext(isAdmin);
+): Promise<{ preview: ImportPreview; summary: ImportSummary }> {
+  const context = (await buildContext(isAdmin));
   const parsed = parseCsv(text);
 
   const fileSlugs = new Map<string, number[]>();
@@ -641,7 +641,7 @@ export function applyImport(
   let updated = 0;
   let skipped = 0;
 
-  parsed.rows.forEach((raw, i) => {
+  parsed.rows.forEach(async (raw, i) => {
     const rowNumber = i + 2;
     const { row, values } = validateRow(raw, rowNumber, context, fileSlugs, fileSkus);
 
@@ -651,7 +651,7 @@ export function applyImport(
       return;
     }
 
-    const result = writeProduct(raw, values, context, userId);
+    const result = (await writeProduct(raw, values, context, userId));
     if (!result.ok) {
       rows.push({
         ...row,
@@ -697,17 +697,17 @@ export function applyImport(
 }
 
 /** Writes one product, and its variations. */
-function writeProduct(
+async function writeProduct(
   raw: CsvRow,
   values: Values,
   context: Context,
   userId: number | null
-): { ok: boolean; created: boolean; message: string; column?: string } {
+): Promise<{ ok: boolean; created: boolean; message: string; column?: string }> {
   const existing = context.products.get(values.slug);
   const has = (key: string) => Boolean((raw[key] ?? "").trim());
 
   if (!existing) {
-    const created = createProduct({
+    const created = (await createProduct({
       slug: values.slug,
       name: values.name,
       brand: values.brand,
@@ -737,7 +737,7 @@ function writeProduct(
       packageHeight: null,
       warranty: null,
       returns: null,
-    });
+    }));
 
     if (!created.ok) {
       return { ok: false, created: false, message: created.reason ?? "The product could not be made." };
@@ -765,7 +765,7 @@ function writeProduct(
   if (has("image")) patch.image = values.image;
   if (has("specs") && values.specs) patch.specs = values.specs;
 
-  if (Object.keys(patch).length) updateProduct(values.slug, patch);
+  if (Object.keys(patch).length) (await updateProduct(values.slug, patch));
 
   // The stock goes through the inventory, so the change is written down.
   //
@@ -776,61 +776,61 @@ function writeProduct(
     (existing?.hasVariants ?? false) || (values.variants?.length ?? 0) > 0;
 
   if (has("stock") && !stockedByOptions) {
-    const moved = adjustStock({
+    const moved = (await adjustStock({
       productSlug: values.slug,
       variantId: null,
       mode: "set",
       quantity: values.stock,
       reason: "Imported from a file",
       userId,
-    });
+    }));
     if (!moved.ok) {
       return { ok: false, created: false, message: moved.reason, column: "stock" };
     }
   } else if (has("stock") && stockedByOptions && !existing?.hasVariants) {
     // A new product that the file gives options to: the options carry the
     // stock, so the product's own count is left at nothing.
-    const moved = adjustStock({
+    const moved = (await adjustStock({
       productSlug: values.slug,
       variantId: null,
       mode: "set",
       quantity: 0,
       reason: "Imported from a file",
       userId,
-    });
+    }));
     if (!moved.ok) {
       return { ok: false, created: false, message: moved.reason, column: "stock" };
     }
   }
 
   if (has("low_stock_threshold")) {
-    setThreshold(values.slug, null, values.lowStockThreshold);
+    (await setThreshold(values.slug, null, values.lowStockThreshold));
   }
 
   if (has("attributes") && values.attributes) {
-    setAttributes(values.slug, values.attributes);
+    (await setAttributes(values.slug, values.attributes));
   }
 
   if (has("status")) {
     const status = values.status;
     if (status === "published") {
-      getDb()
+      (await getDb()
         .prepare("UPDATE products SET status = 'published', listed = 1 WHERE slug = ?")
-        .run(values.slug);
+        .run(values.slug));
     } else {
-      getDb()
+      (await getDb()
         .prepare("UPDATE products SET status = ? WHERE slug = ?")
-        .run(status, values.slug);
+        .run(status, values.slug));
     }
   }
   if (has("listed")) {
-    getDb()
+    (await getDb()
       .prepare("UPDATE products SET listed = ? WHERE slug = ?")
-      .run(values.listed ? 1 : 0, values.slug);
+      .run(values.listed ? 1 : 0, values.slug));
   }
 
   if (has("variants") && values.variants) {
-    const result = writeVariants(values.slug, values.variants, userId);
+    const result = (await writeVariants(values.slug, values.variants, userId));
     if (!result.ok) {
       return { ok: false, created: false, message: result.message, column: "variants" };
     }
@@ -840,15 +840,15 @@ function writeProduct(
 }
 
 /** Writes the options of a product. */
-function writeVariants(
+async function writeVariants(
   slug: string,
   variants: unknown[],
   userId: number | null
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
-  const existing = db
+  const existing = (await db
     .prepare("SELECT id, name, attributes FROM variants WHERE product_slug = ?")
-    .all(slug) as { id: string; name: string; attributes: string | null }[];
+    .all(slug)) as { id: string; name: string; attributes: string | null }[];
 
   for (const v of variants) {
     const item = v as Record<string, unknown>;
@@ -884,10 +884,10 @@ function writeVariants(
     };
 
     if (match) {
-      const result = updateVariant(slug, match.id, input, userId);
+      const result = (await updateVariant(slug, match.id, input, userId));
       if (!result.ok) return { ok: false, message: result.reason ?? "An option could not be changed." };
     } else {
-      const result = createVariant(slug, input, userId);
+      const result = (await createVariant(slug, input, userId));
       if (!result.ok) return { ok: false, message: result.reason ?? "An option could not be made." };
     }
   }
@@ -896,24 +896,24 @@ function writeVariants(
 }
 
 /** Sets the low-stock threshold of a product or an option. */
-function setThreshold(slug: string, variantId: string | null, threshold: number) {
+async function setThreshold(slug: string, variantId: string | null, threshold: number) {
   const db = getDb();
   if (variantId) {
-    db.prepare(
+    (await db.prepare(
       "UPDATE variants SET low_stock_threshold = ? WHERE id = ? AND product_slug = ?"
-    ).run(threshold, variantId, slug);
+    ).run(threshold, variantId, slug));
   } else {
-    db.prepare(
+    (await db.prepare(
       "UPDATE products SET low_stock_threshold = ? WHERE slug = ?"
-    ).run(threshold, slug);
+    ).run(threshold, slug));
   }
 }
 
 /** Sets what a product varies by. */
-function setAttributes(slug: string, attributes: Record<string, string[]>) {
-  getDb()
+async function setAttributes(slug: string, attributes: Record<string, string[]>) {
+  (await getDb()
     .prepare("UPDATE products SET attributes = ? WHERE slug = ?")
-    .run(JSON.stringify(attributes), slug);
+    .run(JSON.stringify(attributes), slug));
 }
 
 /* ------------------------------------------------------------ the export */
@@ -927,11 +927,11 @@ function setAttributes(slug: string, attributes: Record<string, string[]>) {
  * The purchase cost is only written for an administrator. For anybody else
  * the column is not in the file at all, so the cost is not in it to find.
  */
-export function exportCatalogue(isAdmin: boolean): string {
+export async function exportCatalogue(isAdmin: boolean): Promise<string> {
   const columns = PRODUCT_COLUMNS.filter((c) => !c.adminOnly || isAdmin);
   const headers = columns.map((c) => c.key);
 
-  const products = listAdminProducts();
+  const products = (await listAdminProducts());
   const rows: CsvRow[] = products.map((p) => {
     const row: CsvRow = {
       slug: p.slug,

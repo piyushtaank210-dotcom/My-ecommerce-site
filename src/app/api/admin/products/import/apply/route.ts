@@ -27,12 +27,12 @@ export async function POST(request: Request) {
   }
 
   const text = await file.text();
-  const { preview, summary } = applyImport(
+  const { preview, summary } = (await applyImport(
     file.name || "catalogue.csv",
     text,
     guard.user.role === "admin",
     guard.user.id
-  );
+  ));
 
   return json({ preview, summary });
 }

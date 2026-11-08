@@ -48,7 +48,7 @@ export default async function OrderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const order = getOrder(id);
+  const order = (await getOrder(id));
   if (!order) notFound();
 
   // A signed-in customer only sees their own orders. Guests can still open
@@ -70,12 +70,12 @@ export default async function OrderPage({
     : "confirmed";
   const cancelled = status === "cancelled";
   const step = ORDER_TIMELINE.findIndex((s) => s.status === status);
-  const returnRequests = getReturnRequestsForOrder(order.id);
-  const eligibility = getOrderReturnEligibility(order);
+  const returnRequests = (await getReturnRequestsForOrder(order.id));
+  const eligibility = (await getOrderReturnEligibility(order));
 
   // Cancellation is its own thing and not a return. Where the order is
   // decides whether it can be asked for at all.
-  const cancellation = getCancellationForOrder(order.id);
+  const cancellation = (await getCancellationForOrder(order.id));
   const cancelEligibility = cancellationEligibility(order);
 
   return (
@@ -178,8 +178,8 @@ export default async function OrderPage({
             Items ({order.items.length})
           </h2>
           <ul className="divide-y divide-gray-200">
-            {order.items.map((item, i) => {
-              const itemProduct = getProduct(item.product_slug);
+            {order.items.map(async (item, i) => {
+              const itemProduct = (await getProduct(item.product_slug));
               const key = item.id ?? i + 1;
               const itemEligibility = eligibility.itemEligibilities[key];
 

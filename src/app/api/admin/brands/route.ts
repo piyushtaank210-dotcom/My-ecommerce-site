@@ -8,7 +8,7 @@ export async function GET() {
   const guard = await requireApiPermission("catalog.view");
   if ("error" in guard) return guard.error;
 
-  return json({ brands: listBrands() });
+  return json({ brands: (await listBrands()) });
 }
 
 /**
@@ -27,13 +27,13 @@ export async function POST(request: Request) {
     return fail("Send a JSON body.", 400);
   }
 
-  const result = createBrand({
+  const result = (await createBrand({
     name: String(body.name ?? ""),
     blurb: body.blurb ? String(body.blurb) : null,
-  });
+  }));
   if (!result.ok) {
     return fail(result.reason ?? "That brand could not be added.", 409);
   }
 
-  return json(listBrands().find((b) => b.slug === result.slug), 201);
+  return json((await listBrands()).find((b) => b.slug === result.slug), 201);
 }

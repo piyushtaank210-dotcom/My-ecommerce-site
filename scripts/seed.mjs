@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { SCHEMA_SQL } from "../src/lib/schema.ts";
+import { SCHEMA_SQL_SQLITE } from "../src/lib/schema.ts";
 import { STAFF, hashPassword } from "./staff.mjs";
 import { normalizeSku, skuFromSlug, uniqueSku } from "../src/lib/sku.ts";
 import { inferVariantAttributes } from "../src/lib/variations.ts";
@@ -32,7 +32,7 @@ const hero = JSON.parse(readFileSync(join(ROOT, "data/hero.json"), "utf8"));
 const heroImages = JSON.parse(readFileSync(join(ROOT, "data/hero-images.json"), "utf8"));
 
 const db = new DatabaseSync(DB_PATH);
-db.exec(SCHEMA_SQL);
+db.exec(SCHEMA_SQL_SQLITE);
 db.exec("PRAGMA journal_mode = WAL;");
 db.exec("BEGIN");
 
@@ -66,14 +66,14 @@ const insVar = db.prepare(
 /** The SKUs handed out during this seed, so none of them collide. */
 const takenSkus = new Set();
 
-catalog.products.forEach((p, i) => {
+for (const [i, p] of catalog.products.entries()) {
   const image = images[p.image] ?? null;
   if (!image) console.warn(`  ! no image for ${p.slug} (key "${p.image}")`);
 
   // A product may carry its own SKU in catalog.json; otherwise one is
   // generated from the slug and made unique.
   const wanted = p.sku ? normalizeSku(p.sku) : "";
-  const sku = uniqueSku(wanted || skuFromSlug(p.slug), (candidate) =>
+  const sku = await uniqueSku(wanted || skuFromSlug(p.slug), (candidate) =>
     takenSkus.has(candidate)
   );
   takenSkus.add(sku);
@@ -100,14 +100,14 @@ catalog.products.forEach((p, i) => {
     i
   );
 
-  (p.variants ?? []).forEach((v, j) => {
+  for (const [j, v] of (p.variants ?? []).entries()) {
     // The option's own values. They are worked out from its name when the
     // name is one of the attribute's values, and spelled out otherwise.
     const variantAttributes = v.attributes
       ? v.attributes
       : inferVariantAttributes(attributes, v.name);
 
-    const variantSku = uniqueSku(
+    const variantSku = await uniqueSku(
       normalizeSku(v.sku ?? "") || skuFromSlug(`${p.slug}-${v.name}`),
       (candidate) => takenSkus.has(candidate)
     );
@@ -127,8 +127,8 @@ catalog.products.forEach((p, i) => {
       JSON.stringify(variantAttributes),
       j
     );
-  });
-});
+  }
+}
 
 const insHero = db.prepare(
   `INSERT INTO hero_slides

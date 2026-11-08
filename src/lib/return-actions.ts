@@ -57,7 +57,7 @@ export async function createReturnRequestAction(
     return { ok: false, message: "Order ID is missing." };
   }
 
-  const order = getOrder(orderId);
+  const order = (await getOrder(orderId));
   if (!order) {
     return { ok: false, message: "Order not found." };
   }
@@ -68,7 +68,7 @@ export async function createReturnRequestAction(
   }
 
   // Strict server-side eligibility and deadline validation (does not rely on browser clock)
-  const eligibility = getOrderReturnEligibility(order);
+  const eligibility = (await getOrderReturnEligibility(order));
   if (!eligibility.isDelivered) {
     return {
       ok: false,
@@ -131,13 +131,13 @@ export async function createReturnRequestAction(
 
   // Validate each selected item for conflicting requests and returnability
   for (const it of parsedItems) {
-    if (!isProductReturnable(it.productSlug)) {
+    if (!(await isProductReturnable(it.productSlug))) {
       return {
         ok: false,
         message: `${it.name} is marked as non-returnable.`,
       };
     }
-    const existingActive = getActiveReturnForItem(it.orderItemId);
+    const existingActive = (await getActiveReturnForItem(it.orderItemId));
     if (existingActive) {
       return {
         ok: false,
@@ -206,18 +206,25 @@ export async function createReturnRequestAction(
 
   let returnId: string;
   try {
-    returnId = createReturnRequest({
+    returnId = (await createReturnRequest({
       orderId,
       userId: user?.id ?? order.user_id,
       type: (type === "replacement" ? "replacement" : type === "accessories" ? "accessories" : "return") as ReturnType,
       reason,
       customerNotes: customerNotes || null,
       serialNumber: serialNumber || null,
-      sealedState: policy.requiresSealed ? "sealed" : sealedState ? sealedState : null,
+      // The customer's answer about the seal is one of two things. Any
+      // other word the form happened to carry is not an answer about the
+      // seal, so it is treated as no answer at all.
+      sealedState: policy.requiresSealed
+        ? "sealed"
+        : sealedState === "sealed" || sealedState === "opened"
+          ? sealedState
+          : null,
       missingAccessories: missingAccessories || null,
       evidence,
       items: parsedItems,
-    });
+    }));
   } catch (err) {
     return {
       ok: false,
@@ -252,7 +259,7 @@ export async function cancelReturnRequestAction(
     return { ok: false, message: "Return ID missing." };
   }
 
-  const result = cancelReturnRequest(returnId, user.id, note);
+  const result = (await cancelReturnRequest(returnId, user.id, note));
 
   if (result.ok) {
     revalidatePath(`/account/returns/${returnId}`);

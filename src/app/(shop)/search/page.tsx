@@ -25,8 +25,8 @@ export default async function SearchPage({
     "featured") as SortKey;
 
   const query = { q: q || undefined, sort };
-  const total = countProducts(query);
-  const products = getProducts({ ...query, limit: 48 });
+  const total = (await countProducts(query));
+  const products = (await getProducts({ ...query, limit: 48 }));
 
   return (
     <div className="container-x py-8">

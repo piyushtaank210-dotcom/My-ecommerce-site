@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { id } = await params;
-  const message = listMessages({}).find((m) => m.id === Number(id));
+  const message = (await listMessages({})).find((m) => m.id === Number(id));
   if (!message) return fail("No such enquiry.", 404);
 
   return json(message);
@@ -37,7 +37,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const closed = body.status === "closed" || body.status === "answered";
-  const info = getDb()
+  const info = (await getDb()
     .prepare(
       `UPDATE contact_messages
        SET status = ?, handled_by = ?, handled_at = ?
@@ -48,10 +48,10 @@ export async function PATCH(request: Request, { params }: Params) {
       guard.user.id,
       closed ? new Date().toISOString() : null,
       messageId
-    );
+    ));
 
   if (!info.changes) return fail("No such enquiry.", 404);
 
-  const updated = listMessages({}).find((m) => m.id === messageId);
+  const updated = (await listMessages({})).find((m) => m.id === messageId);
   return json(updated);
 }

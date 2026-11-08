@@ -1,5 +1,5 @@
 import type { Db } from "./db";
-import { getDb } from "./db";
+import { getDb, withTransaction } from "./db";
 import {
   stockLevel,
   type AdjustMode,
@@ -52,26 +52,6 @@ export class InventoryError extends Error {
  * part of a bigger transaction — it simply runs, so the two never try to
  * open a second transaction on top of the first.
  */
-export function withTransaction<T>(
-  db: Db,
-  work: () => T
-): T {
-  if (db.isTransaction) return work();
-  db.exec("BEGIN");
-  try {
-    const out = work();
-    db.exec("COMMIT");
-    return out;
-  } catch (err) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      // A transaction that has already been rolled back needs nothing more.
-    }
-    throw err;
-  }
-}
-
 /** The name a stock bucket is known by. */
 export function stockKey(productSlug: string, variantId: string | null): string {
   return variantId ? `v:${variantId}` : `p:${productSlug}`;
@@ -98,10 +78,10 @@ export type StockBucket = {
 };
 
 /** Whether a product is stocked by its options rather than by itself. */
-function productHasVariants(db: DatabaseSync, productSlug: string): boolean {
-  const row = db
+async function productHasVariants(db: Db, productSlug: string): Promise<boolean> {
+  const row = (await db
     .prepare("SELECT 1 AS x FROM variants WHERE product_slug = ? LIMIT 1")
-    .get(productSlug);
+    .get(productSlug));
   return !!row;
 }
 
@@ -111,26 +91,26 @@ function productHasVariants(db: DatabaseSync, productSlug: string): boolean {
  * Throws when the bucket does not exist, because a movement that points at
  * nothing would be worse than a loud failure.
  */
-function readBucket(
-  db: DatabaseSync,
+async function readBucket(
+  db: Db,
   productSlug: string,
   variantId: string | null
-): number {
+): Promise<number> {
   if (variantId) {
-    const row = db
+    const row = (await db
       .prepare("SELECT stock FROM variants WHERE id = ? AND product_slug = ?")
-      .get(variantId, productSlug) as { stock?: number } | undefined;
+      .get(variantId, productSlug)) as { stock?: number } | undefined;
     if (!row) throw new InventoryError("That option no longer exists.");
     return num(row.stock);
   }
-  if (productHasVariants(db, productSlug)) {
+  if ((await productHasVariants(db, productSlug))) {
     throw new InventoryError(
       "This product is stocked by its options — the stock to change is the option's own."
     );
   }
-  const row = db.prepare("SELECT stock FROM products WHERE slug = ?").get(
+  const row = (await db.prepare("SELECT stock FROM products WHERE slug = ?").get(
     productSlug
-  ) as { stock?: number } | undefined;
+  )) as { stock?: number } | undefined;
   if (!row) throw new InventoryError("That product no longer exists.");
   return num(row.stock);
 }
@@ -142,53 +122,53 @@ function readBucket(
  * it offers one, so the reader is public. A product stocked by its options
  * has no shelf of its own — the option does.
  */
-export function stockOnHand(
-  db: DatabaseSync,
+export async function stockOnHand(
+  db: Db,
   productSlug: string,
   variantId: string | null
-): number {
-  return readBucket(db, productSlug, variantId);
+): Promise<number> {
+  return (await readBucket(db, productSlug, variantId));
 }
 
 /** Puts a number into a bucket. */
-function writeBucket(
-  db: DatabaseSync,
+async function writeBucket(
+  db: Db,
   productSlug: string,
   variantId: string | null,
   stock: number
-): void {
+): Promise<void> {
   const info = variantId
-    ? db
+    ? (await db
         .prepare(
           "UPDATE variants SET stock = ? WHERE id = ? AND product_slug = ?"
         )
-        .run(stock, variantId, productSlug)
-    : db
+        .run(stock, variantId, productSlug))
+    : (await db
         .prepare("UPDATE products SET stock = ? WHERE slug = ?")
-        .run(stock, productSlug);
+        .run(stock, productSlug));
   if (!info.changes) throw new InventoryError("That product no longer exists.");
 }
 
 /** The number at or below which a bucket counts as low. */
-function readThreshold(
-  db: DatabaseSync,
+async function readThreshold(
+  db: Db,
   productSlug: string,
   variantId: string | null
-): number {
+): Promise<number> {
   if (variantId) {
-    const row = db
+    const row = (await db
       .prepare(
         "SELECT low_stock_threshold FROM variants WHERE id = ? AND product_slug = ?"
       )
-      .get(variantId, productSlug) as
+      .get(variantId, productSlug)) as
       | { low_stock_threshold?: number }
       | undefined;
     if (!row) throw new InventoryError("That option no longer exists.");
     return num(row.low_stock_threshold);
   }
-  const row = db
+  const row = (await db
     .prepare("SELECT low_stock_threshold FROM products WHERE slug = ?")
-    .get(productSlug) as { low_stock_threshold?: number } | undefined;
+    .get(productSlug)) as { low_stock_threshold?: number } | undefined;
   if (!row) throw new InventoryError("That product no longer exists.");
   return num(row.low_stock_threshold);
 }
@@ -199,32 +179,32 @@ function readThreshold(
  * The `stock >= ?` guard is in the statement itself, so the number can
  * never go below zero even if something else changed it a moment ago.
  */
-function takeFromBucket(
-  db: DatabaseSync,
+async function takeFromBucket(
+  db: Db,
   productSlug: string,
   variantId: string | null,
   quantity: number
-): number {
+): Promise<number> {
   const info = variantId
-    ? db
+    ? (await db
         .prepare(
           `UPDATE variants SET stock = stock - ?
            WHERE id = ? AND product_slug = ? AND stock >= ?`
         )
-        .run(quantity, variantId, productSlug, quantity)
-    : db
+        .run(quantity, variantId, productSlug, quantity))
+    : (await db
         .prepare(
           "UPDATE products SET stock = stock - ? WHERE slug = ? AND stock >= ?"
         )
-        .run(quantity, productSlug, quantity);
+        .run(quantity, productSlug, quantity));
 
   if (!info.changes) {
-    const available = readBucket(db, productSlug, variantId);
+    const available = (await readBucket(db, productSlug, variantId));
     throw new InventoryError(
       `Only ${available} left in stock — the order needs ${quantity}.`
     );
   }
-  return readBucket(db, productSlug, variantId);
+  return (await readBucket(db, productSlug, variantId));
 }
 
 /* -------------------------------------------------------------- movements */
@@ -263,8 +243,8 @@ export type Movement = {
 };
 
 /** Writes one row of history. */
-function recordMovement(db: DatabaseSync, m: Movement): void {
-  db.prepare(
+async function recordMovement(db: Db, m: Movement): Promise<void> {
+  (await db.prepare(
     `INSERT INTO inventory_movements
        (stock_key, product_slug, variant_id, previous_stock, quantity_changed,
         new_stock, movement_type, reason, note, order_id, user_id)
@@ -281,7 +261,7 @@ function recordMovement(db: DatabaseSync, m: Movement): void {
     m.note,
     m.orderId,
     m.userId
-  );
+  ));
 }
 
 /* ------------------------------------------------------------ adjustments */
@@ -315,7 +295,7 @@ export type AdjustmentResult =
  * never disagree with the stock. Stock is never allowed to go below zero:
  * a change that would leave it there is refused, not clipped.
  */
-export function adjustStock(input: StockAdjustment): AdjustmentResult {
+export async function adjustStock(input: StockAdjustment): Promise<AdjustmentResult> {
   const db = getDb();
   const productSlug = input.productSlug.trim();
   const variantId = input.variantId?.trim() || null;
@@ -329,9 +309,9 @@ export function adjustStock(input: StockAdjustment): AdjustmentResult {
   if (!reason) return { ok: false, reason: "Give a reason for the change." };
 
   try {
-    return withTransaction(db, () => {
-      const previous = readBucket(db, productSlug, variantId);
-      const threshold = readThreshold(db, productSlug, variantId);
+    return (await withTransaction(async (db) => {
+      const previous = (await readBucket(db, productSlug, variantId));
+      const threshold = (await readThreshold(db, productSlug, variantId));
 
       let next: number;
       if (input.mode === "set") next = quantity;
@@ -357,9 +337,9 @@ export function adjustStock(input: StockAdjustment): AdjustmentResult {
         };
       }
 
-      writeBucket(db, productSlug, variantId, next);
+      (await writeBucket(db, productSlug, variantId, next));
 
-      recordMovement(db, {
+      (await recordMovement(db, {
         stockKey: stockKey(productSlug, variantId),
         productSlug,
         variantId,
@@ -371,7 +351,7 @@ export function adjustStock(input: StockAdjustment): AdjustmentResult {
         note: input.note?.trim() || null,
         orderId: null,
         userId: input.userId ?? null,
-      });
+      }));
 
       return {
         ok: true,
@@ -380,7 +360,7 @@ export function adjustStock(input: StockAdjustment): AdjustmentResult {
         stock: next,
         level: stockLevel(next, threshold),
       };
-    });
+    }));
   } catch (err) {
     if (err instanceof InventoryError) return { ok: false, reason: err.message };
     throw err;
@@ -394,23 +374,23 @@ export function adjustStock(input: StockAdjustment): AdjustmentResult {
  * its first count is a movement like any other: the history starts at zero
  * rather than at a number with nothing behind it.
  */
-export function recordOpeningBalance(
+export async function recordOpeningBalance(
   productSlug: string,
   quantity: number,
   userId: number | null,
   variantId: string | null = null
-): void {
+): Promise<void> {
   const units = Math.round(Number(quantity));
   if (!Number.isFinite(units) || units <= 0) return;
 
   const db = getDb();
   try {
-    withTransaction(db, () => {
-      const previous = readBucket(db, productSlug, variantId);
+    (await withTransaction(async (db) => {
+      const previous = (await readBucket(db, productSlug, variantId));
       const next = previous + units;
-      writeBucket(db, productSlug, variantId, next);
+      (await writeBucket(db, productSlug, variantId, next));
 
-      recordMovement(db, {
+      (await recordMovement(db, {
         stockKey: stockKey(productSlug, variantId),
         productSlug,
         variantId,
@@ -422,8 +402,8 @@ export function recordOpeningBalance(
         note: null,
         orderId: null,
         userId,
-      });
-    });
+      }));
+    }));
   } catch (err) {
     if (err instanceof InventoryError) return;
     throw err;
@@ -436,26 +416,26 @@ export function recordOpeningBalance(
  * The threshold is not a movement — it changes no stock, so it writes no
  * history.
  */
-export function setLowStockThreshold(
+export async function setLowStockThreshold(
   productSlug: string,
   variantId: string | null,
   threshold: number
-): boolean {
+): Promise<boolean> {
   const value = Math.max(0, Math.round(Number(threshold)));
   if (!Number.isFinite(value)) return false;
   const db = getDb();
   const info = variantId
-    ? db
+    ? (await db
         .prepare(
           `UPDATE variants SET low_stock_threshold = ?
            WHERE id = ? AND product_slug = ?`
         )
-        .run(value, variantId, productSlug)
-    : db
+        .run(value, variantId, productSlug))
+    : (await db
         .prepare(
           "UPDATE products SET low_stock_threshold = ? WHERE slug = ?"
         )
-        .run(value, productSlug);
+        .run(value, productSlug));
   return info.changes > 0;
 }
 
@@ -473,8 +453,8 @@ export function setLowStockThreshold(
  * store takes backorders, in which case what is there is taken and the
  * shortfall is reported so the order line can record it.
  */
-export function takeStockForOrder(
-  db: DatabaseSync,
+export async function takeStockForOrder(
+  db: Db,
   orderId: string,
   productSlug: string,
   variantId: string | null,
@@ -483,12 +463,12 @@ export function takeStockForOrder(
   userId: number | null,
   type: "sale" | "resale" | "replacement" = "sale",
   reason?: string | null
-): { taken: number; backordered: number } {
-  const available = readBucket(db, productSlug, variantId);
+): Promise<{ taken: number; backordered: number }> {
+  const available = (await readBucket(db, productSlug, variantId));
   // A replacement is a unit going out to a customer who is waiting for it.
   // It cannot be sent on backorder — there has to be something on the shelf.
   const allowBackorder =
-    type === "replacement" ? false : backordersAllowed(getBackorderPolicy());
+    type === "replacement" ? false : backordersAllowed((await getBackorderPolicy()));
 
   if (available < quantity && !allowBackorder) {
     throw new InventoryError(
@@ -498,9 +478,9 @@ export function takeStockForOrder(
 
   const taken = Math.min(available, quantity);
   const backordered = quantity - taken;
-  const next = taken > 0 ? takeFromBucket(db, productSlug, variantId, taken) : available;
+  const next = taken > 0 ? (await takeFromBucket(db, productSlug, variantId, taken)) : available;
 
-  recordMovement(db, {
+  (await recordMovement(db, {
     stockKey: stockKey(productSlug, variantId),
     productSlug,
     variantId,
@@ -518,7 +498,7 @@ export function takeStockForOrder(
     note: null,
     orderId,
     userId,
-  });
+  }));
 
   return { taken, backordered };
 }
@@ -529,24 +509,24 @@ export function takeStockForOrder(
  * `type` says why: a cancellation that never left the warehouse is a
  * restock, and a return that has been checked over is a return.
  */
-export function putStockBack(
-  db: DatabaseSync,
+export async function putStockBack(
+  db: Db,
   orderId: string,
   line: { id: number; product_slug: string; variant_id: string | null; quantity: number },
   type: "restock" | "return",
   reason: string,
   note: string | null,
   userId: number | null
-): void {
+): Promise<void> {
   const productSlug = line.product_slug;
   const variantId = line.variant_id;
   const quantity = num(line.quantity);
-  const previous = readBucket(db, productSlug, variantId);
+  const previous = (await readBucket(db, productSlug, variantId));
   const next = previous + quantity;
 
-  writeBucket(db, productSlug, variantId, next);
+  (await writeBucket(db, productSlug, variantId, next));
 
-  recordMovement(db, {
+  (await recordMovement(db, {
     stockKey: stockKey(productSlug, variantId),
     productSlug,
     variantId,
@@ -558,13 +538,13 @@ export function putStockBack(
     note,
     orderId,
     userId,
-  });
+  }));
 
-  db.prepare("UPDATE order_items SET stock_state = ?, stock_state_note = ? WHERE id = ?").run(
+  (await db.prepare("UPDATE order_items SET stock_state = ?, stock_state_note = ? WHERE id = ?").run(
     type === "return" ? "returned" : "restocked",
     note,
     line.id
-  );
+  ));
 }
 
 /* ---------------------------------------------------------- pending checks */
@@ -592,9 +572,9 @@ export type PendingStockCheck = {
  * left, so the goods are on their way back but nobody has looked at them.
  * They are not sellable stock until somebody says so.
  */
-export function pendingStockChecks(): PendingStockCheck[] {
+export async function pendingStockChecks(): Promise<PendingStockCheck[]> {
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT oi.id AS line_id, oi.order_id, oi.product_slug, oi.variant_id,
                 oi.variant_name, oi.quantity, oi.price, oi.name AS product_name,
@@ -604,7 +584,7 @@ export function pendingStockChecks(): PendingStockCheck[] {
          WHERE oi.stock_state = 'awaiting_check'
          ORDER BY o.created_at DESC, oi.id`
       )
-      .all() as Row[]
+      .all()) as Row[]
   ).map((r) => ({
     order_id: str(r.order_id),
     order_status: str(r.order_status),
@@ -630,12 +610,12 @@ export function pendingStockChecks(): PendingStockCheck[] {
  * going on the shelf. The decision and the reason are recorded against
  * the order line.
  */
-export function resolveStockCheck(
+export async function resolveStockCheck(
   orderId: string,
   action: "restock" | "write_off",
   reason: string,
   userId: number | null
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const why = reason.trim();
   if (!why) {
@@ -643,12 +623,12 @@ export function resolveStockCheck(
   }
 
   try {
-    return withTransaction(db, () => {
-      const lines = db
+    return (await withTransaction(async (db) => {
+      const lines = (await db
         .prepare(
           "SELECT id, product_slug, variant_id, quantity FROM order_items WHERE order_id = ? AND stock_state = 'awaiting_check'"
         )
-        .all(orderId) as Row[];
+        .all(orderId)) as Row[];
 
       if (!lines.length) {
         throw new InventoryError(
@@ -658,7 +638,7 @@ export function resolveStockCheck(
 
       for (const line of lines) {
         if (action === "restock") {
-          putStockBack(
+          (await putStockBack(
             db,
             orderId,
             {
@@ -671,11 +651,11 @@ export function resolveStockCheck(
             why,
             null,
             userId
-          );
+          ));
         } else {
-          db.prepare(
+          (await db.prepare(
             "UPDATE order_items SET stock_state = 'written_off', stock_state_note = ? WHERE id = ?"
-          ).run(why, num(line.id));
+          ).run(why, num(line.id)));
         }
       }
 
@@ -686,7 +666,7 @@ export function resolveStockCheck(
             ? `The units for order ${orderId} are back in stock.`
             : `Order ${orderId} is settled. The units were not put back into stock.`,
       };
-    });
+    }));
   } catch (err) {
     if (err instanceof InventoryError) return { ok: false, message: err.message };
     throw err;
@@ -707,8 +687,8 @@ export type BucketQuery = {
  * them is listed once. The level of each is worked out against that
  * bucket's own threshold.
  */
-export function listStockBuckets(query: BucketQuery = {}): StockBucket[] {
-  const rows = getDb()
+export async function listStockBuckets(query: BucketQuery = {}): Promise<StockBucket[]> {
+  const rows = (await getDb()
     .prepare(
       `SELECT p.slug, p.name, p.sku, p.stock AS product_stock,
               p.low_stock_threshold AS product_threshold, p.listed, p.status,
@@ -718,7 +698,7 @@ export function listStockBuckets(query: BucketQuery = {}): StockBucket[] {
        LEFT JOIN variants v ON v.product_slug = p.slug
        ORDER BY p.position, p.name, v.position, v.name`
     )
-    .all() as Row[];
+    .all()) as Row[];
 
   const buckets: StockBucket[] = [];
   for (const r of rows) {
@@ -792,7 +772,7 @@ function movementWhere(query: MovementQuery) {
 }
 
 /** The inventory history, newest first. */
-export function listMovements(query: MovementQuery = {}): InventoryMovement[] {
+export async function listMovements(query: MovementQuery = {}): Promise<InventoryMovement[]> {
   const { where, params } = movementWhere(query);
   const bind = [...params];
   let limit = "";
@@ -807,7 +787,7 @@ export function listMovements(query: MovementQuery = {}): InventoryMovement[] {
   }
 
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT m.*, p.name AS product_name, v.name AS variant_name, u.name AS user_name
          FROM inventory_movements m
@@ -817,7 +797,7 @@ export function listMovements(query: MovementQuery = {}): InventoryMovement[] {
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY m.created_at DESC, m.id DESC ${limit} ${offset}`
       )
-      .all(...bind) as Row[]
+      .all(...bind)) as Row[]
   ).map((r) => ({
     id: num(r.id),
     stock_key: str(r.stock_key),
@@ -838,16 +818,16 @@ export function listMovements(query: MovementQuery = {}): InventoryMovement[] {
   }));
 }
 
-export function countMovements(query: MovementQuery = {}): number {
+export async function countMovements(query: MovementQuery = {}): Promise<number> {
   const { where, params } = movementWhere(query);
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       `SELECT COUNT(*) AS n FROM inventory_movements m
        LEFT JOIN products p ON p.slug = m.product_slug
        LEFT JOIN variants v ON v.id = m.variant_id
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`
     )
-    .get(...params) as Row | undefined;
+    .get(...params)) as Row | undefined;
   return num(row?.n);
 }
 
@@ -861,19 +841,19 @@ export type InventorySummary = {
   movements: number;
 };
 
-export function inventorySummary(): InventorySummary {
+export async function inventorySummary(): Promise<InventorySummary> {
   const db = getDb();
-  const buckets = listStockBuckets();
-  const row = db
+  const buckets = (await listStockBuckets());
+  const row = (await db
     .prepare("SELECT COUNT(*) AS n FROM inventory_movements")
-    .get() as Row | undefined;
+    .get()) as Row | undefined;
 
   return {
     units: buckets.reduce((sum, b) => sum + b.stock, 0),
     buckets: buckets.length,
     low: buckets.filter((b) => b.level === "low").length,
     out: buckets.filter((b) => b.level === "out").length,
-    pendingChecks: pendingStockChecks().length,
+    pendingChecks: (await pendingStockChecks()).length,
     movements: num(row?.n),
   };
 }

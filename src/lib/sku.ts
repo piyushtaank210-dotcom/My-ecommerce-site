@@ -38,18 +38,19 @@ export function skuFromSlug(slug: string): string {
  *
  * `isTaken` is a callback so this works the same in the migration (which
  * checks the database) and in an admin action (which checks the database
- * before saving).
+ * before saving). The callback may wait for the answer — the database is
+ * on the other side of a network — so this waits too.
  */
-export function uniqueSku(
+export async function uniqueSku(
   base: string,
-  isTaken: (sku: string) => boolean
-): string {
+  isTaken: (sku: string) => boolean | Promise<boolean>
+): Promise<string> {
   const root = normalizeSku(base) || "PRODUCT";
-  if (!isTaken(root)) return root;
+  if (!(await isTaken(root))) return root;
 
   for (let n = 2; n < 1000; n++) {
     const candidate = `${root}-${n}`;
-    if (!isTaken(candidate)) return candidate;
+    if (!(await isTaken(candidate))) return candidate;
   }
   // Practically unreachable; the suffix keeps it unique regardless.
   return `${root}-${Date.now()}`;

@@ -27,8 +27,8 @@ export const metadata = { title: "Overview" };
  */
 export default async function AdminDashboardPage() {
   await requirePermission("dashboard.view");
-  const stats = getAdminStats();
-  const returnStats = getReturnSummaryStats();
+  const stats = (await getAdminStats());
+  const returnStats = (await getReturnSummaryStats());
 
   return (
     <div className="mx-auto max-w-[1600px]">

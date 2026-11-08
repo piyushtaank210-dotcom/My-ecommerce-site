@@ -25,12 +25,12 @@ export async function PATCH(request: Request, { params }: Params) {
     return fail("Send a JSON body.", 400);
   }
 
-  const result = updateSubcategory(slug, subSlug, String(body.name ?? ""));
+  const result = (await updateSubcategory(slug, subSlug, String(body.name ?? "")));
   if (!result.ok) {
     return fail(result.reason ?? "That subcategory could not be changed.", 409);
   }
 
-  return json(listCategories().find((c) => c.slug === slug));
+  return json((await listCategories()).find((c) => c.slug === slug));
 }
 
 /**
@@ -43,10 +43,10 @@ export async function DELETE(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug, subSlug } = await params;
-  const result = deleteSubcategory(slug, subSlug);
+  const result = (await deleteSubcategory(slug, subSlug));
   if (!result.ok) {
     return fail(result.reason ?? "That subcategory could not be removed.", 409);
   }
 
-  return json(listCategories().find((c) => c.slug === slug));
+  return json((await listCategories()).find((c) => c.slug === slug));
 }

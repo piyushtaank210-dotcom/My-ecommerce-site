@@ -89,10 +89,10 @@ export default async function AdminReturnsPage({
     offset: (page - 1) * PER_PAGE,
   };
 
-  const returns = listReturnRequests(query);
-  const total = countReturnRequests(query);
+  const returns = (await listReturnRequests(query));
+  const total = (await countReturnRequests(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-  const stats = getReturnSummaryStats();
+  const stats = (await getReturnSummaryStats());
 
   /**
    * A link that keeps the search, the dates and the order, and changes

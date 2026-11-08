@@ -15,8 +15,8 @@ export async function GET() {
   if ("error" in guard) return guard.error;
 
   return json({
-    backorderPolicy: getBackorderPolicy(),
-    returnWindowDays: getReturnWindowDays(),
+    backorderPolicy: (await getBackorderPolicy()),
+    returnWindowDays: (await getReturnWindowDays()),
   });
 }
 
@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
     if (!(BACKORDER_POLICIES as readonly string[]).includes(policy)) {
       return fail("Pick a valid policy.", 400);
     }
-    setBackorderPolicy(policy as "none" | "allow");
+    (await setBackorderPolicy(policy as "none" | "allow"));
   }
 
   if (body.returnWindowDays !== undefined) {
@@ -52,11 +52,11 @@ export async function PATCH(request: Request) {
     if (!Number.isFinite(days) || days < 1 || days > 60) {
       return fail("Return window must be between 1 and 60 days.", 400);
     }
-    setReturnWindowDays(days);
+    (await setReturnWindowDays(days));
   }
 
   return json({
-    backorderPolicy: getBackorderPolicy(),
-    returnWindowDays: getReturnWindowDays(),
+    backorderPolicy: (await getBackorderPolicy()),
+    returnWindowDays: (await getReturnWindowDays()),
   });
 }

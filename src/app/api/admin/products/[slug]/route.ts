@@ -7,12 +7,11 @@ import {
   skuTakenByAnother,
   updateProduct,
 } from "@/lib/admin";
-import { getDb } from "@/lib/db";
+import { getDb, withTransaction } from "@/lib/db";
 import {
   InventoryError,
   adjustStock,
   setLowStockThreshold,
-  withTransaction,
 } from "@/lib/inventory";
 import { fail, json, requireApiPermission } from "@/lib/api";
 import { parseProductStatus } from "@/lib/product-status";
@@ -27,7 +26,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = (await getProduct(slug));
   if (!product) return fail("No such product.", 404);
 
   return json(product);
@@ -57,7 +56,7 @@ export async function PATCH(request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = (await getProduct(slug));
   if (!product) return fail("No such product.", 404);
 
   let body: Record<string, unknown>;
@@ -68,15 +67,15 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   try {
-    withTransaction(getDb(), () => {
+    (await withTransaction(async () => {
       if (typeof body.listed === "boolean") {
-        setProductListed(slug, body.listed);
+        (await setProductListed(slug, body.listed));
       }
 
       if (typeof body.status === "string") {
         const status = parseProductStatus(body.status);
-        if (status === "published") publishProduct(slug);
-        else setProductStatus(slug, status);
+        if (status === "published") (await publishProduct(slug));
+        else (await setProductStatus(slug, status));
       }
 
       const patch: Parameters<typeof updateProduct>[1] = {};
@@ -122,7 +121,7 @@ export async function PATCH(request: Request, { params }: Params) {
       }
       if (typeof body.sku === "string") {
         const sku = normalizeSku(body.sku);
-        if (sku && skuTakenByAnother(sku, slug)) {
+        if (sku && (await skuTakenByAnother(sku, slug))) {
           throw new InventoryError("Another product already uses that SKU.");
         }
         patch.sku = sku || null;
@@ -171,14 +170,14 @@ export async function PATCH(request: Request, { params }: Params) {
             "This product is stocked by its options — set the stock on the option itself."
           );
         }
-        const moved = adjustStock({
+        const moved = (await adjustStock({
           productSlug: slug,
           variantId: null,
           mode: "set",
           quantity: Math.max(0, Math.round(body.stock)),
           reason: "Stock set from the back office",
           userId: guard.user.id,
-        });
+        }));
         if (!moved.ok) throw new InventoryError(moved.reason);
       }
 
@@ -188,7 +187,7 @@ export async function PATCH(request: Request, { params }: Params) {
         Number.isInteger(body.lowStockThreshold) &&
         body.lowStockThreshold >= 0
       ) {
-        setLowStockThreshold(slug, null, body.lowStockThreshold);
+        (await setLowStockThreshold(slug, null, body.lowStockThreshold));
       }
 
       // The options carry their own stock, which is what a product with
@@ -202,14 +201,14 @@ export async function PATCH(request: Request, { params }: Params) {
           if (!v || typeof v.id !== "string") continue;
 
           if (typeof v.stock === "number") {
-            const moved = adjustStock({
+            const moved = (await adjustStock({
               productSlug: slug,
               variantId: v.id,
               mode: "set",
               quantity: Math.max(0, Math.round(v.stock)),
               reason: "Stock set from the back office",
               userId: guard.user.id,
-            });
+            }));
             if (!moved.ok) throw new InventoryError(moved.reason);
           }
 
@@ -218,19 +217,19 @@ export async function PATCH(request: Request, { params }: Params) {
             Number.isInteger(v.lowStockThreshold) &&
             v.lowStockThreshold >= 0
           ) {
-            setLowStockThreshold(slug, v.id, v.lowStockThreshold);
+            (await setLowStockThreshold(slug, v.id, v.lowStockThreshold));
           }
         }
       }
 
-      updateProduct(slug, patch);
-    });
+      (await updateProduct(slug, patch));
+    }));
   } catch (err) {
     if (err instanceof InventoryError) return fail(err.message, 409);
     throw err;
   }
 
-  return json(getProduct(slug));
+  return json((await getProduct(slug)));
 }
 
 /**
@@ -249,7 +248,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   const { slug } = await params;
-  const result = deleteProduct(slug);
+  const result = (await deleteProduct(slug));
 
   if (!result.deleted) {
     return fail(result.reason ?? "That product could not be deleted.", 409);

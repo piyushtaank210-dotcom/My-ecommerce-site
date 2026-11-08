@@ -21,7 +21,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const category = getCategory(slug);
+  const category = (await getCategory(slug));
   if (!category) return { title: "Not found" };
   return {
     title: category.name,
@@ -39,7 +39,7 @@ export default async function CategoryPage({
   const { slug } = await params;
   const sp = await searchParams;
 
-  const category = getCategory(slug);
+  const category = (await getCategory(slug));
   if (!category) notFound();
 
   const brandParam = one(sp.brand);
@@ -53,13 +53,17 @@ export default async function CategoryPage({
     sort,
   };
 
-  const total = countProducts(query);
-  const products = getProducts({
-    ...query,
-    limit: PER_PAGE,
-    offset: (page - 1) * PER_PAGE,
-  });
-  const allBrands = getBrands(slug);
+  // The three are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [total, products, allBrands] = await Promise.all([
+    countProducts(query),
+    getProducts({
+      ...query,
+      limit: PER_PAGE,
+      offset: (page - 1) * PER_PAGE,
+    }),
+    getBrands(slug),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

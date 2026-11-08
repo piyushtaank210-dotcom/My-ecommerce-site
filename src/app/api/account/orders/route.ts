@@ -6,5 +6,5 @@ export async function GET() {
   const guard = await requireApiUser();
   if ("error" in guard) return guard.error;
 
-  return json({ orders: getOrdersForUser(guard.user.id) });
+  return json({ orders: (await getOrdersForUser(guard.user.id)) });
 }

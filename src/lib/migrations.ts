@@ -249,11 +249,15 @@ async function backfillBrands(db: Db): Promise<void> {
   if (!(await tableExists(db, "brands"))) return;
   if (!(await tableExists(db, "products"))) return;
 
+  // The brands are listed in order of their name, ignoring how the name
+  // is capitalised. The sort key is asked for as a column of its own,
+  // because PostgreSQL will not order a distinct list by something it
+  // did not ask for.
   const rows = (await db
     .prepare(
-      `SELECT DISTINCT brand FROM products
+      `SELECT DISTINCT brand, lower(brand) AS brand_sort FROM products
        WHERE brand IS NOT NULL AND TRIM(brand) != ''
-       ORDER BY lower(brand)`
+       ORDER BY brand_sort`
     )
     .all()) as { brand: string }[];
 
@@ -410,7 +414,7 @@ async function backfillVariantSkus(db: Db): Promise<void> {
   for (const r of rows) {
     if (r.sku) continue;
     const base = skuFromSlug(`${r.product_slug}-${r.name}`);
-    const sku = uniqueSku(base, (candidate) => taken.has(candidate));
+    const sku = (await uniqueSku(base, (candidate) => taken.has(candidate)));
     taken.add(sku);
     await update.run(sku, r.id);
   }
@@ -511,7 +515,7 @@ async function backfillProductSkus(db: Db): Promise<void> {
   const update = db.prepare("UPDATE products SET sku = ? WHERE slug = ?");
   for (const r of rows) {
     if (r.sku) continue;
-    const sku = uniqueSku(skuFromSlug(r.slug), (s) => taken.has(s));
+    const sku = (await uniqueSku(skuFromSlug(r.slug), (s) => taken.has(s)));
     taken.add(sku);
     await update.run(sku, r.slug);
   }

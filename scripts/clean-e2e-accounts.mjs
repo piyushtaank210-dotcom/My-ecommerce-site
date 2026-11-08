@@ -12,8 +12,7 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
-import { tokenForRole } from "./lib/session.mjs";
+import { shopDb, tokenForRole } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -21,16 +20,16 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 /** The shape of an account the end-to-end suite registers. */
 const FIXTURE = /^e2e\d+@example\.com$/;
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-const admin = tokenForRole(db, "admin");
+const pool = shopDb();
+const admin = await tokenForRole("admin");
 
-const fixtures = db
-  .prepare("SELECT id, email FROM users WHERE email LIKE 'e2e%@example.com'")
-  .all();
+const { rows: fixtures } = await pool.query(
+  "SELECT id, email FROM users WHERE email LIKE 'e2e%@example.com'"
+);
+await pool.end();
 
 if (fixtures.length === 0) {
   console.log("✓ no leftover test accounts");
-  db.close();
   process.exit(0);
 }
 
@@ -58,5 +57,4 @@ for (const f of fixtures) {
   }
 }
 
-db.close();
 console.log(`\n${removed} removed, ${refused} left alone`);

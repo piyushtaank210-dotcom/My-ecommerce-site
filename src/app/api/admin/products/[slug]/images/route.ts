@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  return json({ images: listProductGallery(slug) });
+  return json({ images: (await listProductGallery(slug)) });
 }
 
 /**
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: Params) {
     const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
 
     if (replaceId) {
-      const old = removeProductImage(slug, replaceId);
+      const old = (await removeProductImage(slug, replaceId));
       // The file the old picture used is ours, so it goes too — but only
       // if it is this product's own.
       if (old.removed && old.path && isOwnUpload(old.path, slug)) {
@@ -75,11 +75,11 @@ export async function POST(request: Request, { params }: Params) {
       }
     }
 
-    const image = addProductImage(slug, publicPath, alt || null);
+    const image = (await addProductImage(slug, publicPath, alt || null));
     if (image) added.push(image.id);
   }
 
-  return json({ images: listProductGallery(slug), added });
+  return json({ images: (await listProductGallery(slug)), added });
 }
 
 /**
@@ -111,29 +111,29 @@ export async function PATCH(request: Request, { params }: Params) {
       ? body.ids.map((i) => String(i))
       : [];
     if (!ids.length) return fail("Nothing to reorder.", 400);
-    reorderProductImages(slug, ids);
-    return json({ images: listProductGallery(slug) });
+    (await reorderProductImages(slug, ids));
+    return json({ images: (await listProductGallery(slug)) });
   }
 
   if (action === "main") {
     if (!id) return fail("Choose a photograph.", 400);
-    if (!setMainProductImage(slug, id)) {
+    if (!(await setMainProductImage(slug, id))) {
       return fail("That photograph is not on this product.", 404);
     }
-    return json({ images: listProductGallery(slug) });
+    return json({ images: (await listProductGallery(slug)) });
   }
 
   if (action === "alt") {
     if (!id) return fail("Choose a photograph.", 400);
-    if (!setProductImageAlt(slug, id, String(body.alt ?? ""))) {
+    if (!(await setProductImageAlt(slug, id, String(body.alt ?? "")))) {
       return fail("That photograph is not on this product.", 404);
     }
-    return json({ images: listProductGallery(slug) });
+    return json({ images: (await listProductGallery(slug)) });
   }
 
   if (action === "remove") {
     if (!id) return fail("Choose a photograph.", 400);
-    const result = removeProductImage(slug, id);
+    const result = (await removeProductImage(slug, id));
     if (!result.removed) {
       return fail("That photograph is not on this product.", 404);
     }
@@ -143,7 +143,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (result.path && isOwnUpload(result.path, slug)) {
       await unlink(join(process.cwd(), "public", result.path)).catch(() => {});
     }
-    return json({ images: listProductGallery(slug) });
+    return json({ images: (await listProductGallery(slug)) });
   }
 
   return fail("That is not something a photograph can do.", 400);

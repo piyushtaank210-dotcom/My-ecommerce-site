@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug, variantId } = await params;
-  const variant = getVariant(slug, variantId);
+  const variant = (await getVariant(slug, variantId));
   if (!variant) return fail("No such option.", 404);
 
   return json(variant);
@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: Params) {
     barcode: typeof body.barcode === "string" ? body.barcode : undefined,
   };
 
-  const result = updateVariant(slug, variantId, input, guard.user.id);
+  const result = (await updateVariant(slug, variantId, input, guard.user.id));
   if (!result.ok) {
     return fail(result.reason ?? "That option could not be changed.", 409);
   }
@@ -74,7 +74,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug, variantId } = await params;
-  const result = deleteVariant(slug, variantId);
+  const result = (await deleteVariant(slug, variantId));
   if (!result.ok) {
     return fail(result.reason ?? "That option could not be removed.", 409);
   }

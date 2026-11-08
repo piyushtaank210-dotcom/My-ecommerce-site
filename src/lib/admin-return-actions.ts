@@ -57,11 +57,11 @@ export async function approveReturnAction(
 
   if (!returnId) return { ok: false, message: "Return ID missing." };
 
-  const result = approveReturnRequest(
+  const result = (await approveReturnRequest(
     returnId,
     { id: staff.id, name: staff.name },
     adminNotes || undefined
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -87,11 +87,11 @@ export async function rejectReturnAction(
     return { ok: false, message: "Please provide a rejection reason for the customer." };
   }
 
-  const result = rejectReturnRequest(
+  const result = (await rejectReturnRequest(
     returnId,
     { id: staff.id, name: staff.name },
     rejectionReason
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -119,12 +119,12 @@ export async function schedulePickupAction(
     return { ok: false, message: "Please fill in all courier, tracking, and pickup date details." };
   }
 
-  const result = schedulePickup(returnId, { id: staff.id, name: staff.name }, {
+  const result = (await schedulePickup(returnId, { id: staff.id, name: staff.name }, {
     courier,
     tracking,
     date,
     notes: notes || undefined,
-  });
+  }));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -161,11 +161,11 @@ export async function recordQcAction(
     return { ok: false, message: "Invalid item decision format." };
   }
 
-  const result = recordQcInspection(returnId, { id: staff.id, name: staff.name }, {
+  const result = (await recordQcInspection(returnId, { id: staff.id, name: staff.name }, {
     qcStatus,
     notes,
     itemDecisions,
-  });
+  }));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -195,11 +195,11 @@ export async function initiateRefundAction(
     return { ok: false, message: "Please enter the amount to refund." };
   }
 
-  const result = initiateRefund(returnId, { id: staff.id, name: staff.name }, {
+  const result = (await initiateRefund(returnId, { id: staff.id, name: staff.name }, {
     amount,
     method,
     notes: notes || undefined,
-  });
+  }));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -231,11 +231,11 @@ export async function confirmRefundPaidAction(
     };
   }
 
-  const result = confirmRefundPaid(
+  const result = (await confirmRefundPaid(
     returnId,
     { id: staff.id, name: staff.name },
     { reference, notes: notes || undefined }
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -261,11 +261,11 @@ export async function rejectRefundAction(
     return { ok: false, message: "Please give a reason for refusing the refund." };
   }
 
-  const result = rejectRefund(
+  const result = (await rejectRefund(
     returnId,
     { id: staff.id, name: staff.name },
     reason
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -288,11 +288,11 @@ export async function markCompletedAction(
 
   if (!returnId) return { ok: false, message: "Return ID missing." };
 
-  const result = markCompleted(
+  const result = (await markCompleted(
     returnId,
     { id: staff.id, name: staff.name },
     notes || undefined
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -318,11 +318,11 @@ export async function requestMoreInfoAction(
     return { ok: false, message: "Say what you need from the customer." };
   }
 
-  const result = requestMoreInformation(
+  const result = (await requestMoreInformation(
     returnId,
     { id: staff.id, name: staff.name },
     message
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -345,11 +345,11 @@ export async function markReceivedAction(
 
   if (!returnId) return { ok: false, message: "Return ID missing." };
 
-  const result = markProductReceived(
+  const result = (await markProductReceived(
     returnId,
     { id: staff.id, name: staff.name },
     notes || undefined
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -396,7 +396,7 @@ export async function dispatchReplacementAction(
   }
 
   try {
-    const result = dispatchReplacement(
+    const result = (await dispatchReplacement(
       returnId,
       { id: staff.id, name: staff.name },
       {
@@ -406,7 +406,7 @@ export async function dispatchReplacementAction(
         notes: notes || undefined,
       },
       choices
-    );
+    ));
 
     if (result.ok) revalidateAll(returnId);
     return result;
@@ -447,11 +447,11 @@ export async function dispatchMissingAccessoriesAction(
     };
   }
 
-  const result = dispatchMissingAccessories(
+  const result = (await dispatchMissingAccessories(
     returnId,
     { id: staff.id, name: staff.name },
     { courier, tracking, notes: notes || undefined }
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -478,11 +478,11 @@ export async function setReplacementDeliveryAction(
     return { ok: false, message: "That is not a delivery status." };
   }
 
-  const result = setReplacementDelivery(
+  const result = (await setReplacementDelivery(
     returnId,
     { id: staff.id, name: staff.name },
     { status, notes: notes || undefined }
-  );
+  ));
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -507,7 +507,7 @@ export async function addStaffNoteAction(
     return { ok: false, message: "Note cannot be empty." };
   }
 
-  const result = addInternalNote(returnId, { id: staff.id, name: staff.name }, note);
+  const result = (await addInternalNote(returnId, { id: staff.id, name: staff.name }, note));
 
   if (result.ok) revalidateAll(returnId);
   return result;

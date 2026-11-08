@@ -16,20 +16,20 @@ export const BACKORDER_SETTING = "backorder_policy";
 /** The key the return window duration (in days) is stored under. */
 export { RETURN_WINDOW_SETTING };
 
-export function getSetting(key: string, fallback = ""): string {
-  const row = getDb()
+export async function getSetting(key: string, fallback = ""): Promise<string> {
+  const row = (await getDb()
     .prepare("SELECT value FROM store_settings WHERE key = ?")
-    .get(key) as { value?: string } | undefined;
+    .get(key)) as { value?: string } | undefined;
   return row?.value ?? fallback;
 }
 
-export function setSetting(key: string, value: string): void {
-  getDb()
+export async function setSetting(key: string, value: string): Promise<void> {
+  (await getDb()
     .prepare(
       `INSERT INTO store_settings (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`
     )
-    .run(key, value);
+    .run(key, value));
 }
 
 /**
@@ -42,24 +42,24 @@ export function setSetting(key: string, value: string): void {
 export const DEFAULT_RETURN_WINDOW_DAYS = RETURN_WINDOW_DAYS;
 
 /** Returns the configured return window duration in days (default 7). */
-export function getReturnWindowDays(): number {
-  const val = getSetting(RETURN_WINDOW_SETTING, String(DEFAULT_RETURN_WINDOW_DAYS));
+export async function getReturnWindowDays(): Promise<number> {
+  const val = (await getSetting(RETURN_WINDOW_SETTING, String(DEFAULT_RETURN_WINDOW_DAYS)));
   const parsed = parseInt(val, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RETURN_WINDOW_DAYS;
 }
 
 /** Sets the configured return window duration in days. */
-export function setReturnWindowDays(days: number): void {
+export async function setReturnWindowDays(days: number): Promise<void> {
   const safe = Math.max(1, Math.min(60, Math.round(days)));
-  setSetting(RETURN_WINDOW_SETTING, String(safe));
+  (await setSetting(RETURN_WINDOW_SETTING, String(safe)));
 }
 
 /** Whether the store takes orders for things it does not have. */
-export function getBackorderPolicy(): BackorderPolicy {
-  return parseBackorderPolicy(getSetting(BACKORDER_SETTING, "none"));
+export async function getBackorderPolicy(): Promise<BackorderPolicy> {
+  return parseBackorderPolicy((await getSetting(BACKORDER_SETTING, "none")));
 }
 
 /** Sets the backorder policy. */
-export function setBackorderPolicy(policy: BackorderPolicy): void {
-  setSetting(BACKORDER_SETTING, policy);
+export async function setBackorderPolicy(policy: BackorderPolicy): Promise<void> {
+  (await setSetting(BACKORDER_SETTING, policy));
 }

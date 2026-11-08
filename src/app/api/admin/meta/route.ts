@@ -15,18 +15,18 @@ export async function GET() {
   if ("error" in guard) return guard.error;
 
   const images = (
-    getDb()
+    (await getDb()
       .prepare(
         "SELECT DISTINCT image FROM products WHERE image IS NOT NULL ORDER BY image"
       )
-      .all() as { image: string }[]
+      .all()) as { image: string }[]
   ).map((r) => r.image);
 
   return json({
-    categories: getCategories(),
+    categories: (await getCategories()),
     // The back office wants every brand in the catalogue, including the
     // ones that only archived products carry.
-    brands: getBrands(undefined, { includeUnlisted: true }),
+    brands: (await getBrands(undefined, { includeUnlisted: true })),
     productImages: images,
     roles: ROLES,
     orderStatuses: ORDER_STATUSES,

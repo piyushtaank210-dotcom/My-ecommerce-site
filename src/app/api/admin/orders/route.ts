@@ -22,5 +22,5 @@ export async function GET(request: Request) {
     offset,
   };
 
-  return json(paged(listOrders(query), countOrders(query), page, limit));
+  return json(paged((await listOrders(query)), (await countOrders(query)), page, limit));
 }

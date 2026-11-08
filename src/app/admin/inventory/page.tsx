@@ -46,11 +46,11 @@ export default async function AdminInventoryPage({
   const productSlug = one(sp.product).trim() || undefined;
   const variantId = one(sp.variant).trim() || undefined;
 
-  const summary = inventorySummary();
-  const buckets = listStockBuckets({ q: q || undefined, level });
-  const pending = pendingStockChecks();
-  const backorderPolicy = getBackorderPolicy();
-  const products = listAdminProducts().map((p) => ({
+  const summary = (await inventorySummary());
+  const buckets = (await listStockBuckets({ q: q || undefined, level }));
+  const pending = (await pendingStockChecks());
+  const backorderPolicy = (await getBackorderPolicy());
+  const products = (await listAdminProducts()).map((p) => ({
     slug: p.slug,
     name: p.name,
     variants: p.variants.map((v) => ({

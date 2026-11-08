@@ -1,11 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { getDb } from "./db";
+import { getDb, withTransaction } from "./db";
 import { getCurrentUser } from "./auth";
 import {
   InventoryError,
   putStockBack,
   takeStockForOrder,
-  withTransaction,
 } from "./inventory";
 import type { Order, OrderItem } from "./types";
 
@@ -73,8 +72,8 @@ export async function createOrder(
   const id = generateOrderId();
   const user = await getCurrentUser();
 
-  withTransaction(db, () => {
-    db.prepare(
+  (await withTransaction(async (db) => {
+    (await db.prepare(
       `INSERT INTO orders
         (id, user_id, name, email, phone, address1, address2, city, state, pincode, notes,
          subtotal, shipping, total, payment_method, status)
@@ -95,7 +94,7 @@ export async function createOrder(
       totals.shipping,
       totals.total,
       input.paymentMethod
-    );
+    ));
 
     const insItem = db.prepare(
       `INSERT INTO order_items
@@ -104,7 +103,7 @@ export async function createOrder(
        VALUES (?,?,?,?,?,?,?,'deducted',?)`
     );
     for (const l of lines) {
-      const taken = takeStockForOrder(
+      const taken = (await takeStockForOrder(
         db,
         id,
         l.productSlug,
@@ -112,8 +111,8 @@ export async function createOrder(
         l.quantity,
         l.name,
         user?.id ?? null
-      );
-      insItem.run(
+      ));
+      await insItem.run(
         id,
         l.productSlug,
         l.variantId,
@@ -124,7 +123,7 @@ export async function createOrder(
         taken.backordered
       );
     }
-  });
+  }));
 
   return id;
 }
@@ -141,29 +140,29 @@ export async function createOrder(
  * while the return is still waiting for a check, because the units are
  * somewhere in between.
  */
-export function applyOrderStatus(
+export async function applyOrderStatus(
   orderId: string,
   status: OrderStatus,
   userId: number | null = null
-): { ok: boolean; message?: string } {
+): Promise<{ ok: boolean; message?: string }> {
   const db = getDb();
 
   try {
-    withTransaction(db, () => {
-      const order = db
+    (await withTransaction(async (db) => {
+      const order = (await db
         .prepare("SELECT id, status FROM orders WHERE id = ?")
-        .get(orderId) as { id?: string; status?: string } | undefined;
+        .get(orderId)) as { id?: string; status?: string } | undefined;
       if (!order) throw new InventoryError("That order no longer exists.");
 
       const from = String(order.status ?? "");
       if (from === status) return;
 
-      const lines = db
+      const lines = (await db
         .prepare(
           `SELECT id, product_slug, variant_id, variant_name, name, quantity, stock_state
            FROM order_items WHERE order_id = ? ORDER BY id`
         )
-        .all(orderId) as Row[];
+        .all(orderId)) as Row[];
 
       if (status === "cancelled") {
         // The goods had already left the warehouse, so they are coming back
@@ -174,13 +173,13 @@ export function applyOrderStatus(
           if (str(line.stock_state) !== "deducted") continue;
 
           if (hadLeft) {
-            db.prepare(
+            (await db.prepare(
               "UPDATE order_items SET stock_state = 'awaiting_check' WHERE id = ?"
-            ).run(num(line.id));
+            ).run(num(line.id)));
             continue;
           }
 
-          putStockBack(
+          (await putStockBack(
             db,
             orderId,
             {
@@ -193,7 +192,7 @@ export function applyOrderStatus(
             `Order ${orderId} cancelled`,
             null,
             userId
-          );
+          ));
         }
       } else if (from === "cancelled") {
         // Reopening the order puts the stock back on the shelf, so it has
@@ -207,7 +206,7 @@ export function applyOrderStatus(
           }
           if (state !== "restocked" && state !== "returned") continue;
 
-          const taken = takeStockForOrder(
+          const taken = (await takeStockForOrder(
             db,
             orderId,
             str(line.product_slug),
@@ -216,21 +215,21 @@ export function applyOrderStatus(
             str(line.name),
             userId,
             "resale"
-          );
-          db.prepare(
+          ));
+          (await db.prepare(
             "UPDATE order_items SET stock_state = 'deducted', stock_state_note = NULL, backordered = ? WHERE id = ?"
-          ).run(taken.backordered, num(line.id));
+          ).run(taken.backordered, num(line.id)));
         }
       }
 
       if (status === "delivered") {
-        db.prepare(
+        (await db.prepare(
           "UPDATE orders SET status = ?, delivered_at = COALESCE(delivered_at, datetime('now')) WHERE id = ?"
-        ).run(status, orderId);
+        ).run(status, orderId));
       } else {
-        db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId);
+        (await db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId));
       }
-    });
+    }));
 
     return { ok: true };
   } catch (err) {
@@ -239,17 +238,17 @@ export function applyOrderStatus(
   }
 }
 
-export function getOrder(id: string): Order | null {
+export async function getOrder(id: string): Promise<Order | null> {
   const db = getDb();
-  const row = db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as
+  const row = (await db.prepare("SELECT * FROM orders WHERE id = ?").get(id)) as
     | Row
     | undefined;
   if (!row) return null;
 
   const items = (
-    db
+    (await db
       .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
-      .all(id) as Row[]
+      .all(id)) as Row[]
   ).map<OrderItem>((r) => ({
     id: num(r.id),
     product_slug: str(r.product_slug),
@@ -286,10 +285,13 @@ export function getOrder(id: string): Order | null {
   };
 }
 
-export function getOrdersForUser(userId: number): Order[] {
+export async function getOrdersForUser(userId: number): Promise<Order[]> {
   const db = getDb();
-  const rows = db
+  const rows = (await db
     .prepare("SELECT id FROM orders WHERE user_id = ? ORDER BY created_at DESC")
-    .all(userId) as Row[];
-  return rows.map((r) => getOrder(str(r.id))).filter((o): o is Order => o !== null);
+    .all(userId)) as Row[];
+  const orders = await Promise.all(
+    rows.map(async (r) => (await getOrder(str(r.id))))
+  );
+  return orders.filter((o): o is Order => o !== null);
 }

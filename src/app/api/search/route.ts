@@ -8,7 +8,7 @@ export async function GET(request: Request) {
 
   if (q.length < 2) return NextResponse.json({ products: [] });
 
-  const products = getProducts({ q, limit: 6 }).map((p) => ({
+  const products = (await getProducts({ q, limit: 6 })).map((p) => ({
     slug: p.slug,
     name: p.name,
     brand: p.brand,

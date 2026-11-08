@@ -1,8 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { SQLInputValue } from "node:sqlite";
-import { getDb } from "./db";
+import { getDb, withTransaction } from "./db";
 import {
-  withTransaction,
   putStockBack,
   takeStockForOrder,
   stockOnHand,
@@ -47,15 +46,15 @@ export function generateReturnId(): string {
  * Default return window is 7 calendar days from delivery date.
  * If delivered on 10 November, return deadline is end of day 17 November (23:59:59.999 IST).
  */
-export function calculateReturnDeadline(deliveredAt: string | null): {
+export async function calculateReturnDeadline(deliveredAt: string | null): Promise<{
   deadline: Date;
   deadlineIso: string;
   formattedDeadline: string;
   isExpired: boolean;
   daysRemaining: number;
   windowDays: number;
-} {
-  const windowDays = getReturnWindowDays();
+}> {
+  const windowDays = (await getReturnWindowDays());
   const delivery = deliveredAt ? new Date(deliveredAt) : new Date();
 
   // IST offset is +5 hours 30 minutes
@@ -118,13 +117,13 @@ export type ItemReturnEligibility = {
   reason?: string;
 };
 
-export function getActiveReturnForItem(orderItemId: number): {
+export async function getActiveReturnForItem(orderItemId: number): Promise<{
   id: string;
   type: ReturnType;
   status: ReturnStatus;
-} | null {
+} | null> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT rr.id, rr.type, rr.status
        FROM return_items ri
@@ -134,7 +133,7 @@ export function getActiveReturnForItem(orderItemId: number): {
        ORDER BY rr.created_at DESC
        LIMIT 1`
     )
-    .get(orderItemId) as Row | undefined;
+    .get(orderItemId)) as Row | undefined;
 
   if (!row) return null;
   return {
@@ -144,11 +143,11 @@ export function getActiveReturnForItem(orderItemId: number): {
   };
 }
 
-export function isProductReturnable(productSlug: string): boolean {
+export async function isProductReturnable(productSlug: string): Promise<boolean> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare("SELECT returns FROM products WHERE slug = ?")
-    .get(productSlug) as { returns?: string } | undefined;
+    .get(productSlug)) as { returns?: string } | undefined;
   if (!row) return true;
   if (row.returns === "non-returnable" || row.returns === "no") return false;
   return true;
@@ -157,7 +156,7 @@ export function isProductReturnable(productSlug: string): boolean {
 /**
  * Checks return and replacement eligibility separately for each product in an order.
  */
-export function getOrderReturnEligibility(order: Order): {
+export async function getOrderReturnEligibility(order: Order): Promise<{
   eligible: boolean;
   isDelivered: boolean;
   isWindowActive: boolean;
@@ -168,9 +167,9 @@ export function getOrderReturnEligibility(order: Order): {
   daysRemaining: number;
   reason?: string;
   itemEligibilities: Record<number, ItemReturnEligibility>;
-} {
+}> {
   const isDelivered = order.status === "delivered";
-  const deadlineCalc = calculateReturnDeadline(order.delivered_at ?? null);
+  const deadlineCalc = (await calculateReturnDeadline(order.delivered_at ?? null));
 
   const isWindowActive = isDelivered && !deadlineCalc.isExpired;
   const isWindowClosed = isDelivered && deadlineCalc.isExpired;
@@ -181,8 +180,8 @@ export function getOrderReturnEligibility(order: Order): {
   for (let index = 0; index < order.items.length; index++) {
     const item = order.items[index];
     const key = item.id ?? index + 1;
-    const activeReq = item.id ? getActiveReturnForItem(item.id) : null;
-    const returnable = isProductReturnable(item.product_slug);
+    const activeReq = item.id ? (await getActiveReturnForItem(item.id)) : null;
+    const returnable = (await isProductReturnable(item.product_slug));
 
     let reason: string | undefined;
     let canReturn = false;
@@ -248,15 +247,15 @@ export function getOrderReturnEligibility(order: Order): {
 /**
  * Checks whether an order is eligible for return or replacement.
  */
-export function isReturnEligible(order: Order): {
+export async function isReturnEligible(order: Order): Promise<{
   eligible: boolean;
   reason?: string;
   daysRemaining?: number;
   isDelivered?: boolean;
   isWindowClosed?: boolean;
   formattedDeadline?: string;
-} {
-  const res = getOrderReturnEligibility(order);
+}> {
+  const res = (await getOrderReturnEligibility(order));
   return {
     eligible: res.eligible,
     reason: res.reason,
@@ -270,14 +269,14 @@ export function isReturnEligible(order: Order): {
 /**
  * Maps a database row into a ReturnRequest with items, images, and events.
  */
-function mapReturnRow(r: Row): ReturnRequest {
+async function mapReturnRow(r: Row): Promise<ReturnRequest> {
   const db = getDb();
   const id = str(r.id);
 
   const items = (
-    db
+    (await db
       .prepare("SELECT * FROM return_items WHERE return_id = ? ORDER BY id ASC")
-      .all(id) as Row[]
+      .all(id)) as Row[]
   ).map<ReturnItem>((it) => ({
     id: num(it.id),
     return_id: str(it.return_id),
@@ -298,9 +297,9 @@ function mapReturnRow(r: Row): ReturnRequest {
   }));
 
   const images = (
-    db
+    (await db
       .prepare("SELECT * FROM return_images WHERE return_id = ? ORDER BY id ASC")
-      .all(id) as Row[]
+      .all(id)) as Row[]
   ).map<ReturnImage>((im) => ({
     id: num(im.id),
     return_id: str(im.return_id),
@@ -311,9 +310,9 @@ function mapReturnRow(r: Row): ReturnRequest {
   }));
 
   const events = (
-    db
+    (await db
       .prepare("SELECT * FROM return_events WHERE return_id = ? ORDER BY created_at ASC, id ASC")
-      .all(id) as Row[]
+      .all(id)) as Row[]
   ).map<ReturnEvent>((ev) => ({
     id: num(ev.id),
     return_id: str(ev.return_id),
@@ -374,23 +373,23 @@ function mapReturnRow(r: Row): ReturnRequest {
   };
 }
 
-export function getReturnRequest(id: string): ReturnRequest | null {
+export async function getReturnRequest(id: string): Promise<ReturnRequest | null> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT r.*, o.name AS customer_name, o.email AS customer_email, o.phone AS customer_phone
        FROM return_requests r
        JOIN orders o ON o.id = r.order_id
        WHERE r.id = ?`
     )
-    .get(id) as Row | undefined;
+    .get(id)) as Row | undefined;
 
-  return row ? mapReturnRow(row) : null;
+  return row ? (await mapReturnRow(row)) : null;
 }
 
-export function getReturnRequestsForOrder(orderId: string): ReturnRequest[] {
+export async function getReturnRequestsForOrder(orderId: string): Promise<ReturnRequest[]> {
   const db = getDb();
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT r.*, o.name AS customer_name, o.email AS customer_email, o.phone AS customer_phone
        FROM return_requests r
@@ -398,14 +397,14 @@ export function getReturnRequestsForOrder(orderId: string): ReturnRequest[] {
        WHERE r.order_id = ?
        ORDER BY r.created_at DESC`
     )
-    .all(orderId) as Row[];
+    .all(orderId)) as Row[];
 
-  return rows.map(mapReturnRow);
+  return await Promise.all(rows.map(mapReturnRow));
 }
 
-export function getReturnRequestsForUser(userId: number): ReturnRequest[] {
+export async function getReturnRequestsForUser(userId: number): Promise<ReturnRequest[]> {
   const db = getDb();
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT r.*, o.name AS customer_name, o.email AS customer_email, o.phone AS customer_phone
        FROM return_requests r
@@ -413,9 +412,9 @@ export function getReturnRequestsForUser(userId: number): ReturnRequest[] {
        WHERE r.user_id = ?
        ORDER BY r.created_at DESC`
     )
-    .all(userId) as Row[];
+    .all(userId)) as Row[];
 
-  return rows.map(mapReturnRow);
+  return await Promise.all(rows.map(mapReturnRow));
 }
 
 export type ReturnQuery = {
@@ -496,13 +495,13 @@ function returnOrder(sort: string | undefined): string {
   }
 }
 
-export function listReturnRequests(q: ReturnQuery = {}): ReturnRequest[] {
+export async function listReturnRequests(q: ReturnQuery = {}): Promise<ReturnRequest[]> {
   const db = getDb();
   const { clause, params } = returnFilter(q);
   const limit = Math.max(1, Math.min(q.limit ?? 25, 100));
   const offset = Math.max(0, q.offset ?? 0);
 
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT r.*, o.name AS customer_name, o.email AS customer_email, o.phone AS customer_phone
        FROM return_requests r
@@ -511,28 +510,28 @@ export function listReturnRequests(q: ReturnQuery = {}): ReturnRequest[] {
        ORDER BY ${returnOrder(q.sort)}
        LIMIT ? OFFSET ?`
     )
-    .all(...params, limit, offset) as Row[];
+    .all(...params, limit, offset)) as Row[];
 
-  return rows.map(mapReturnRow);
+  return await Promise.all(rows.map(mapReturnRow));
 }
 
-export function countReturnRequests(q: ReturnQuery = {}): number {
+export async function countReturnRequests(q: ReturnQuery = {}): Promise<number> {
   const db = getDb();
   const { clause, params } = returnFilter(q);
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT COUNT(*) AS total
        FROM return_requests r
        JOIN orders o ON o.id = r.order_id
        ${clause}`
     )
-    .get(...params) as { total?: number } | undefined;
+    .get(...params)) as { total?: number } | undefined;
 
   return num(row?.total);
 }
 
-export function getReturnSummaryStats(): {
+export async function getReturnSummaryStats(): Promise<{
   total: number;
   requested: number;
   approved: number;
@@ -546,11 +545,11 @@ export function getReturnSummaryStats(): {
   infoRequested: number;
   /** Every request that has not been closed yet. */
   open: number;
-} {
+}> {
   const db = getDb();
-  const rows = db
+  const rows = (await db
     .prepare("SELECT status, refund_amount, refund_status FROM return_requests")
-    .all() as Row[];
+    .all()) as Row[];
 
   let requested = 0;
   let approved = 0;
@@ -625,18 +624,18 @@ export type CreateReturnInput = {
 /**
  * Creates a return or replacement request.
  */
-export function createReturnRequest(input: CreateReturnInput): string {
+export async function createReturnRequest(input: CreateReturnInput): Promise<string> {
   const db = getDb();
   const returnId = generateReturnId();
 
-  withTransaction(db, () => {
+  (await withTransaction(async (db) => {
     // 1. Insert return_requests row
     const refundEst =
       input.type === "return"
         ? input.items.reduce((sum, it) => sum + it.price * it.quantity, 0)
         : 0;
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_requests
         (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status,
          serial_number, sealed_state, missing_accessories)
@@ -653,7 +652,7 @@ export function createReturnRequest(input: CreateReturnInput): string {
       input.serialNumber || null,
       input.sealedState || null,
       input.missingAccessories || null
-    );
+    ));
 
     // 2. Insert items
     const insItem = db.prepare(
@@ -663,7 +662,7 @@ export function createReturnRequest(input: CreateReturnInput): string {
     );
 
     for (const it of input.items) {
-      insItem.run(
+      await insItem.run(
         returnId,
         it.orderItemId,
         it.productSlug,
@@ -681,20 +680,22 @@ export function createReturnRequest(input: CreateReturnInput): string {
         "INSERT INTO return_images (return_id, path, kind) VALUES (?, ?, ?)"
       );
       for (const e of input.evidence) {
-        if (e.path && e.path.trim()) insImg.run(returnId, e.path.trim(), e.kind);
+        if (e.path && e.path.trim()) {
+          await insImg.run(returnId, e.path.trim(), e.kind);
+        }
       }
     }
 
     // 4. Record initial event
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, note)
        VALUES (?, 'requested', 'customer', ?, ?)`
     ).run(
       returnId,
       input.userId,
       `Customer initiated a ${RETURN_TYPE_LABEL[input.type] ?? "return"} request.`
-    );
-  });
+    ));
+  }));
 
   return returnId;
 }
@@ -702,17 +703,17 @@ export function createReturnRequest(input: CreateReturnInput): string {
 /**
  * Customer cancels their request before pickup.
  */
-export function cancelReturnRequest(
+export async function cancelReturnRequest(
   id: string,
   userId: number,
   note: string = "Cancelled by customer"
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const existing = db
+  return (await withTransaction(async (db) => {
+    const existing = (await db
       .prepare("SELECT status, user_id FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string; user_id?: number } | undefined;
+      .get(id)) as { status?: string; user_id?: number } | undefined;
 
     if (!existing) return { ok: false, message: "Request not found." };
     if (existing.user_id !== userId) {
@@ -725,33 +726,33 @@ export function cancelReturnRequest(
       };
     }
 
-    db.prepare(
+    (await db.prepare(
       "UPDATE return_requests SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?"
-    ).run(id);
+    ).run(id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, note)
        VALUES (?, 'cancelled', 'customer', ?, ?)`
-    ).run(id, userId, note);
+    ).run(id, userId, note));
 
     return { ok: true, message: "Your return request has been cancelled." };
-  });
+  }));
 }
 
 /**
  * Admin approves request.
  */
-export function approveReturnRequest(
+export async function approveReturnRequest(
   id: string,
   staffUser: { id: number; name: string },
   adminNotes?: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string } | undefined;
+      .get(id)) as { status?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     // A request the customer has been asked about can still be decided —
@@ -760,13 +761,13 @@ export function approveReturnRequest(
       return { ok: false, message: `Request is already in '${req.status}' state.` };
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'approved', admin_notes = COALESCE(?, admin_notes), updated_at = datetime('now')
        WHERE id = ?`
-    ).run(adminNotes || null, id);
+    ).run(adminNotes || null, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'approved', 'staff', ?, ?, ?)`
     ).run(
@@ -774,50 +775,50 @@ export function approveReturnRequest(
       staffUser.id,
       staffUser.name,
       adminNotes ? `Approved: ${adminNotes}` : "Return request approved by staff."
-    );
+    ));
 
     return { ok: true, message: "Return request approved." };
-  });
+  }));
 }
 
 /**
  * Admin rejects request with explanation.
  */
-export function rejectReturnRequest(
+export async function rejectReturnRequest(
   id: string,
   staffUser: { id: number; name: string },
   rejectionReason: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const reason = rejectionReason.trim();
   if (!reason) return { ok: false, message: "Provide a reason for rejection." };
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string } | undefined;
+      .get(id)) as { status?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'rejected', rejection_reason = ?, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(reason, id);
+    ).run(reason, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'rejected', 'staff', ?, ?, ?)`
-    ).run(id, staffUser.id, staffUser.name, `Rejected: ${reason}`);
+    ).run(id, staffUser.id, staffUser.name, `Rejected: ${reason}`));
 
     return { ok: true, message: "Return request rejected." };
-  });
+  }));
 }
 
 /**
  * Admin schedules pickup with courier partner.
  */
-export function schedulePickup(
+export async function schedulePickup(
   id: string,
   staffUser: { id: number; name: string },
   pickup: {
@@ -826,13 +827,13 @@ export function schedulePickup(
     date: string;
     notes?: string;
   }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string } | undefined;
+      .get(id)) as { status?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     // A pickup is arranged while the request is open. It cannot be
@@ -848,7 +849,7 @@ export function schedulePickup(
       };
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'pickup_scheduled',
            pickup_courier = ?,
@@ -856,9 +857,9 @@ export function schedulePickup(
            pickup_date = ?,
            updated_at = datetime('now')
        WHERE id = ?`
-    ).run(pickup.courier.trim(), pickup.tracking.trim(), pickup.date.trim(), id);
+    ).run(pickup.courier.trim(), pickup.tracking.trim(), pickup.date.trim(), id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'pickup_scheduled', 'staff', ?, ?, ?)`
     ).run(
@@ -868,16 +869,16 @@ export function schedulePickup(
       `Pickup scheduled via ${pickup.courier} (AWB: ${pickup.tracking}) for ${pickup.date}.${
         pickup.notes ? ` Note: ${pickup.notes}` : ""
       }`
-    );
+    ));
 
     return { ok: true, message: "Pickup scheduled successfully." };
-  });
+  }));
 }
 
 /**
  * Admin marks item received and completes Quality Check (QC).
  */
-export function recordQcInspection(
+export async function recordQcInspection(
   id: string,
   staffUser: { id: number; name: string },
   inspection: {
@@ -888,20 +889,20 @@ export function recordQcInspection(
       decision: "restock" | "write_off" | "reject";
     }[];
   }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
 
     const nextStatus = inspection.qcStatus === "passed" ? "qc_passed" : "qc_failed";
     const nowIso = new Date().toISOString();
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = ?,
            received_at = COALESCE(received_at, ?),
@@ -916,7 +917,7 @@ export function recordQcInspection(
       inspection.notes.trim() || null,
       nowIso,
       id
-    );
+    ));
 
     const updItem = db.prepare(
       "UPDATE return_items SET qc_decision = ? WHERE id = ?"
@@ -924,16 +925,16 @@ export function recordQcInspection(
 
     // Apply inventory actions for items
     for (const d of inspection.itemDecisions) {
-      updItem.run(d.decision, d.itemId);
+      await updItem.run(d.decision, d.itemId);
 
-      const itRow = db
+      const itRow = (await db
         .prepare("SELECT * FROM return_items WHERE id = ?")
-        .get(d.itemId) as Row | undefined;
+        .get(d.itemId)) as Row | undefined;
 
       if (!itRow) continue;
 
       if (d.decision === "restock") {
-        putStockBack(
+        (await putStockBack(
           db,
           str(req.order_id),
           {
@@ -946,15 +947,15 @@ export function recordQcInspection(
           `Return ${id} QC passed (restocked)`,
           inspection.notes || null,
           staffUser.id
-        );
+        ));
       } else if (d.decision === "write_off" && itRow.order_item_id) {
-        db.prepare(
+        (await db.prepare(
           "UPDATE order_items SET stock_state = 'written_off', stock_state_note = ? WHERE id = ?"
-        ).run(`Return ${id} QC: written off`, num(itRow.order_item_id));
+        ).run(`Return ${id} QC: written off`, num(itRow.order_item_id)));
       }
     }
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, ?, 'staff', ?, ?, ?)`
     ).run(
@@ -963,10 +964,10 @@ export function recordQcInspection(
       staffUser.id,
       staffUser.name,
       `QC Inspection: ${inspection.qcStatus.toUpperCase()}. ${inspection.notes}`
-    );
+    ));
 
     return { ok: true, message: `QC inspection recorded (${inspection.qcStatus}).` };
-  });
+  }));
 }
 
 /**
@@ -977,7 +978,7 @@ export function recordQcInspection(
  * payment went out under. A refund that is only approved is pending, and
  * it is tracked as pending until somebody says it has actually been paid.
  */
-export function initiateRefund(
+export async function initiateRefund(
   id: string,
   staffUser: { id: number; name: string },
   refund: {
@@ -985,13 +986,13 @@ export function initiateRefund(
     method: string;
     notes?: string;
   }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (req.status === "completed" || req.status === "rejected") {
@@ -1006,7 +1007,7 @@ export function initiateRefund(
 
     const nowIso = new Date().toISOString();
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'refund_pending',
            refund_status = 'pending',
@@ -1014,9 +1015,9 @@ export function initiateRefund(
            refund_method = ?,
            updated_at = ?
        WHERE id = ?`
-    ).run(refund.amount, refund.method.trim(), nowIso, id);
+    ).run(refund.amount, refund.method.trim(), nowIso, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'refund_pending', 'staff', ?, ?, ?)`
     ).run(
@@ -1026,10 +1027,10 @@ export function initiateRefund(
       `Refund of ₹${refund.amount.toLocaleString("en-IN")} approved via ${
         refund.method
       }.${refund.notes ? ` Note: ${refund.notes}` : ""}`
-    );
+    ));
 
     return { ok: true, message: `Refund of ₹${refund.amount} raised.` };
-  });
+  }));
 }
 
 /**
@@ -1038,24 +1039,24 @@ export function initiateRefund(
  * This is the step that makes the refund a refund. Until it happens the
  * money has only been promised, and the request says so.
  */
-export function confirmRefundPaid(
+export async function confirmRefundPaid(
   id: string,
   staffUser: { id: number; name: string },
   payment: {
     reference: string;
     notes?: string;
   }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const reference = payment.reference.trim();
   if (!reference) {
     return { ok: false, message: "Enter the reference the refund was paid under." };
   }
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (str(req.refund_status) === "processed") {
@@ -1067,16 +1068,16 @@ export function confirmRefundPaid(
 
     const nowIso = new Date().toISOString();
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET refund_status = 'processed',
            refund_reference = ?,
            refund_processed_at = ?,
            updated_at = ?
        WHERE id = ?`
-    ).run(reference, nowIso, nowIso, id);
+    ).run(reference, nowIso, nowIso, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'refund_pending', 'staff', ?, ?, ?)`
     ).run(
@@ -1086,10 +1087,10 @@ export function confirmRefundPaid(
       `Refund of ₹${num(req.refund_amount).toLocaleString("en-IN")} confirmed as paid (Ref: ${reference}).${
         payment.notes ? ` Note: ${payment.notes}` : ""
       }`
-    );
+    ));
 
     return { ok: true, message: "The refund is recorded as paid." };
-  });
+  }));
 }
 
 /**
@@ -1097,19 +1098,19 @@ export function confirmRefundPaid(
  *
  * The request is closed as refused, and the customer can see why.
  */
-export function rejectRefund(
+export async function rejectRefund(
   id: string,
   staffUser: { id: number; name: string },
   reason: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const text = reason.trim();
   if (!text) return { ok: false, message: "Say why the refund is being refused." };
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (str(req.refund_status) === "processed") {
@@ -1119,22 +1120,22 @@ export function rejectRefund(
       return { ok: false, message: `Request is already '${req.status}'.` };
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'rejected',
            refund_status = 'failed',
            rejection_reason = ?,
            updated_at = datetime('now')
        WHERE id = ?`
-    ).run(text, id);
+    ).run(text, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'rejected', 'staff', ?, ?, ?)`
-    ).run(id, staffUser.id, staffUser.name, `Refund refused: ${text}`);
+    ).run(id, staffUser.id, staffUser.name, `Refund refused: ${text}`));
 
     return { ok: true, message: "The refund has been refused." };
-  });
+  }));
 }
 
 /**
@@ -1144,17 +1145,17 @@ export function rejectRefund(
  * request open — a request is not finished while the money has not gone
  * back to the customer, and closing it does not settle the refund.
  */
-export function markCompleted(
+export async function markCompleted(
   id: string,
   staffUser: { id: number; name: string },
   notes?: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (req.status === "completed") {
@@ -1191,13 +1192,13 @@ export function markCompleted(
 
     const nowIso = new Date().toISOString();
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'completed', updated_at = ?
        WHERE id = ?`
-    ).run(nowIso, id);
+    ).run(nowIso, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'completed', 'staff', ?, ?, ?)`
     ).run(
@@ -1205,10 +1206,10 @@ export function markCompleted(
       staffUser.id,
       staffUser.name,
       notes?.trim() ? `Request completed. ${notes.trim()}` : "Request completed."
-    );
+    ));
 
     return { ok: true, message: "Request completed." };
-  });
+  }));
 }
 
 /**
@@ -1219,11 +1220,11 @@ export function markCompleted(
  * the case is closed when they have been sent. The customer keeps the
  * console, the controller, and the receipt for what they were sent.
  */
-export function dispatchMissingAccessories(
+export async function dispatchMissingAccessories(
   id: string,
   staffUser: { id: number; name: string },
   input: { courier: string; tracking: string; notes?: string }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const courier = input.courier.trim();
   const tracking = input.tracking.trim();
@@ -1231,10 +1232,10 @@ export function dispatchMissingAccessories(
   if (!courier) return { ok: false, message: "Say which courier the parts went with." };
   if (!tracking) return { ok: false, message: "Give the tracking number for the parts." };
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status, type FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string; type?: string } | undefined;
+      .get(id)) as { status?: string; type?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (str(req.type) !== "accessories") {
@@ -1249,7 +1250,7 @@ export function dispatchMissingAccessories(
 
     const nowIso = new Date().toISOString();
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'completed',
            accessories_courier = ?,
@@ -1257,9 +1258,9 @@ export function dispatchMissingAccessories(
            accessories_dispatched_at = ?,
            updated_at = ?
        WHERE id = ?`
-    ).run(courier, tracking, nowIso, nowIso, id);
+    ).run(courier, tracking, nowIso, nowIso, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'completed', 'staff', ?, ?, ?)`
     ).run(
@@ -1269,13 +1270,13 @@ export function dispatchMissingAccessories(
       input.notes?.trim()
         ? `Missing accessories dispatched with ${courier} (${tracking}). ${input.notes.trim()}`
         : `Missing accessories dispatched with ${courier} (${tracking}).`
-    );
+    ));
 
     return {
       ok: true,
       message: "The missing accessories have been sent to the customer.",
     };
-  });
+  }));
 }
 
 /**
@@ -1284,38 +1285,38 @@ export function dispatchMissingAccessories(
  * The request stays open and the question is shown to the customer on
  * their own page, so they can answer and the staff can carry on.
  */
-export function requestMoreInformation(
+export async function requestMoreInformation(
   id: string,
   staffUser: { id: number; name: string },
   message: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const text = message.trim();
   if (!text) return { ok: false, message: "Say what you need from the customer." };
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string } | undefined;
+      .get(id)) as { status?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (req.status === "completed" || req.status === "rejected") {
       return { ok: false, message: `Request is already '${req.status}'.` };
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'info_requested', admin_notes = ?, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(text, id);
+    ).run(text, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'info_requested', 'staff', ?, ?, ?)`
-    ).run(id, staffUser.id, staffUser.name, `More information requested: ${text}`);
+    ).run(id, staffUser.id, staffUser.name, `More information requested: ${text}`));
 
     return { ok: true, message: "The customer has been asked for more information." };
-  });
+  }));
 }
 
 /**
@@ -1323,30 +1324,30 @@ export function requestMoreInformation(
  *
  * Marking it received is what puts it in the queue for inspection.
  */
-export function markProductReceived(
+export async function markProductReceived(
   id: string,
   staffUser: { id: number; name: string },
   notes?: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
-      .get(id) as { status?: string } | undefined;
+      .get(id)) as { status?: string } | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (req.status !== "pickup_scheduled" && req.status !== "approved") {
       return { ok: false, message: "Only a scheduled pickup can be received." };
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET status = 'received', received_at = datetime('now'), updated_at = datetime('now')
        WHERE id = ?`
-    ).run(id);
+    ).run(id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'received', 'staff', ?, ?, ?)`
     ).run(
@@ -1356,10 +1357,10 @@ export function markProductReceived(
       notes?.trim()
         ? `Product received at the warehouse. ${notes.trim()}`
         : "Product received at the warehouse."
-    );
+    ));
 
     return { ok: true, message: "Product marked as received." };
-  });
+  }));
 }
 
 /**
@@ -1371,34 +1372,34 @@ export function markProductReceived(
  * then whatever else the store has in stock in the same category, for the
  * times the option the customer wants has run out.
  */
-export function replacementCandidates(id: string): ReplacementCandidate[] {
+export async function replacementCandidates(id: string): Promise<ReplacementCandidate[]> {
   const db = getDb();
-  const items = db
+  const items = (await db
     .prepare("SELECT * FROM return_items WHERE return_id = ?")
-    .all(id) as Row[];
+    .all(id)) as Row[];
 
-  const product = (slug: string) =>
-    db
+  const product = async (slug: string) =>
+    (await db
       .prepare("SELECT slug, name, category_slug FROM products WHERE slug = ?")
-      .get(slug) as { slug?: string; name?: string; category_slug?: string } | undefined;
+      .get(slug)) as { slug?: string; name?: string; category_slug?: string } | undefined;
 
-  const variantsOf = (slug: string) =>
-    db
+  const variantsOf = async (slug: string) =>
+    (await db
       .prepare(
         "SELECT id, name, stock FROM variants WHERE product_slug = ? ORDER BY position, name"
       )
-      .all(slug) as { id?: string; name?: string; stock?: number }[];
+      .all(slug)) as { id?: string; name?: string; stock?: number }[];
 
-  const onHand = (slug: string, variantId: string | null): number => {
+  const onHand = async (slug: string, variantId: string | null): Promise<number> => {
     if (variantId) {
-      const row = db
+      const row = (await db
         .prepare("SELECT stock FROM variants WHERE id = ? AND product_slug = ?")
-        .get(variantId, slug) as { stock?: number } | undefined;
+        .get(variantId, slug)) as { stock?: number } | undefined;
       return num(row?.stock);
     }
-    const row = db
+    const row = (await db
       .prepare("SELECT stock FROM products WHERE slug = ?")
-      .get(slug) as { stock?: number } | undefined;
+      .get(slug)) as { stock?: number } | undefined;
     return num(row?.stock);
   };
 
@@ -1407,10 +1408,10 @@ export function replacementCandidates(id: string): ReplacementCandidate[] {
   for (const item of items) {
     const slug = str(item.product_slug);
     const variantId = strOrNull(item.variant_id);
-    const own = product(slug);
+    const own = (await product(slug));
     const options: ReplacementOption[] = [];
 
-    const variants = variantsOf(slug);
+    const variants = (await variantsOf(slug));
     if (variants.length) {
       for (const v of variants) {
         options.push({
@@ -1428,7 +1429,7 @@ export function replacementCandidates(id: string): ReplacementCandidate[] {
         label: str(own?.name),
         productSlug: slug,
         variantId: null,
-        stock: onHand(slug, null),
+        stock: (await onHand(slug, null)),
         current: true,
       });
     }
@@ -1436,16 +1437,16 @@ export function replacementCandidates(id: string): ReplacementCandidate[] {
     // Whatever else is on the shelf in the same category.
     const category = own?.category_slug;
     if (category) {
-      const others = db
+      const others = (await db
         .prepare(
           `SELECT slug, name FROM products
            WHERE category_slug = ? AND slug != ? AND status = 'published'
            ORDER BY name LIMIT 12`
         )
-        .all(category, slug) as { slug?: string; name?: string }[];
+        .all(category, slug)) as { slug?: string; name?: string }[];
 
       for (const other of others) {
-        const otherVariants = variantsOf(str(other.slug));
+        const otherVariants = (await variantsOf(str(other.slug)));
         if (otherVariants.length) {
           for (const v of otherVariants) {
             const stock = num(v.stock);
@@ -1460,7 +1461,7 @@ export function replacementCandidates(id: string): ReplacementCandidate[] {
             });
           }
         } else {
-          const stock = onHand(str(other.slug), null);
+          const stock = (await onHand(str(other.slug), null));
           if (stock <= 0) continue;
           options.push({
             value: str(other.slug),
@@ -1500,7 +1501,7 @@ export function replacementCandidates(id: string): ReplacementCandidate[] {
  * replacement and not as a sale, because it is not a second sale of the
  * original order.
  */
-export function dispatchReplacement(
+export async function dispatchReplacement(
   id: string,
   staffUser: { id: number; name: string },
   replacement: {
@@ -1515,7 +1516,7 @@ export function dispatchReplacement(
     variantId: string | null;
     quantity: number;
   }[]
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const courier = replacement.courier.trim();
   const tracking = replacement.tracking.trim();
@@ -1526,12 +1527,12 @@ export function dispatchReplacement(
   const ref = `REP-${randomBytes(4).toString("hex").toUpperCase()}`;
   const dispatchDate = replacement.dispatchDate?.trim() || null;
 
-  return withTransaction(db, () => {
+  return (await withTransaction(async (db) => {
     // The gate. Nothing has been read yet, so this takes the write lock
     // straight away and the whole of the rest of the work is done under
     // it. If it changes nothing, the request already has its shipment —
     // or is not ready for one — and no stock moves.
-    const gate = db
+    const gate = (await db
       .prepare(
         `UPDATE return_requests
          SET status = 'replacement_pending',
@@ -1545,7 +1546,7 @@ export function dispatchReplacement(
            AND replacement_order_id IS NULL
            AND (status = 'qc_passed' OR (status = 'received' AND qc_status = 'passed'))`
       )
-      .run(ref, courier, tracking, dispatchDate, id);
+      .run(ref, courier, tracking, dispatchDate, id));
 
     if (gate.changes === 0) {
       return {
@@ -1555,14 +1556,14 @@ export function dispatchReplacement(
       };
     }
 
-    const req = db
+    const req = (await db
       .prepare("SELECT order_id FROM return_requests WHERE id = ?")
-      .get(id) as { order_id?: string } | undefined;
+      .get(id)) as { order_id?: string } | undefined;
     const orderId = str(req?.order_id);
 
-    const items = db
+    const items = (await db
       .prepare("SELECT * FROM return_items WHERE return_id = ?")
-      .all(id) as Row[];
+      .all(id)) as Row[];
 
     // What is going out, item by item. It is not always the unit that
     // came back — sometimes the option the customer wants is the one
@@ -1576,14 +1577,14 @@ export function dispatchReplacement(
 
       // The shelf has to have it. A replacement cannot be sent on
       // backorder — the customer is waiting for a unit.
-      const onHand = stockOnHand(db, slug, variantId);
+      const onHand = (await stockOnHand(db, slug, variantId));
       if (onHand < quantity) {
         throw new InventoryError(
           `Only ${onHand} of ${str(item.name)} left in stock — the replacement needs ${quantity}.`
         );
       }
 
-      takeStockForOrder(
+      (await takeStockForOrder(
         db,
         orderId,
         slug,
@@ -1593,27 +1594,27 @@ export function dispatchReplacement(
         staffUser.id,
         "replacement",
         `Replacement ${ref} for request ${id}`
-      );
+      ));
 
-      db.prepare(
+      (await db.prepare(
         `UPDATE return_items
          SET replacement_product_slug = ?, replacement_variant_id = ?, replacement_quantity = ?
          WHERE id = ?`
-      ).run(slug, variantId, quantity, num(item.id));
+      ).run(slug, variantId, quantity, num(item.id)));
     }
 
     // What is going out. Each item carries its own choice; this is the
     // headline of it — the unit the request is really about.
     const firstChoice = choices.find((c) => c.productSlug);
     if (firstChoice) {
-      db.prepare(
+      (await db.prepare(
         `UPDATE return_requests
          SET replacement_product_slug = ?, replacement_variant_id = ?
          WHERE id = ?`
-      ).run(firstChoice.productSlug, firstChoice.variantId, id);
+      ).run(firstChoice.productSlug, firstChoice.variantId, id));
     }
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'replacement_pending', 'staff', ?, ?, ?)`
     ).run(
@@ -1623,13 +1624,13 @@ export function dispatchReplacement(
       `Replacement ${ref} dispatched via ${courier} (Tracking: ${tracking}).${
         replacement.notes ? ` Note: ${replacement.notes}` : ""
       }`
-    );
+    ));
 
     return {
       ok: true,
       message: `Replacement ${ref} dispatched with tracking ${tracking}.`,
     };
-  });
+  }));
 }
 
 /**
@@ -1639,20 +1640,20 @@ export function dispatchReplacement(
  * from the request's own status — a replacement is on its way while the
  * request is still open.
  */
-export function setReplacementDelivery(
+export async function setReplacementDelivery(
   id: string,
   staffUser: { id: number; name: string },
   delivery: {
     status: ReplacementDeliveryStatus;
     notes?: string;
   }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return withTransaction(db, () => {
-    const req = db
+  return (await withTransaction(async (db) => {
+    const req = (await db
       .prepare("SELECT replacement_order_id, replacement_delivery_status FROM return_requests WHERE id = ?")
-      .get(id) as Row | undefined;
+      .get(id)) as Row | undefined;
 
     if (!req) return { ok: false, message: "Request not found." };
     if (!str(req.replacement_order_id)) {
@@ -1665,15 +1666,15 @@ export function setReplacementDelivery(
     const nowIso = new Date().toISOString();
     const delivered = delivery.status === "delivered";
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE return_requests
        SET replacement_delivery_status = ?,
            replacement_delivered_at = CASE WHEN ? THEN ? ELSE replacement_delivered_at END,
            updated_at = ?
        WHERE id = ?`
-    ).run(delivery.status, delivered ? 1 : 0, nowIso, nowIso, id);
+    ).run(delivery.status, delivered ? 1 : 0, nowIso, nowIso, id));
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
        VALUES (?, 'replacement_pending', 'staff', ?, ?, ?)`
     ).run(
@@ -1683,28 +1684,28 @@ export function setReplacementDelivery(
       `Replacement delivery: ${REPLACEMENT_DELIVERY_LABEL[delivery.status]}.${
         delivery.notes ? ` ${delivery.notes.trim()}` : ""
       }`
-    );
+    ));
 
     return { ok: true, message: "The delivery has been recorded." };
-  });
+  }));
 }
 
 /**
  * Admin appends an internal note to a return request.
  */
-export function addInternalNote(
+export async function addInternalNote(
   id: string,
   staffUser: { id: number; name: string },
   note: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
   const text = note.trim();
   if (!text) return { ok: false, message: "Enter a note." };
 
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO return_events (return_id, status, actor_type, actor_id, actor_name, note)
      VALUES (?, (SELECT status FROM return_requests WHERE id = ?), 'staff', ?, ?, ?)`
-  ).run(id, id, staffUser.id, staffUser.name, `Staff Note: ${text}`);
+  ).run(id, id, staffUser.id, staffUser.name, `Staff Note: ${text}`));
 
   return { ok: true, message: "Note added to event log." };
 }

@@ -69,6 +69,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
   if (!await getUserById(userId)) return fail("No such account.", 404);
 
-  getDb().prepare("DELETE FROM users WHERE id = ?").run(userId);
+  (await getDb().prepare("DELETE FROM users WHERE id = ?").run(userId));
   return json({ deleted: userId });
 }

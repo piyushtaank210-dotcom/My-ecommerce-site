@@ -24,5 +24,5 @@ export async function GET(request: Request) {
     offset,
   };
 
-  return json(paged(listMessages(query), countMessages(query), page, limit));
+  return json(paged((await listMessages(query)), (await countMessages(query)), page, limit));
 }

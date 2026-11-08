@@ -1,13 +1,13 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { SCHEMA_SQL } from "../src/lib/schema.ts";
+import { SCHEMA_SQL_SQLITE } from "../src/lib/schema.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
 // Ensure all schema tables exist
-db.exec(SCHEMA_SQL);
+db.exec(SCHEMA_SQL_SQLITE);
 
 let failures = 0;
 function check(label, ok, extra = "") {

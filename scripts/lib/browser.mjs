@@ -183,3 +183,32 @@ export const setCheckbox = (name) => `(() => {
   if (!el.checked) el.click();
   return el.checked ? 'CHECKED' : 'FAILED';
 })()`;
+
+/**
+ * Waits for the page to become something.
+ *
+ * The shop's database is a long way off, so a change can take a moment to
+ * come back. Waiting for the thing itself is steadier than waiting a fixed
+ * length of time and hoping.
+ *
+ *   await waitFor(cdp, `location.pathname.startsWith('/order/')`);
+ *
+ * @param cdp        The browser.
+ * @param expression The JavaScript to ask; it should return something truthy
+ *                   when the page has arrived.
+ * @param timeout    How long to keep asking, in milliseconds.
+ * @param every      How long to wait between asks, in milliseconds.
+ */
+export async function waitFor(
+  cdp,
+  expression,
+  { timeout = 30000, every = 300 } = {}
+) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const value = await cdp.evaluate(expression);
+    if (value) return value;
+    await sleep(every);
+  }
+  return null;
+}

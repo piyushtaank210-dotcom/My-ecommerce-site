@@ -65,9 +65,9 @@ export async function GET(request: Request) {
     offset,
   };
 
-  const rows = listAdminProducts(query);
+  const rows = (await listAdminProducts(query));
 
-  return json(paged(rows, countProducts(query), page, limit));
+  return json(paged(rows, (await countProducts(query)), page, limit));
 }
 
 /**
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
   // A body with a name is a new product; anything else is a bulk action.
   if (typeof body.name === "string" && !body.action) {
-    return createProductFromApi(body, guard.user.role, guard.user.id);
+    return (await createProductFromApi(body, guard.user.role, guard.user.id));
   }
 
   const action = String(body.action ?? "");
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     // The list is worked out again here, so the action can never reach a
     // product the caller was not looking at.
     const filters = (body.filters ?? {}) as CatalogueFilters;
-    slugs = getProducts(catalogueQuery(filters)).map((p) => p.slug);
+    slugs = (await getProducts(catalogueQuery(filters))).map((p) => p.slug);
   } else {
     slugs = Array.isArray(body.slugs)
       ? body.slugs.map((s) => String(s).trim()).filter(Boolean)
@@ -154,12 +154,12 @@ export async function POST(request: Request) {
   }
   if (!slugs.length) return fail("Choose at least one product.", 400);
 
-  const result = bulkUpdateProducts(slugs, action as BulkProductAction);
+  const result = (await bulkUpdateProducts(slugs, action as BulkProductAction));
   return json({ changed: result.changed, missing: result.missing });
 }
 
 /** Puts a new product in the catalogue, the way the editor does. */
-function createProductFromApi(
+async function createProductFromApi(
   body: Record<string, unknown>,
   role: "member" | "support" | "admin",
   userId: number
@@ -183,7 +183,7 @@ function createProductFromApi(
     return fail("Enter an MRP.", 400);
   }
 
-  const created = createProduct({
+  const created = (await createProduct({
     slug,
     name,
     brand: body.brand ? String(body.brand) : null,
@@ -224,10 +224,10 @@ function createProductFromApi(
         : null,
     warranty: body.warranty ? String(body.warranty) : null,
     returns: body.returns ? String(body.returns) : null,
-  });
+  }));
 
   if (!created.ok) {
     return fail(created.reason ?? "The product could not be created.", 409);
   }
-  return json(getProduct(created.slug!), 201);
+  return json((await getProduct(created.slug!)), 201);
 }

@@ -117,29 +117,29 @@ function mapHeroSlide(r: Row): HeroSlide {
 
 /* ----------------------------------------------------------------- queries */
 
-export function getHeroSlides(): HeroSlide[] {
+export async function getHeroSlides(): Promise<HeroSlide[]> {
   return (
-    getDb().prepare("SELECT * FROM hero_slides ORDER BY position").all() as Row[]
+    (await getDb().prepare("SELECT * FROM hero_slides ORDER BY position").all()) as Row[]
   ).map(mapHeroSlide);
 }
 
-export function getCategories(): Category[] {
+export async function getCategories(): Promise<Category[]> {
   return (
-    getDb().prepare("SELECT * FROM categories ORDER BY position").all() as Row[]
+    (await getDb().prepare("SELECT * FROM categories ORDER BY position").all()) as Row[]
   ).map(mapCategory);
 }
 
-export function getCategory(slug: string): Category | null {
-  const row = getDb().prepare("SELECT * FROM categories WHERE slug = ?").get(slug) as
+export async function getCategory(slug: string): Promise<Category | null> {
+  const row = (await getDb().prepare("SELECT * FROM categories WHERE slug = ?").get(slug)) as
     | Row
     | undefined;
   return row ? mapCategory(row) : null;
 }
 
-export function getBrands(
+export async function getBrands(
   categorySlug?: string,
   options: { includeUnlisted?: boolean } = {}
-): string[] {
+): Promise<string[]> {
   const db = getDb();
   // The shop only offers brands it actually has on sale; the back office
   // wants every brand in the catalogue, including archived ones.
@@ -147,16 +147,16 @@ export function getBrands(
     ? ""
     : " AND listed = 1 AND status = 'published'";
   const rows = categorySlug
-    ? (db
+    ? ((await db
         .prepare(
           `SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND category_slug = ?${visibility} ORDER BY brand`
         )
-        .all(categorySlug) as Row[])
-    : (db
+        .all(categorySlug)) as Row[])
+    : ((await db
         .prepare(
           `SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL${visibility} ORDER BY brand`
         )
-        .all() as Row[]);
+        .all()) as Row[]);
   return rows.map((r) => str(r.brand));
 }
 
@@ -252,14 +252,14 @@ const SORT_SQL: Record<SortKey, string> = {
 };
 
 /** True when the store has sold anything, so best-selling means something. */
-export function hasSalesData(): boolean {
-  const row = getDb()
+export async function hasSalesData(): Promise<boolean> {
+  const row = (await getDb()
     .prepare(
       `SELECT COUNT(*) n FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
        WHERE o.status != 'cancelled'`
     )
-    .get() as Row | undefined;
+    .get()) as Row | undefined;
   return num(row?.n) > 0;
 }
 
@@ -324,7 +324,7 @@ function buildWhere(query: ProductQuery, omit?: Facet) {
   return { where, params };
 }
 
-export function getProducts(query: ProductQuery = {}): Product[] {
+export async function getProducts(query: ProductQuery = {}): Promise<Product[]> {
   const db = getDb();
   const { where, params } = buildWhere(query);
   const bind = [...params];
@@ -340,26 +340,26 @@ export function getProducts(query: ProductQuery = {}): Product[] {
   }
 
   return (
-    db
+    (await db
       .prepare(
         `SELECT p.*, ${PRODUCT_STOCK_COLUMNS_SQL} FROM products p
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY ${SORT_SQL[query.sort ?? "featured"] ?? SORT_SQL.featured} ${limit} ${offset}`
       )
-      .all(...bind) as Row[]
+      .all(...bind)) as Row[]
   ).map(mapProduct);
 }
 
-export function countProducts(query: ProductQuery = {}): number {
+export async function countProducts(query: ProductQuery = {}): Promise<number> {
   const db = getDb();
   const { where, params } = buildWhere(query);
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT COUNT(*) AS n FROM products p ${
         where.length ? `WHERE ${where.join(" AND ")}` : ""
       }`
     )
-    .get(...params) as Row | undefined;
+    .get(...params)) as Row | undefined;
   return num(row?.n);
 }
 
@@ -381,7 +381,7 @@ export type CatalogueFacets = {
  * `total` on each facet is the "All â€¦" option â€” everything that matches
  * once that filter is taken away.
  */
-export function catalogueFacets(query: ProductQuery = {}): CatalogueFacets {
+export async function catalogueFacets(query: ProductQuery = {}): Promise<CatalogueFacets> {
   const db = getDb();
   const base: ProductQuery = {
     ...query,
@@ -391,15 +391,15 @@ export function catalogueFacets(query: ProductQuery = {}): CatalogueFacets {
     offset: undefined,
   };
 
-  const group = (omit: Facet, key: string) => {
+  const group = async (omit: Facet, key: string) => {
     const { where, params } = buildWhere(base, omit);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT ${key} AS k, COUNT(*) AS n FROM products p
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          GROUP BY k`
       )
-      .all(...params) as Row[];
+      .all(...params)) as Row[];
     const counts: Record<string, number> = {};
     let total = 0;
     for (const r of rows) {
@@ -411,12 +411,15 @@ export function catalogueFacets(query: ProductQuery = {}): CatalogueFacets {
   };
 
   const basis = base.stockBasis === "sellable" ? "sellable" : "product";
-  const stockGroups = group("stock", stockLevelSql(basis));
-
-  const category = group("category", "p.category_slug");
-  const brand = group("brand", "p.brand");
-  const status = group("status", "p.status");
-  const listed = group("listed", "p.listed");
+  // The five counts are asked for together: the database is a long way off,
+  // and asking one at a time makes the page as slow as the sum of them.
+  const [stockGroups, category, brand, status, listed] = await Promise.all([
+    group("stock", stockLevelSql(basis)),
+    group("category", "p.category_slug"),
+    group("brand", "p.brand"),
+    group("status", "p.status"),
+    group("listed", "p.listed"),
+  ]);
 
   return {
     category,
@@ -440,17 +443,21 @@ export function catalogueFacets(query: ProductQuery = {}): CatalogueFacets {
   };
 }
 
-export function getProduct(slug: string): ProductWithVariants | null {
+export async function getProduct(slug: string): Promise<ProductWithVariants | null> {
   const db = getDb();
-  const row = db
-    .prepare(`SELECT p.*, ${PRODUCT_STOCK_COLUMNS_SQL} FROM products p WHERE p.slug = ?`)
-    .get(slug) as Row | undefined;
-  if (!row) return null;
-  const variants = (
+  // The product and its options are asked for together: the database is a
+  // long way off, and asking one at a time makes the page as slow as the
+  // sum of them.
+  const [row, variantRows] = await Promise.all([
+    db
+      .prepare(`SELECT p.*, ${PRODUCT_STOCK_COLUMNS_SQL} FROM products p WHERE p.slug = ?`)
+      .get(slug) as Promise<Row | undefined>,
     db
       .prepare("SELECT * FROM variants WHERE product_slug = ? ORDER BY position")
-      .all(slug) as Row[]
-  ).map(mapVariant);
+      .all(slug) as Promise<Row[]>,
+  ]);
+  if (!row) return null;
+  const variants = variantRows.map(mapVariant);
   return { ...mapProduct(row), variants };
 }
 
@@ -461,31 +468,31 @@ export function getProduct(slug: string): ProductWithVariants | null {
  * table show. A product with no pictures of its own falls back to the
  * picture it carries.
  */
-export function getProductImages(slug: string): GalleryImage[] {
-  const rows = getDb()
+export async function getProductImages(slug: string): Promise<GalleryImage[]> {
+  const rows = (await getDb()
     .prepare(
       "SELECT path, alt FROM product_images WHERE product_slug = ? ORDER BY position, id"
     )
-    .all(slug) as Row[];
+    .all(slug)) as Row[];
   return rows.map((r) => ({
     src: str(r.path),
     alt: strOrNull(r.alt) ?? "",
   }));
 }
 
-export function getRelatedProducts(product: Product, limit = 4): Product[] {
+export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT p.* FROM products p
          WHERE p.slug != ? AND p.category_slug IS ? AND p.listed = 1
            AND p.status = 'published'
          ORDER BY p.rating DESC LIMIT ?`
       )
-      .all(product.slug, product.category_slug, limit) as Row[]
+      .all(product.slug, product.category_slug, limit)) as Row[]
   ).map(mapProduct);
 }
 
-export function getDiscountedProducts(limit = 8): Product[] {
-  return getProducts({ sort: "discount", limit });
+export async function getDiscountedProducts(limit = 8): Promise<Product[]> {
+  return (await getProducts({ sort: "discount", limit }));
 }

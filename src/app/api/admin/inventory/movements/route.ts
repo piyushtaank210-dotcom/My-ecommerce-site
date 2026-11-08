@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     : "all";
 
   const query = { q, productSlug, type, limit, offset };
-  const rows = listMovements(query);
+  const rows = (await listMovements(query));
 
-  return json(paged(rows, countMovements({ q, productSlug, type }), page, limit));
+  return json(paged(rows, (await countMovements({ q, productSlug, type })), page, limit));
 }

@@ -16,7 +16,7 @@ export async function POST(
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const result = duplicateProduct(slug);
+  const result = (await duplicateProduct(slug));
 
   if (!result.ok) {
     return fail(result.reason ?? "That product could not be copied.", 404);

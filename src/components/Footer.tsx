@@ -21,13 +21,20 @@ const PROMISES = [
   },
 ];
 
-export function Footer() {
+export async function Footer() {
   // The categories the shop actually has something in. A category that is
   // empty — one the store is getting ready for — is not a link yet.
+  //
+  // The two are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [products, allCategories] = await Promise.all([
+    getProducts(),
+    getCategories(),
+  ]);
   const stocked = new Set(
-    getProducts().map((p) => p.category_slug).filter(Boolean)
+    products.map((p) => p.category_slug).filter(Boolean)
   );
-  const categories = getCategories().filter((c) => stocked.has(c.slug));
+  const categories = allCategories.filter((c) => stocked.has(c.slug));
 
   return (
     <footer className="mt-20 border-t border-gray-200 bg-gray-50">

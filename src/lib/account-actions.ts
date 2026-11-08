@@ -226,7 +226,7 @@ export async function makeDefaultAddressAction(
 
 export async function deleteAccountAction(): Promise<void> {
   const user = await requireUser();
-  getDb().prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  (await getDb().prepare("DELETE FROM users WHERE id = ?").run(user.id));
   await endSession();
   revalidatePath("/", "layout");
   redirect("/");

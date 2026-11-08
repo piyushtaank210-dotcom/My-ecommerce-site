@@ -38,8 +38,8 @@ export default async function AdminOrdersPage({
     offset: (page - 1) * PER_PAGE,
   };
 
-  const orders = listOrders(query);
-  const total = countOrders(query);
+  const orders = (await listOrders(query));
+  const total = (await countOrders(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

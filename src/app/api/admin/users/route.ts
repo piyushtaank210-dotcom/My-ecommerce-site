@@ -26,5 +26,5 @@ export async function GET(request: Request) {
     offset,
   };
 
-  return json(paged(listCustomers(query), countCustomers(query), page, limit));
+  return json(paged((await listCustomers(query)), (await countCustomers(query)), page, limit));
 }

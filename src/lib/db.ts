@@ -1,10 +1,14 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
-import { DatabaseSync } from "node:sqlite";
-import { join } from "node:path";
-import { existsSync, copyFileSync, mkdirSync } from "node:fs";
-import { SCHEMA_SQL, SCHEMA_SQL_SQLITE, type Dialect } from "./schema";
-import { applyMigrations } from "./migrations";
+// The extension matters: this file is imported by the migration script,
+// which runs on plain Node rather than through Next's bundler, and Node
+// will not guess that "./schema" means "./schema.ts".
+import { type Dialect } from "./schema.ts";
+import { databaseUrl, sslOption } from "./database-url.ts";
+
+// The connection string lives in its own file, so that it is one place to
+// find and one place to change.
+export { databaseUrl };
 
 /**
  * The shop's database: PostgreSQL.
@@ -35,21 +39,6 @@ import { applyMigrations } from "./migrations";
 declare global {
   // eslint-disable-next-line no-var
   var __pfPool: Pool | undefined;
-  // eslint-disable-next-line no-var
-  var __pfSqlite: DatabaseSync | undefined;
-}
-
-/** The connection string of the shop's database. */
-export function databaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      "DATABASE_URL is not set. The shop needs a PostgreSQL database — " +
-        "set DATABASE_URL in .env.local, for example " +
-        "postgresql://postgres:postgres@localhost:5432/consoleseller"
-    );
-  }
-  return url;
 }
 
 /**
@@ -61,22 +50,15 @@ export function databaseUrl(): string {
  */
 export function getPool(): Pool {
   if (!globalThis.__pfPool) {
+    const url = databaseUrl();
     globalThis.__pfPool = new Pool({
-      connectionString: databaseUrl(),
+      connectionString: url,
       max: Number(process.env.DATABASE_POOL_MAX ?? 10),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 15_000,
-      // Hosted PostgreSQL — Neon, Supabase, RDS — wants the connection
-      // encrypted. A PostgreSQL running on the same machine does not, so
-      // the choice is made by DATABASE_SSL rather than guessed at.
-      ssl:
-        process.env.DATABASE_SSL === "require"
-          ? { rejectUnauthorized: false }
-          : process.env.DATABASE_SSL === "disable"
-            ? undefined
-            : process.env.NODE_ENV === "production"
-              ? { rejectUnauthorized: false }
-              : undefined,
+      // Whether the connection is encrypted is decided by the connection
+      // string itself, and by DATABASE_SSL when it is set.
+      ssl: sslOption(url),
     });
   }
   return globalThis.__pfPool;
@@ -131,8 +113,31 @@ export function toPostgres(sql: string): string {
 
   return out
     // SQLite's own clock.
-    .replace(/datetime\('now'\)/gi, "now()")
-    .replace(/date\('now'\)/gi, "current_date");
+    //
+    // The shop keeps its timestamps as text, in one format, so that they
+    // sort as they are — so the time a query asks for has to be text in
+    // that same format too, or the comparison has nothing to compare.
+    // `shop_now()` is the shop's own clock, and it is the same format.
+    .replace(
+      /datetime\('now'\s*,\s*'([^']+)'\)/gi,
+      (_m, mod) =>
+        `to_char(now() AT TIME ZONE 'UTC' + interval '${mod}', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`
+    )
+    .replace(/datetime\('now'\)/gi, "shop_now()")
+    .replace(/date\('now'\)/gi, "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD')")
+    // SQLite's `LIKE` ignores the case of the letters; PostgreSQL's does
+    // not, so the search has to ask for the same thing by name.
+    .replace(/\bLIKE\s+\$(\d+)/gi, (_, n) => `ILIKE $${n}`)
+    // SQLite's `COLLATE NOCASE` is a comparison that ignores the case of
+    // the letters. PostgreSQL spells that by folding both sides.
+    .replace(
+      /(\w+)\s*=\s*\$(\d+)\s+COLLATE\s+NOCASE/gi,
+      (_, col, n) => `lower(${col}) = lower($${n})`
+    )
+    // SQLite's `IS` is a comparison that treats two nulls as equal.
+    // PostgreSQL spells that `IS NOT DISTINCT FROM`. The placeholder has
+    // already become a number by this point, so it is matched here.
+    .replace(/\bIS\s+\$(\d+)/gi, (_, n) => `IS NOT DISTINCT FROM $${n}`);
 }
 
 /** The result of a statement, in the shape the shop's code expects. */
@@ -220,11 +225,13 @@ function handleOn(client: PoolClient, isTx: boolean): Db {
     prepare(sql: string): Prepared {
       const text = toPostgres(sql);
       return {
-        async all<T = QueryResultRow>(...params: unknown[]): Promise<T[]> {
+        async all<T extends QueryResultRow = QueryResultRow>(
+          ...params: unknown[]
+        ): Promise<T[]> {
           const result = await client.query<T>(text, params as never[]);
           return result.rows;
         },
-        async get<T = QueryResultRow>(
+        async get<T extends QueryResultRow = QueryResultRow>(
           ...params: unknown[]
         ): Promise<T | undefined> {
           const result = await client.query<T>(text, params as never[]);
@@ -253,109 +260,16 @@ function handleOn(client: PoolClient, isTx: boolean): Db {
 }
 
 /**
- * Whether the shop is running on PostgreSQL.
- *
- * PostgreSQL is the shop's database. The SQLite file is what the shop
- * kept its data in before, and it is still here for a machine that has
- * no PostgreSQL to point at — the shop runs on it exactly as it always
- * did. With DATABASE_URL set, the shop runs on PostgreSQL instead.
- */
-export function isPostgres(): boolean {
-  return Boolean(process.env.DATABASE_URL);
-}
-
-/**
- * Where the SQLite file lives, for a machine without PostgreSQL.
- */
-function resolveSqlitePath(): string {
-  const configured = process.env.DATABASE_PATH;
-  if (configured) return configured;
-
-  const defaultDir = join(process.cwd(), "data");
-  if (!existsSync(defaultDir)) {
-    try {
-      mkdirSync(defaultDir, { recursive: true });
-    } catch {
-      // directory creation handled by OS or exists
-    }
-  }
-  return join(defaultDir, "store.db");
-}
-
-/**
- * The SQLite handle, for a machine without PostgreSQL.
- *
- * It is the same shape as the PostgreSQL one, and every method is a
- * promise, so the shop's code does not have to care which one it has.
- */
-function sqliteDb(): Db {
-  if (!globalThis.__pfSqlite) {
-    const db = new DatabaseSync(resolveSqlitePath());
-    globalThis.__pfSqlite = db;
-
-    // The schema is applied first, so the tables are there for the very
-    // first query. The migrations run behind it: they add the columns
-    // that predate the schema, and they are safe to run at any time.
-    db.exec(SCHEMA_SQL_SQLITE);
-    db.exec("PRAGMA journal_mode = WAL;");
-    db.exec("PRAGMA busy_timeout = 5000;");
-    db.exec("PRAGMA wal_autocheckpoint = 16;");
-
-    const bootstrap = buildSqliteAdapter(db);
-    void applyMigrations(bootstrap).catch((e) => {
-      console.warn("Database initialization notice:", e);
-    });
-  }
-
-  return buildSqliteAdapter(globalThis.__pfSqlite);
-}
-
-/**
- * The SQLite handle, for a machine without PostgreSQL.
- *
- * It is the same shape as the PostgreSQL one, and every method is a
- * promise, so the shop's code does not have to care which one it has.
- */
-function buildSqliteAdapter(db: DatabaseSync): Db {
-  return {
-    prepare(sql: string): Prepared {
-      const statement = db.prepare(sql);
-      return {
-        all(...params: unknown[]): any {
-          return statement.all(...params);
-        },
-        get(...params: unknown[]): any {
-          return statement.get(...params);
-        },
-        run(...params: unknown[]): any {
-          const info = statement.run(...params);
-          return {
-            changes: Number(info.changes ?? 0),
-            lastInsertRowid: Number(info.lastInsertRowid),
-          };
-        },
-      };
-    },
-    exec(sql: string): any {
-      db.exec(sql);
-    },
-    get isTransaction(): boolean {
-      return db.isTransaction;
-    },
-    get dialect(): Dialect {
-      return "sqlite";
-    },
-  };
-}
-
-/**
  * The shop's handle on the database.
  *
  * Outside a transaction this is a handle on the pool. Inside one it is a
  * handle on that transaction's connection.
  */
 export function getDb(): Db {
-  if (!isPostgres()) return sqliteDb();
+  // The connection string is asked for first, so that a shop that has not
+  // been told where its database is says so at once rather than at the
+  // first query.
+  databaseUrl();
 
   const current = transaction.getStore();
   if (current) return handleOn(current, true);
@@ -363,11 +277,13 @@ export function getDb(): Db {
     prepare(sql: string): Prepared {
       const text = toPostgres(sql);
       return {
-        async all<T = QueryResultRow>(...params: unknown[]): Promise<T[]> {
+        async all<T extends QueryResultRow = QueryResultRow>(
+          ...params: unknown[]
+        ): Promise<T[]> {
           const result = await getPool().query<T>(text, params as never[]);
           return result.rows;
         },
-        async get<T = QueryResultRow>(
+        async get<T extends QueryResultRow = QueryResultRow>(
           ...params: unknown[]
         ): Promise<T | undefined> {
           const result = await getPool().query<T>(text, params as never[]);
@@ -388,6 +304,9 @@ export function getDb(): Db {
     },
     get isTransaction(): boolean {
       return false;
+    },
+    get dialect(): Dialect {
+      return "postgres";
     },
   };
 }

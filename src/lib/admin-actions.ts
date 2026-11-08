@@ -252,13 +252,13 @@ export async function saveProductAction(
     .replace(/^-|-$/g, "");
 
   const db = getDb();
-  const existing = db
+  const existing = (await db
     .prepare(
       `SELECT p.slug, p.stock,
               (SELECT COUNT(*) FROM variants v WHERE v.product_slug = p.slug) AS option_count
        FROM products p WHERE p.slug = ?`
     )
-    .get(slug) as
+    .get(slug)) as
     | { slug?: string; stock?: number; option_count?: number }
     | undefined;
 
@@ -267,8 +267,8 @@ export async function saveProductAction(
   // The subcategory and the brand are kept in lists the back office
   // manages. A name the administrator typed that is not in the list yet is
   // added to it, so the list never falls behind the catalogue.
-  const subcategory = resolveSubcategory(d.category, d.subcategory);
-  const brand = ensureBrand(d.brand);
+  const subcategory = (await resolveSubcategory(d.category, d.subcategory));
+  const brand = (await ensureBrand(d.brand));
 
   // The purchase cost is what the store paid for the thing. Only an
   // administrator ever sets it, and nobody else can read it.
@@ -279,7 +279,7 @@ export async function saveProductAction(
     // The SKU. Left blank, it is generated from the slug; typed in, it is
     // normalised and checked against every other product.
     let sku = normalizeSku(d.sku ?? "");
-    if (sku && skuTakenByAnother(sku, slug)) {
+    if (sku && (await skuTakenByAnother(sku, slug))) {
       return {
         ok: false,
         errors: { sku: "Another product already uses this SKU." },
@@ -287,12 +287,12 @@ export async function saveProductAction(
       };
     }
     if (!sku) {
-      sku = uniqueSku(skuFromSlug(slug), (candidate) =>
-        skuTakenByAnother(candidate, slug)
-      );
+      sku = (await uniqueSku(skuFromSlug(slug), async (candidate) =>
+        (await skuTakenByAnother(candidate, slug))
+      ));
     }
 
-    updateProduct(slug, {
+    (await updateProduct(slug, {
       name: d.name,
       brand: brand || null,
       subcategory: subcategory || null,
@@ -317,21 +317,21 @@ export async function saveProductAction(
       packageHeight: d.packageHeight ?? null,
       warranty: d.warranty || null,
       returns: d.returns || null,
-    });
+    }));
 
     // A product with options is stocked by its options, each counted
     // separately, so its own count is left alone here. The options are
     // managed on the inventory page.
     const hasOptions = (existing.option_count ?? 0) > 0;
     if (!hasOptions && d.stock !== (existing.stock ?? 0)) {
-      const moved = adjustStock({
+      const moved = (await adjustStock({
         productSlug: slug,
         variantId: null,
         mode: "set",
         quantity: d.stock,
         reason: "Stock set in the product editor",
         userId: user.id,
-      });
+      }));
       if (!moved.ok) {
         return {
           ok: false,
@@ -341,7 +341,7 @@ export async function saveProductAction(
       }
     }
   } else {
-    const created = createProduct({
+    const created = (await createProduct({
       slug,
       name: d.name,
       brand: brand || null,
@@ -369,7 +369,7 @@ export async function saveProductAction(
       packageHeight: d.packageHeight ?? null,
       warranty: d.warranty || null,
       returns: d.returns || null,
-    });
+    }));
 
     if (!created.ok) {
       return {
@@ -383,20 +383,20 @@ export async function saveProductAction(
   // The number at or below which this counts as low. It changes no stock,
   // so it writes no history.
   if (d.lowStockThreshold !== undefined) {
-    setLowStockThreshold(slug, null, d.lowStockThreshold);
+    (await setLowStockThreshold(slug, null, d.lowStockThreshold));
   }
 
   // What the form asked for. "draft" keeps it off the shop, "publish" puts
   // it on sale, and "keep" leaves the product where it was.
   const intent = String(formData.get("intent") ?? "").trim();
   if (intent === "draft") {
-    setProductStatus(slug, "draft");
+    (await setProductStatus(slug, "draft"));
   } else if (intent === "publish") {
-    publishProduct(slug);
+    (await publishProduct(slug));
   } else if (!existing) {
     // A brand new product with no instruction is a draft until somebody
     // says otherwise.
-    setProductStatus(slug, "draft");
+    (await setProductStatus(slug, "draft"));
   }
 
   revalidatePath("/", "layout");
@@ -428,7 +428,7 @@ export async function toggleProductListingAction(
     return { ok: false, message: "You cannot change the catalogue." };
   }
 
-  setProductListed(slug, listed);
+  (await setProductListed(slug, listed));
   revalidatePath("/", "layout");
   revalidatePath("/admin/products");
   return {
@@ -459,9 +459,9 @@ export async function setProductStatusAction(
   }
 
   if (next === "published") {
-    publishProduct(slug);
+    (await publishProduct(slug));
   } else {
-    setProductStatus(slug, next as ProductStatus);
+    (await setProductStatus(slug, next as ProductStatus));
   }
 
   revalidatePath("/", "layout");
@@ -485,7 +485,7 @@ export async function archiveProductAction(
     return { ok: false, message: "You cannot change the catalogue." };
   }
 
-  if (!archiveProduct(slug)) {
+  if (!(await archiveProduct(slug))) {
     return { ok: false, message: "That product no longer exists." };
   }
 
@@ -507,7 +507,7 @@ export async function restoreProductAction(
     return { ok: false, message: "You cannot change the catalogue." };
   }
 
-  if (!publishProduct(slug)) {
+  if (!(await publishProduct(slug))) {
     return { ok: false, message: "That product no longer exists." };
   }
 
@@ -531,7 +531,7 @@ export async function duplicateProductAction(
     return { ok: false, message: "You cannot change the catalogue." };
   }
 
-  const result = duplicateProduct(slug);
+  const result = (await duplicateProduct(slug));
   if (!result.ok) {
     return { ok: false, message: result.reason ?? "That product could not be copied." };
   }
@@ -586,7 +586,7 @@ export async function bulkProductAction(
       status: String(formData.get("status") ?? ""),
       listed: String(formData.get("listed") ?? ""),
     };
-    slugs = getProducts(catalogueQuery(filters)).map((p) => p.slug);
+    slugs = (await getProducts(catalogueQuery(filters))).map((p) => p.slug);
   } else {
     slugs = formData
       .getAll("slugs")
@@ -598,10 +598,10 @@ export async function bulkProductAction(
     return { ok: false, message: "Choose at least one product." };
   }
 
-  const { changed, missing } = bulkUpdateProducts(
+  const { changed, missing } = (await bulkUpdateProducts(
     slugs,
     action as BulkProductAction
-  );
+  ));
 
   revalidatePath("/", "layout");
   revalidatePath("/admin/products");
@@ -644,7 +644,7 @@ export async function deleteProductAction(
     };
   }
 
-  const result = deleteProduct(slug);
+  const result = (await deleteProduct(slug));
   if (!result.deleted) {
     return { ok: false, message: result.reason ?? "That product could not be deleted." };
   }
@@ -678,7 +678,7 @@ export async function setOrderStatusAction(
     return { ok: false, message: "Pick a valid status." };
   }
 
-  const result = applyOrderStatus(id, status as OrderStatus, user.id);
+  const result = (await applyOrderStatus(id, status as OrderStatus, user.id));
   if (!result.ok) {
     return { ok: false, message: result.message ?? "That order could not be changed." };
   }
@@ -738,7 +738,7 @@ export async function adjustStockAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  const result = adjustStock({
+  const result = (await adjustStock({
     productSlug: parsed.data.productSlug,
     variantId: parsed.data.variantId || null,
     mode: parsed.data.mode,
@@ -746,7 +746,7 @@ export async function adjustStockAction(
     reason: parsed.data.reason,
     note: parsed.data.note ?? null,
     userId: user.id,
-  });
+  }));
 
   if (!result.ok) {
     return { ok: false, message: result.reason };
@@ -794,7 +794,7 @@ export async function setStockThresholdAction(
     return { ok: false, message: "Enter a whole number of units." };
   }
 
-  if (!setLowStockThreshold(productSlug, variantId, threshold)) {
+  if (!(await setLowStockThreshold(productSlug, variantId, threshold))) {
     return { ok: false, message: "That product no longer exists." };
   }
 
@@ -834,7 +834,7 @@ export async function resolveStockCheckAction(
   }
   if (!reason) return { ok: false, message: "Say why." };
 
-  const result = resolveStockCheck(orderId, action, reason, user.id);
+  const result = (await resolveStockCheck(orderId, action, reason, user.id));
   if (!result.ok) return { ok: false, message: result.message };
 
   revalidatePath("/admin/inventory");
@@ -894,7 +894,7 @@ export async function deleteUserAction(
     return { ok: false, message: "You cannot delete your own account." };
   }
 
-  const info = getDb().prepare("DELETE FROM users WHERE id = ?").run(id);
+  const info = (await getDb().prepare("DELETE FROM users WHERE id = ?").run(id));
   if (!info.changes) return { ok: false, message: "That account no longer exists." };
 
   revalidatePath("/admin/users");
@@ -946,7 +946,7 @@ export async function setMessageStatusAction(
   }
 
   const closed = status === "closed" || status === "answered";
-  getDb()
+  (await getDb()
     .prepare(
       `UPDATE contact_messages
        SET status = ?, handled_by = ?, handled_at = ?
@@ -957,7 +957,7 @@ export async function setMessageStatusAction(
       user.id,
       closed ? new Date().toISOString() : null,
       id
-    );
+    ));
 
   revalidatePath("/admin/messages");
   return { ok: true, message: "Enquiry updated." };

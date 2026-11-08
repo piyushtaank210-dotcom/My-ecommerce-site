@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export type FilterOption = { value: string; label: string };
 
@@ -21,6 +21,7 @@ export function PanelFilter({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
 
   // A value that is not on the list — a filter that no longer exists, or one
   // reached with a hand-written link — would leave the dropdown blank. It
@@ -35,7 +36,7 @@ export function PanelFilter({
     else search.delete(name);
     search.delete("page");
     const qs = search.toString();
-    router.push(qs ? `?${qs}` : "?");
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   return (

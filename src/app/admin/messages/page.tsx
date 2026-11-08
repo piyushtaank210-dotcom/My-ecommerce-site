@@ -48,8 +48,8 @@ export default async function AdminMessagesPage({
     offset: (page - 1) * PER_PAGE,
   };
 
-  const messages = listMessages(query);
-  const total = countMessages(query);
+  const messages = (await listMessages(query));
+  const total = (await countMessages(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

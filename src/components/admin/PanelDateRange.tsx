@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /**
  * The date range on a back-office listing. It writes to the URL so the
@@ -15,6 +15,7 @@ export function PanelDateRange({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
 
   function push(nextFrom: string, nextTo: string) {
     const search = new URLSearchParams(params.toString());
@@ -24,7 +25,7 @@ export function PanelDateRange({
     else search.delete("to");
     search.delete("page");
     const qs = search.toString();
-    router.push(qs ? `?${qs}` : "?");
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   return (

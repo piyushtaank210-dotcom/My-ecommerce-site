@@ -132,7 +132,7 @@ export async function addToCartAction(
   variantId: string | null,
   quantity: number
 ): Promise<{ ok: boolean; message: string }> {
-  const product = getProduct(productSlug);
+  const product = (await getProduct(productSlug));
   if (!product) return { ok: false, message: "Product not found." };
 
   const variant = variantId
@@ -150,7 +150,7 @@ export async function addToCartAction(
 
   // A shopper may only buy what is on the shelf — unless the store takes
   // backorders, in which case the missing units are ordered in.
-  const allowBackorder = backordersAllowed(getBackorderPolicy());
+  const allowBackorder = backordersAllowed((await getBackorderPolicy()));
 
   if (available <= 0 && !allowBackorder) {
     return { ok: false, message: "That option is out of stock." };
@@ -162,25 +162,25 @@ export async function addToCartAction(
   const sessionId = await ensureSessionId();
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare(
       `SELECT id, quantity FROM cart_items
        WHERE session_id = ? AND product_slug = ? AND (variant_id IS ? OR variant_id = ?)`
     )
-    .get(sessionId, productSlug, variantId, variantId) as
+    .get(sessionId, productSlug, variantId, variantId)) as
     | { id: number; quantity: number }
     | undefined;
 
   if (existing) {
-    db.prepare("UPDATE cart_items SET quantity = ? WHERE id = ?").run(
+    (await db.prepare("UPDATE cart_items SET quantity = ? WHERE id = ?").run(
       Math.min(existing.quantity + qty, allowBackorder ? 10 : available),
       existing.id
-    );
+    ));
   } else {
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO cart_items (session_id, product_slug, variant_id, quantity)
        VALUES (?,?,?,?)`
-    ).run(sessionId, productSlug, variantId, qty);
+    ).run(sessionId, productSlug, variantId, qty));
   }
 
   revalidatePath("/", "layout");
@@ -195,14 +195,14 @@ export async function updateCartAction(
   if (!sessionId) return;
   const db = getDb();
   if (quantity <= 0) {
-    db.prepare("DELETE FROM cart_items WHERE id = ? AND session_id = ?").run(
+    (await db.prepare("DELETE FROM cart_items WHERE id = ? AND session_id = ?").run(
       lineId,
       sessionId
-    );
+    ));
   } else {
-    db.prepare(
+    (await db.prepare(
       "UPDATE cart_items SET quantity = ? WHERE id = ? AND session_id = ?"
-    ).run(Math.min(quantity, 10), lineId, sessionId);
+    ).run(Math.min(quantity, 10), lineId, sessionId));
   }
   revalidatePath("/", "layout");
 }
@@ -210,9 +210,9 @@ export async function updateCartAction(
 export async function removeFromCartAction(lineId: number): Promise<void> {
   const sessionId = await readSessionId();
   if (!sessionId) return;
-  getDb()
+  (await getDb()
     .prepare("DELETE FROM cart_items WHERE id = ? AND session_id = ?")
-    .run(lineId, sessionId);
+    .run(lineId, sessionId));
   revalidatePath("/", "layout");
 }
 
@@ -360,7 +360,7 @@ export async function placeOrderAction(
 
   const sessionId = await readSessionId();
   if (sessionId) {
-    getDb().prepare("DELETE FROM cart_items WHERE session_id = ?").run(sessionId);
+    (await getDb().prepare("DELETE FROM cart_items WHERE session_id = ?").run(sessionId));
   }
 
   // "Save this address" — keep it on the account for next time.

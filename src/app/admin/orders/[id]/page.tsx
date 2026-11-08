@@ -21,12 +21,12 @@ export default async function AdminOrderDetailPage({
 }) {
   const user = await requirePermission("orders.view");
   const { id } = await params;
-  const order = getOrder(id);
+  const order = (await getOrder(id));
   if (!order) notFound();
 
   const customer = order.user_id ? await getUserById(order.user_id) : null;
-  const returns = getReturnRequestsForOrder(order.id);
-  const cancellation = getCancellationForOrder(order.id);
+  const returns = (await getReturnRequestsForOrder(order.id));
+  const cancellation = (await getCancellationForOrder(order.id));
 
   return (
     <div className="mx-auto max-w-[1100px]">

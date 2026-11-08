@@ -56,7 +56,7 @@ export default async function CustomerReturnDetailPage({
 }) {
   const { id } = await params;
   const user = await getCurrentUser();
-  const ret = getReturnRequest(id);
+  const ret = (await getReturnRequest(id));
 
   if (!ret) notFound();
 
@@ -66,13 +66,15 @@ export default async function CustomerReturnDetailPage({
   }
 
   // Enrich items with product thumbnail images
-  const itemsWithImages = ret.items.map((it) => {
-    const product = getProduct(it.product_slug);
-    return {
-      ...it,
-      image: product?.image ?? null,
-    };
-  });
+  const itemsWithImages = await Promise.all(
+    ret.items.map(async (it) => {
+      const product = (await getProduct(it.product_slug));
+      return {
+        ...it,
+        image: product?.image ?? null,
+      };
+    })
+  );
 
   const isTerminalNegative = ret.status === "rejected" || ret.status === "cancelled";
 

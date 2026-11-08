@@ -28,6 +28,8 @@
     "setup": "npm run images && npm run seed",
     "e2e": "node scripts/e2e.mjs",
     "check:admin": "node scripts/check-admin.mjs",
+    "check:database": "node scripts/check-database.mjs",
+    "check:async": "node scripts/check-async.mjs",
     "check:catalogue": "node scripts/check-catalogue.mjs",
     "check:inventory": "node scripts/check-inventory.mjs",
     "check:variations": "node scripts/check-variations.mjs",

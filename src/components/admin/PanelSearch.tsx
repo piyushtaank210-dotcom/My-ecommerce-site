@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 
@@ -17,6 +17,7 @@ export function PanelSearch({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
   const fromUrl = params.get(param) ?? "";
   const [value, setValue] = useState(fromUrl);
 
@@ -33,7 +34,7 @@ export function PanelSearch({
     else search.delete(param);
     search.delete("page");
     const qs = search.toString();
-    router.push(qs ? `?${qs}` : "?");
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   return (

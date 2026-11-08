@@ -44,8 +44,8 @@ export default async function AdminInventoryHistoryPage({
     offset: (page - 1) * PER_PAGE,
   };
 
-  const movements = listMovements(query);
-  const total = countMovements({ q: q || undefined, type });
+  const movements = (await listMovements(query));
+  const total = (await countMovements({ q: q || undefined, type }));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

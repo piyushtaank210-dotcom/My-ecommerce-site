@@ -36,19 +36,19 @@ export default async function AdminReturnDetailPage({
 }) {
   await requirePermission("returns.view");
   const { id } = await params;
-  const ret = getReturnRequest(id);
+  const ret = (await getReturnRequest(id));
   if (!ret) notFound();
 
-  const order = getOrder(ret.order_id);
+  const order = (await getOrder(ret.order_id));
 
   // When the product was delivered decides the last day a return could
   // have been asked for, and whether that day has gone.
-  const deadline = calculateReturnDeadline(order?.delivered_at ?? null);
+  const deadline = (await calculateReturnDeadline(order?.delivered_at ?? null));
   const itemValue = ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
 
   // What could be sent in place of what came back, and what is on the shelf.
   const candidates =
-    ret.type === "replacement" ? replacementCandidates(ret.id) : [];
+    ret.type === "replacement" ? (await replacementCandidates(ret.id)) : [];
 
   // The rules this claim is judged against, and what has arrived against
   // them. A claim is never turned away only because a photograph or an

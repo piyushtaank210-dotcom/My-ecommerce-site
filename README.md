@@ -2,7 +2,7 @@
 
 Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 5-day return, replacement & refund management system.
 
-**Stack:** Next.js 16 (App Router, Turbopack, React 19) · Tailwind CSS v4 · SQLite via Node's native `node:sqlite` · Zod. Clean, zero external runtime infrastructure dependencies, fast local setup.
+**Stack:** Next.js 16 (App Router, Turbopack, React 19) · Tailwind CSS v4 · PostgreSQL via `pg` · Zod.
 
 ---
 
@@ -12,15 +12,34 @@ Official repository for **ConsoleSeller** ([consoleseller.in](https://consolesel
 # 1. Install dependencies
 npm install
 
-# 2. Setup product photos and initialize database
+# 2. Setup product photos and seed the SQLite file
 npm run setup
 
-# 3. Start local development server
+# 3. Move the catalogue into PostgreSQL
+npm run db:migrate
+
+# 4. Start local development server
 npm run dev
 # Open http://localhost:3000
 ```
 
-`npm run setup` downloads product images and seeds the database with the initial catalogue. To re-seed at any point, run `npm run seed`.
+`npm run setup` downloads product images and seeds `data/store.db` with the initial catalogue. `npm run db:migrate` then moves that into PostgreSQL — the shop's database — and is safe to run again: the tables are emptied first, so a second run leaves the same data rather than two copies of it.
+
+To re-seed the SQLite file at any point, run `npm run seed` and then `npm run db:migrate` again.
+
+### The database
+
+The shop's data lives in one PostgreSQL database, which every instance of the shop reads and writes — so an order placed on one instance is on the next one too. The connection string is in [`src/lib/database-url.ts`](src/lib/database-url.ts), so a deployment works from the repository alone; `DATABASE_URL` in the environment still wins when it is set, which is how a different database is pointed at.
+
+> The connection string is a secret. It is in the repository, so it is in the repository's history too. If the repository is ever public, rotate the password in the database console and update that one file.
+
+The SQLite file in `data/` is what the shop kept its data in before. It is now only the seed — the file the migration reads from — and the scripts that check the catalogue read it directly.
+
+To check the database is there and holds together:
+
+```bash
+npm run check:database
+```
 
 The seed creates initial staff accounts for the back office:
 
@@ -845,10 +864,13 @@ data/
   hero-images.json      ← hero image key → public path
   image-credits.json    ← author/licence for every Commons photograph
   ATTRIBUTION.md        ← credits for every Commons photograph
-  store.db              ← SQLite database (generated, gitignored)
+  store.db              ← the SQLite file the seed writes and the migration reads
 scripts/
   fetch-images.mjs      ← downloads the product photography
-  seed.mjs              ← loads catalog.json + hero.json into SQLite
+  seed.mjs              ← loads catalog.json + hero.json into the SQLite file
+  migrate-to-postgres.mjs ← moves that file into PostgreSQL, the shop's database
+  check-database.mjs    ← checks the database is there and holds together
+  check-async.mjs       ← checks every query is waited for
   sync-hero.mjs         ← refreshes just the hero slides
   sync-categories.mjs   ← refreshes just the category rows
   sync-variants.mjs     ← refreshes what each product varies by
@@ -923,7 +945,7 @@ If the stylesheet is still stale after a restart, delete the `.next` cache.
 
 ### ⚠️ Dev gotcha: a client component cannot import the database
 
-`node:sqlite` is external on the server, but it cannot be pulled into a
+`src/lib/db.ts` reaches the database driver, which cannot be pulled into a
 browser bundle. A client component that imports a module which reaches
 `src/lib/db.ts` does not fail at build time — Turbopack panics when it tries
 to write the page, and the page returns a 500:
@@ -986,7 +1008,5 @@ This is a **demonstration store**. The commerce flows are complete, but:
 
 ### Taking it further
 - Add Stripe/Razorpay to `src/lib/actions.ts` and create the order from the webhook.
-- Swap `node:sqlite` for Postgres by changing `src/lib/db.ts` — the query layer
-  is plain SQL and the schema is portable.
 - Move the enquiries queue into a support inbox when the support role is
   settled — the `contact_messages.status` column is already there for it.

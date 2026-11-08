@@ -17,7 +17,7 @@ export default async function CartPage() {
   const cart = await getCart();
 
   if (cart.lines.length === 0) {
-    const suggestions = getProducts({ sort: "discount", limit: 4 });
+    const suggestions = (await getProducts({ sort: "discount", limit: 4 }));
     return (
       <div className="container-x py-10">
         <Breadcrumbs items={[{ label: "Cart" }]} />

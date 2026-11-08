@@ -70,10 +70,14 @@ const CARD_ART: Record<string, { hero: string; support: string[] }> = {
   },
 };
 
-export default function HomePage() {
-  const featured = getProducts({ limit: 5 });
-  const heroSlides = getHeroSlides();
-  const allProducts = getProducts();
+export default async function HomePage() {
+  // The three are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [allProducts, heroSlides, allCategories] = await Promise.all([
+    getProducts(),
+    getHeroSlides(),
+    getCategories(),
+  ]);
 
   // Only the categories the shop has something in. A category the store is
   // getting ready for — accessories, bundles — is not a tile until there is
@@ -81,7 +85,11 @@ export default function HomePage() {
   const stocked = new Set(
     allProducts.map((p) => p.category_slug).filter(Boolean)
   );
-  const categories = getCategories().filter((c) => stocked.has(c.slug));
+  const categories = allCategories.filter((c) => stocked.has(c.slug));
+
+  // The best sellers are the first of the same list, so they are taken from
+  // it rather than asked for a second time.
+  const featured = allProducts.slice(0, 5);
 
   const productBySlug: Record<string, Product> = {};
   for (const p of allProducts) productBySlug[p.slug] = p;

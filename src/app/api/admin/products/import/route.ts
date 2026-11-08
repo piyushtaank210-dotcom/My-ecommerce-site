@@ -25,11 +25,11 @@ export async function POST(request: Request) {
   }
 
   const text = await file.text();
-  const preview = previewImport(
+  const preview = (await previewImport(
     file.name || "catalogue.csv",
     text,
     guard.user.role === "admin"
-  );
+  ));
 
   return json(preview);
 }

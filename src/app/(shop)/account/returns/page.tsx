@@ -16,16 +16,20 @@ export const metadata = { title: "My Returns & Replacements — ConsoleSeller" }
 
 export default async function AccountReturnsPage() {
   const user = await requireUser("/account/returns");
-  const rawReturns = getReturnRequestsForUser(user.id);
+  const rawReturns = (await getReturnRequestsForUser(user.id));
 
   // Enrich items with images
-  const returns = rawReturns.map((ret) => ({
-    ...ret,
-    items: ret.items.map((it) => ({
-      ...it,
-      image: getProduct(it.product_slug)?.image ?? null,
-    })),
-  }));
+  const returns = await Promise.all(
+    rawReturns.map(async (ret) => ({
+      ...ret,
+      items: await Promise.all(
+        ret.items.map(async (it) => ({
+          ...it,
+          image: (await getProduct(it.product_slug))?.image ?? null,
+        }))
+      ),
+    }))
+  );
 
   if (returns.length === 0) {
     return (

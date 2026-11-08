@@ -21,21 +21,14 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { SCHEMA_SQL } from "../src/lib/schema.ts";
+import { databaseUrl, sslOption } from "../src/lib/database-url.ts";
+import { toPostgres } from "../src/lib/db.ts";
+import { applyMigrations } from "../src/lib/migrations.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const sqlitePath = process.env.SQLITE_PATH ?? join(ROOT, "data", "store.db");
-const url = process.env.DATABASE_URL;
-
-if (!url) {
-  console.error(
-    "✗ DATABASE_URL is not set.\n" +
-      "  The shop's data is moving into PostgreSQL, so the script needs to\n" +
-      "  know where to put it. For example:\n" +
-      "    DATABASE_URL=postgresql://postgres:postgres@localhost:5432/consoleseller"
-  );
-  process.exit(1);
-}
+const url = databaseUrl();
 
 /**
  * The tables, in the order they have to be written.
@@ -73,6 +66,14 @@ const TABLES = [
  *
  * The rest are given their id by the database, in the order the rows
  * arrive, which is the order they arrive in.
+ *
+ * A table is on this list when its id is part of how the shop refers to
+ * a row. Four of them carry a text id — the id of a picture, of an
+ * option, of a claim, of a cancellation — and that id is the primary key,
+ * so it has to travel with the row. Two of them carry a number that other
+ * tables point at: a person, and a line on an order. Those numbers have
+ * to travel too, or the rows pointing at them end up pointing at the
+ * wrong thing.
  */
 const KEEPING_ID = new Set([
   "categories",
@@ -83,24 +84,61 @@ const KEEPING_ID = new Set([
   "variants",
   "store_settings",
   "hero_slides",
+  "users",
   "sessions",
+  "cart_items",
+  "addresses",
   "orders",
+  "order_items",
+  "inventory_movements",
+  "contact_messages",
+  "return_requests",
+  "return_items",
+  "return_images",
+  "return_events",
+  "order_cancellations",
 ]);
 
 const sqlite = new DatabaseSync(sqlitePath, { readOnly: true });
-const pool = new Pool({ connectionString: url });
+const pool = new Pool({ connectionString: url, ssl: sslOption(url) });
 
 /** The tables that are in the file being read. */
 const tables = new Set(
-  (
-    sqlite
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
-      .all() as { name: string }[]
-  ).map((r) => r.name)
+  sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+    .all()
+    .map((r) => r.name)
 );
 
 console.log(`→ reading ${sqlitePath}`);
 console.log(`→ writing ${url.replace(/:[^:@/]*@/, ":***@")}\n`);
+
+/**
+ * The shop's handle on the database, bound to this one connection.
+ *
+ * The migrations are written against the same handle the shop itself
+ * uses, so they run over PostgreSQL exactly as they run over SQLite.
+ */
+function dbOn(client) {
+  return {
+    dialect: "postgres",
+    isTransaction: false,
+    prepare(sql) {
+      const text = toPostgres(sql);
+      return {
+        all: async (...params) => (await client.query(text, params)).rows,
+        get: async (...params) => (await client.query(text, params)).rows[0],
+        run: async (...params) => {
+          const result = await client.query(text, params);
+          return { changes: result.rowCount ?? 0, lastInsertRowid: undefined };
+        },
+      };
+    },
+    exec: async (sql) => {
+      await client.query(toPostgres(sql));
+    },
+  };
+}
 
 const client = await pool.connect();
 try {
@@ -113,16 +151,15 @@ try {
       continue;
     }
 
-    const columns = (
-      sqlite.prepare(`PRAGMA table_info(${table})`).all() as {
-        name: string;
-      }[]
-    ).map((c) => c.name);
+    const columns = sqlite
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((c) => c.name);
     if (!columns.length) continue;
 
     const rows = sqlite
       .prepare(`SELECT * FROM ${table}`)
-      .all() as Record<string, unknown>[];
+      .all();
 
     if (!rows.length) {
       console.log(`   – ${table}: empty`);
@@ -155,12 +192,10 @@ try {
   console.log("\n→ putting the id sequences back in step");
   for (const table of TABLES) {
     if (!tables.has(table)) continue;
-    const columns = (
-      sqlite.prepare(`PRAGMA table_info(${table})`).all() as {
-        name: string;
-        pk: number;
-      }[]
-    ).filter((c) => c.pk === 1 && c.name === "id");
+    const columns = sqlite
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .filter((c) => c.pk === 1 && c.name === "id");
     if (!columns.length) continue;
 
     await client.query(`
@@ -173,6 +208,14 @@ try {
       // nothing to put back in step.
     });
   }
+
+  // The migrations run behind the copy, the same way they run when the
+  // shop opens the SQLite file. They add the columns that came after the
+  // schema was first written and fill in what the shop would otherwise
+  // fill in itself: a code for every product and every option, a brand
+  // list, a subcategory list, and a picture for every product.
+  console.log("\n→ bringing the PostgreSQL database up to date");
+  await applyMigrations(dbOn(client));
 } finally {
   client.release();
   await pool.end();

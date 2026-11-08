@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const attributes = cleanAttributes(body.attributes);
-  if (!setProductAttributes(slug, attributes)) {
+  if (!(await setProductAttributes(slug, attributes))) {
     return fail("No such product.", 404);
   }
 

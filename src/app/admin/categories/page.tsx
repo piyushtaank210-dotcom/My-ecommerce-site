@@ -24,8 +24,8 @@ export default async function AdminCategoriesPage() {
       </header>
 
       <TaxonomyManager
-        categories={listCategories()}
-        brands={listBrands()}
+        categories={(await listCategories())}
+        brands={(await listBrands())}
         canManage={canManage}
       />
     </div>

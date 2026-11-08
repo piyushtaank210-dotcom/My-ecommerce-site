@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: Params) {
   if ("error" in guard) return guard.error;
 
   const { slug } = await params;
-  const product = listAdminProducts().find((p) => p.slug === slug);
+  const product = (await listAdminProducts()).find((p) => p.slug === slug);
   if (!product) return fail("No such product.", 404);
 
   return json({
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: Params) {
     barcode: typeof body.barcode === "string" ? body.barcode : null,
   };
 
-  const result = createVariant(slug, input, guard.user.id);
+  const result = (await createVariant(slug, input, guard.user.id));
   if (!result.ok) {
     return fail(result.reason ?? "That option could not be added.", 409);
   }

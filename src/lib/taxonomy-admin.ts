@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getDb, withTransaction } from "./db";
 import { cleanSpecFields } from "./taxonomy";
 
 /**
@@ -61,32 +61,32 @@ export type TaxonomyResult = {
 };
 
 /** Every category, with its subcategories and how many products use them. */
-export function listCategories(): CategoryDetail[] {
+export async function listCategories(): Promise<CategoryDetail[]> {
   const db = getDb();
 
-  const categories = db
+  const categories = (await db
     .prepare("SELECT * FROM categories ORDER BY position, name")
-    .all() as Row[];
+    .all()) as Row[];
 
-  const subcategories = db
+  const subcategories = (await db
     .prepare("SELECT * FROM subcategories ORDER BY position, name")
-    .all() as Row[];
+    .all()) as Row[];
 
   const productCounts = new Map<string, number>();
-  for (const r of db
+  for (const r of (await db
     .prepare(
       "SELECT category_slug, COUNT(*) AS n FROM products GROUP BY category_slug"
     )
-    .all() as { category_slug: string | null; n: number }[]) {
+    .all()) as { category_slug: string | null; n: number }[]) {
     if (r.category_slug) productCounts.set(r.category_slug, r.n);
   }
 
   const subCounts = new Map<string, number>();
-  for (const r of db
+  for (const r of (await db
     .prepare(
       "SELECT subcategory, COUNT(*) AS n FROM products WHERE subcategory IS NOT NULL GROUP BY subcategory"
     )
-    .all() as { subcategory: string | null; n: number }[]) {
+    .all()) as { subcategory: string | null; n: number }[]) {
     if (r.subcategory) subCounts.set(r.subcategory, r.n);
   }
 
@@ -129,13 +129,13 @@ function parseFields(raw: unknown): string[] {
  * The address is worked out from the name, so a category called "Gaming
  * Accessories" is found at `/category/gaming-accessories`.
  */
-export function createCategory(input: {
+export async function createCategory(input: {
   slug?: string;
   name: string;
   blurb?: string | null;
   icon?: string | null;
   specFields?: string[];
-}): TaxonomyResult {
+}): Promise<TaxonomyResult> {
   const db = getDb();
   const name = input.name.trim();
   if (name.length < 2) return { ok: false, reason: "Give the category a name." };
@@ -144,7 +144,7 @@ export function createCategory(input: {
   if (slug.length < 2) {
     return { ok: false, reason: "Give the category a name." };
   }
-  if (db.prepare("SELECT slug FROM categories WHERE slug = ?").get(slug)) {
+  if ((await db.prepare("SELECT slug FROM categories WHERE slug = ?").get(slug))) {
     return {
       ok: false,
       reason: "There is already a category at that address.",
@@ -154,13 +154,13 @@ export function createCategory(input: {
 
   const position = num(
     (
-      db
+      (await db
         .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM categories")
-        .get() as { n: number }
+        .get()) as { n: number }
     ).n
   );
 
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO categories (slug, name, icon, blurb, spec_fields, position)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
@@ -170,20 +170,20 @@ export function createCategory(input: {
     input.blurb?.trim() || null,
     JSON.stringify(cleanSpecFields(input.specFields ?? [])),
     position
-  );
+  ));
 
   return { ok: true, slug };
 }
 
 /** Changes a category — its name, its blurb and the fields it asks about. */
-export function updateCategory(
+export async function updateCategory(
   slug: string,
   input: CategoryInput
-): TaxonomyResult {
+): Promise<TaxonomyResult> {
   const db = getDb();
-  const existing = db
+  const existing = (await db
     .prepare("SELECT slug FROM categories WHERE slug = ?")
-    .get(slug);
+    .get(slug));
   if (!existing) return { ok: false, reason: "That category no longer exists." };
 
   const sets: string[] = [];
@@ -213,9 +213,9 @@ export function updateCategory(
   if (!sets.length) return { ok: true };
 
   params.push(slug);
-  db.prepare(`UPDATE categories SET ${sets.join(", ")} WHERE slug = ?`).run(
+  (await db.prepare(`UPDATE categories SET ${sets.join(", ")} WHERE slug = ?`).run(
     ...params
-  );
+  ));
   return { ok: true };
 }
 
@@ -225,19 +225,19 @@ export function updateCategory(
  * A category that products are in cannot be removed — the products would be
  * left pointing at nothing. A category with subcategories cannot either.
  */
-export function deleteCategory(slug: string): TaxonomyResult {
+export async function deleteCategory(slug: string): Promise<TaxonomyResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT slug FROM categories WHERE slug = ?")
-    .get(slug);
+    .get(slug));
   if (!existing) return { ok: false, reason: "That category no longer exists." };
 
   const products = num(
     (
-      db
+      (await db
         .prepare("SELECT COUNT(*) AS n FROM products WHERE category_slug = ?")
-        .get(slug) as { n: number }
+        .get(slug)) as { n: number }
     ).n
   );
   if (products > 0) {
@@ -249,9 +249,9 @@ export function deleteCategory(slug: string): TaxonomyResult {
 
   const subcategories = num(
     (
-      db
+      (await db
         .prepare("SELECT COUNT(*) AS n FROM subcategories WHERE category_slug = ?")
-        .get(slug) as { n: number }
+        .get(slug)) as { n: number }
     ).n
   );
   if (subcategories > 0) {
@@ -263,7 +263,7 @@ export function deleteCategory(slug: string): TaxonomyResult {
     };
   }
 
-  db.prepare("DELETE FROM categories WHERE slug = ?").run(slug);
+  (await db.prepare("DELETE FROM categories WHERE slug = ?").run(slug));
   return { ok: true };
 }
 
@@ -275,14 +275,14 @@ export function deleteCategory(slug: string): TaxonomyResult {
  * The name is what a product carries, so two categories may each have a
  * "PS5" of their own without the two colliding.
  */
-export function createSubcategory(
+export async function createSubcategory(
   categorySlug: string,
   name: string
-): TaxonomyResult {
+): Promise<TaxonomyResult> {
   const db = getDb();
-  const category = db
+  const category = (await db
     .prepare("SELECT slug FROM categories WHERE slug = ?")
-    .get(categorySlug);
+    .get(categorySlug));
   if (!category) return { ok: false, reason: "That category no longer exists." };
 
   const trimmed = name.trim();
@@ -290,11 +290,11 @@ export function createSubcategory(
     return { ok: false, reason: "Give the subcategory a name.", field: "name" };
   }
 
-  const existing = db
+  const existing = (await db
     .prepare(
       "SELECT slug FROM subcategories WHERE category_slug = ? AND name = ? COLLATE NOCASE"
     )
-    .get(categorySlug, trimmed);
+    .get(categorySlug, trimmed));
   if (existing) {
     return {
       ok: false,
@@ -307,7 +307,7 @@ export function createSubcategory(
   if (!slug) return { ok: false, reason: "Give the subcategory a name." };
   let n = 2;
   while (
-    db.prepare("SELECT slug FROM subcategories WHERE slug = ?").get(slug)
+    (await db.prepare("SELECT slug FROM subcategories WHERE slug = ?").get(slug))
   ) {
     slug = `${slugify(trimmed)}-${n}`;
     n++;
@@ -315,17 +315,17 @@ export function createSubcategory(
 
   const position = num(
     (
-      db
+      (await db
         .prepare(
           "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM subcategories WHERE category_slug = ?"
         )
-        .get(categorySlug) as { n: number }
+        .get(categorySlug)) as { n: number }
     ).n
   );
 
-  db.prepare(
+  (await db.prepare(
     "INSERT INTO subcategories (slug, category_slug, name, position) VALUES (?, ?, ?, ?)"
-  ).run(slug, categorySlug, trimmed, position);
+  ).run(slug, categorySlug, trimmed, position));
 
   return { ok: true };
 }
@@ -336,18 +336,18 @@ export function createSubcategory(
  * The products that carry it follow, so the catalogue keeps saying one
  * thing about it.
  */
-export function updateSubcategory(
+export async function updateSubcategory(
   categorySlug: string,
   subSlug: string,
   name: string
-): TaxonomyResult {
+): Promise<TaxonomyResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare(
       "SELECT slug, name FROM subcategories WHERE slug = ? AND category_slug = ?"
     )
-    .get(subSlug, categorySlug) as Row | undefined;
+    .get(subSlug, categorySlug)) as Row | undefined;
   if (!existing) {
     return { ok: false, reason: "That subcategory no longer exists." };
   }
@@ -357,11 +357,11 @@ export function updateSubcategory(
     return { ok: false, reason: "Give the subcategory a name.", field: "name" };
   }
 
-  const clash = db
+  const clash = (await db
     .prepare(
       "SELECT slug FROM subcategories WHERE category_slug = ? AND name = ? COLLATE NOCASE AND slug != ?"
     )
-    .get(categorySlug, trimmed, subSlug);
+    .get(categorySlug, trimmed, subSlug));
   if (clash) {
     return {
       ok: false,
@@ -370,48 +370,43 @@ export function updateSubcategory(
     };
   }
 
-  db.exec("BEGIN");
-  try {
-    db.prepare(
-      "UPDATE subcategories SET name = ? WHERE slug = ? AND category_slug = ?"
-    ).run(trimmed, subSlug, categorySlug);
+  await withTransaction(async (db) => {
+    await db
+      .prepare("UPDATE subcategories SET name = ? WHERE slug = ? AND category_slug = ?")
+      .run(trimmed, subSlug, categorySlug);
     // The products that carry it follow the new name.
-    db.prepare("UPDATE products SET subcategory = ? WHERE subcategory = ?").run(
+    await db.prepare("UPDATE products SET subcategory = ? WHERE subcategory = ?").run(
       trimmed,
       str(existing.name)
     );
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  });
 
   return { ok: true };
 }
 
 /** Removes a subcategory. One that products still carry cannot be. */
-export function deleteSubcategory(
+export async function deleteSubcategory(
   categorySlug: string,
   subSlug: string
-): TaxonomyResult {
+): Promise<TaxonomyResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare(
       "SELECT slug, name FROM subcategories WHERE slug = ? AND category_slug = ?"
     )
-    .get(subSlug, categorySlug) as Row | undefined;
+    .get(subSlug, categorySlug)) as Row | undefined;
   if (!existing) {
     return { ok: false, reason: "That subcategory no longer exists." };
   }
 
   const products = num(
     (
-      db
+      (await db
         .prepare(
           "SELECT COUNT(*) AS n FROM products WHERE subcategory = ? COLLATE NOCASE"
         )
-        .get(str(existing.name)) as { n: number }
+        .get(str(existing.name))) as { n: number }
     ).n
   );
   if (products > 0) {
@@ -421,9 +416,9 @@ export function deleteSubcategory(
     };
   }
 
-  db.prepare(
+  (await db.prepare(
     "DELETE FROM subcategories WHERE slug = ? AND category_slug = ?"
-  ).run(subSlug, categorySlug);
+  ).run(subSlug, categorySlug));
   return { ok: true };
 }
 
@@ -433,30 +428,30 @@ export function deleteSubcategory(
  * The administrator may type a subcategory that is not in the list yet, and
  * a product is never left without one that the category can hold.
  */
-export function resolveSubcategory(
+export async function resolveSubcategory(
   categorySlug: string | null | undefined,
   name: string | null | undefined
-): string | null {
+): Promise<string | null> {
   const trimmed = name?.trim();
   if (!categorySlug || !trimmed) return null;
 
   const db = getDb();
-  const existing = db
+  const existing = (await db
     .prepare(
       "SELECT name FROM subcategories WHERE category_slug = ? AND name = ? COLLATE NOCASE"
     )
-    .get(categorySlug, trimmed) as { name?: string } | undefined;
+    .get(categorySlug, trimmed)) as { name?: string } | undefined;
 
   if (existing?.name) return existing.name;
 
-  const created = createSubcategory(categorySlug, trimmed);
+  const created = (await createSubcategory(categorySlug, trimmed));
   if (!created.ok) {
     // The name is already taken by a case difference, so use what is there.
-    const again = db
+    const again = (await db
       .prepare(
         "SELECT name FROM subcategories WHERE category_slug = ? AND name = ? COLLATE NOCASE"
       )
-      .get(categorySlug, trimmed) as { name?: string } | undefined;
+      .get(categorySlug, trimmed)) as { name?: string } | undefined;
     return again?.name ?? null;
   }
   return trimmed;
@@ -474,19 +469,19 @@ export type BrandDetail = {
 };
 
 /** Every brand the store sells. */
-export function listBrands(): BrandDetail[] {
+export async function listBrands(): Promise<BrandDetail[]> {
   const db = getDb();
 
-  const brands = db
+  const brands = (await db
     .prepare("SELECT * FROM brands ORDER BY position, name")
-    .all() as Row[];
+    .all()) as Row[];
 
   const counts = new Map<string, number>();
-  for (const r of db
+  for (const r of (await db
     .prepare(
-      "SELECT brand, COUNT(*) AS n FROM products WHERE brand IS NOT NULL GROUP BY brand COLLATE NOCASE"
+      "SELECT MIN(brand) AS brand, COUNT(*) AS n FROM products WHERE brand IS NOT NULL GROUP BY lower(brand)"
     )
-    .all() as { brand: string | null; n: number }[]) {
+    .all()) as { brand: string | null; n: number }[]) {
     if (r.brand) counts.set(r.brand.toLowerCase(), r.n);
   }
 
@@ -503,17 +498,17 @@ export function listBrands(): BrandDetail[] {
 }
 
 /** Adds a brand. */
-export function createBrand(input: {
+export async function createBrand(input: {
   name: string;
   blurb?: string | null;
-}): TaxonomyResult {
+}): Promise<TaxonomyResult> {
   const db = getDb();
   const name = input.name.trim();
   if (name.length < 1) return { ok: false, reason: "Give the brand a name." };
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT slug FROM brands WHERE name = ? COLLATE NOCASE")
-    .get(name);
+    .get(name));
   if (existing) {
     return {
       ok: false,
@@ -525,22 +520,22 @@ export function createBrand(input: {
   let slug = slugify(name);
   if (!slug) return { ok: false, reason: "Give the brand a name." };
   let n = 2;
-  while (db.prepare("SELECT slug FROM brands WHERE slug = ?").get(slug)) {
+  while ((await db.prepare("SELECT slug FROM brands WHERE slug = ?").get(slug))) {
     slug = `${slugify(name)}-${n}`;
     n++;
   }
 
   const position = num(
     (
-      db
+      (await db
         .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM brands")
-        .get() as { n: number }
+        .get()) as { n: number }
     ).n
   );
 
-  db.prepare(
+  (await db.prepare(
     "INSERT INTO brands (slug, name, blurb, position) VALUES (?, ?, ?, ?)"
-  ).run(slug, name, input.blurb?.trim() || null, position);
+  ).run(slug, name, input.blurb?.trim() || null, position));
 
   return { ok: true, slug };
 }
@@ -551,15 +546,15 @@ export function createBrand(input: {
  * The products that carry it follow, so the catalogue keeps saying one
  * thing about it.
  */
-export function updateBrand(
+export async function updateBrand(
   slug: string,
   input: { name?: string; blurb?: string | null }
-): TaxonomyResult {
+): Promise<TaxonomyResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT slug, name FROM brands WHERE slug = ?")
-    .get(slug) as Row | undefined;
+    .get(slug)) as Row | undefined;
   if (!existing) return { ok: false, reason: "That brand no longer exists." };
 
   const sets: string[] = [];
@@ -570,11 +565,11 @@ export function updateBrand(
     if (name.length < 1) {
       return { ok: false, reason: "Give the brand a name.", field: "name" };
     }
-    const clash = db
+    const clash = (await db
       .prepare(
         "SELECT slug FROM brands WHERE name = ? COLLATE NOCASE AND slug != ?"
       )
-      .get(name, slug);
+      .get(name, slug));
     if (clash) {
       return {
         ok: false,
@@ -592,44 +587,37 @@ export function updateBrand(
 
   if (!sets.length) return { ok: true };
 
-  db.exec("BEGIN");
-  try {
+  await withTransaction(async (db) => {
     params.push(slug);
-    db.prepare(`UPDATE brands SET ${sets.join(", ")} WHERE slug = ?`).run(
-      ...params
-    );
+    await db.prepare(`UPDATE brands SET ${sets.join(", ")} WHERE slug = ?`).run(...params);
     // The products that carry the old name follow the new one.
     if (input.name !== undefined) {
-      db.prepare("UPDATE products SET brand = ? WHERE brand = ?").run(
+      await db.prepare("UPDATE products SET brand = ? WHERE brand = ?").run(
         input.name.trim(),
         str(existing.name)
       );
     }
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  });
 
   return { ok: true };
 }
 
 /** Removes a brand. One that products still carry cannot be. */
-export function deleteBrand(slug: string): TaxonomyResult {
+export async function deleteBrand(slug: string): Promise<TaxonomyResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT slug, name FROM brands WHERE slug = ?")
-    .get(slug) as Row | undefined;
+    .get(slug)) as Row | undefined;
   if (!existing) return { ok: false, reason: "That brand no longer exists." };
 
   const products = num(
     (
-      db
+      (await db
         .prepare(
           "SELECT COUNT(*) AS n FROM products WHERE brand = ? COLLATE NOCASE"
         )
-        .get(str(existing.name)) as { n: number }
+        .get(str(existing.name))) as { n: number }
     ).n
   );
   if (products > 0) {
@@ -639,7 +627,7 @@ export function deleteBrand(slug: string): TaxonomyResult {
     };
   }
 
-  db.prepare("DELETE FROM brands WHERE slug = ?").run(slug);
+  (await db.prepare("DELETE FROM brands WHERE slug = ?").run(slug));
   return { ok: true };
 }
 
@@ -649,21 +637,21 @@ export function deleteBrand(slug: string): TaxonomyResult {
  * The administrator may type a brand that is not in the list yet, and the
  * list is kept complete so the next product can pick it.
  */
-export function ensureBrand(name: string | null | undefined): string | null {
+export async function ensureBrand(name: string | null | undefined): Promise<string | null> {
   const trimmed = name?.trim();
   if (!trimmed) return null;
 
   const db = getDb();
-  const existing = db
+  const existing = (await db
     .prepare("SELECT name FROM brands WHERE name = ? COLLATE NOCASE")
-    .get(trimmed) as { name?: string } | undefined;
+    .get(trimmed)) as { name?: string } | undefined;
   if (existing?.name) return existing.name;
 
-  const created = createBrand({ name: trimmed });
+  const created = (await createBrand({ name: trimmed }));
   if (!created.ok) {
-    const again = db
+    const again = (await db
       .prepare("SELECT name FROM brands WHERE name = ? COLLATE NOCASE")
-      .get(trimmed) as { name?: string } | undefined;
+      .get(trimmed)) as { name?: string } | undefined;
     return again?.name ?? null;
   }
   return trimmed;

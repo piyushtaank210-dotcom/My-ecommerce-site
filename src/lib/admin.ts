@@ -1,6 +1,6 @@
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { getDb, parseJson } from "./db";
+import { getDb, parseJson, withTransaction } from "./db";
 import { parseRole, type Role } from "./roles";
 import type { ProductStatus } from "./product-status";
 import {
@@ -40,61 +40,61 @@ const EARNING = "status != 'cancelled'";
 
 /* ------------------------------------------------------------------ stats */
 
-export function getAdminStats(): AdminStats {
+export async function getAdminStats(): Promise<AdminStats> {
   const db = getDb();
-  const one = (sql: string, ...params: (string | number)[]) => {
-    const row = db.prepare(sql).get(...params) as Row | undefined;
+  const one = async (sql: string, ...params: (string | number)[]) => {
+    const row = (await db.prepare(sql).get(...params)) as Row | undefined;
     return row ?? {};
   };
 
-  const revenue = num(one(`SELECT COALESCE(SUM(total), 0) AS n FROM orders WHERE ${EARNING}`).n);
-  const orders = num(one("SELECT COUNT(*) AS n FROM orders").n);
-  const customers = num(one("SELECT COUNT(*) AS n FROM users").n);
-  const products = num(one("SELECT COUNT(*) AS n FROM products WHERE listed = 1").n);
-  const delisted = num(one("SELECT COUNT(*) AS n FROM products WHERE listed = 0").n);
+  const revenue = num((await one(`SELECT COALESCE(SUM(total), 0) AS n FROM orders WHERE ${EARNING}`)).n);
+  const orders = num((await one("SELECT COUNT(*) AS n FROM orders")).n);
+  const customers = num((await one("SELECT COUNT(*) AS n FROM users")).n);
+  const products = num((await one("SELECT COUNT(*) AS n FROM products WHERE listed = 1")).n);
+  const delisted = num((await one("SELECT COUNT(*) AS n FROM products WHERE listed = 0")).n);
   const openMessages = num(
-    one("SELECT COUNT(*) AS n FROM contact_messages WHERE status IN ('new','open')").n
+    (await one("SELECT COUNT(*) AS n FROM contact_messages WHERE status IN ('new','open')")).n
   );
 
   const revenueLast30 = num(
-    one(
+    (await one(
       `SELECT COALESCE(SUM(total), 0) AS n FROM orders
        WHERE ${EARNING} AND created_at >= datetime('now','-30 days')`
-    ).n
+    )).n
   );
   const ordersLast30 = num(
-    one(
+    (await one(
       "SELECT COUNT(*) AS n FROM orders WHERE created_at >= datetime('now','-30 days')"
-    ).n
+    )).n
   );
   const customersLast30 = num(
-    one(
+    (await one(
       "SELECT COUNT(*) AS n FROM users WHERE created_at >= datetime('now','-30 days')"
-    ).n
+    )).n
   );
 
   const byStatus = (
-    db
+    (await db
       .prepare("SELECT status, COUNT(*) AS count FROM orders GROUP BY status")
-      .all() as Row[]
+      .all()) as Row[]
   ).map((r) => ({ status: str(r.status), count: num(r.count) }));
 
   // The catalogue, counted properly: every product, and how many of them
   // are on sale, still a draft, or have been retired.
-  const totalProducts = num(one("SELECT COUNT(*) n FROM products").n);
+  const totalProducts = num((await one("SELECT COUNT(*) n FROM products")).n);
   const publishedProducts = num(
-    one("SELECT COUNT(*) n FROM products WHERE status = 'published'").n
+    (await one("SELECT COUNT(*) n FROM products WHERE status = 'published'")).n
   );
   const draftProducts = num(
-    one("SELECT COUNT(*) n FROM products WHERE status = 'draft'").n
+    (await one("SELECT COUNT(*) n FROM products WHERE status = 'draft'")).n
   );
   const archivedProducts = num(
-    one("SELECT COUNT(*) n FROM products WHERE status = 'archived'").n
+    (await one("SELECT COUNT(*) n FROM products WHERE status = 'archived'")).n
   );
 
   // The stock, counted the way the catalogue counts it: a product with
   // options is counted by its options, and its level is the worst of them.
-  const buckets = listStockBuckets();
+  const buckets = (await listStockBuckets());
   const byProduct = new Map<string, typeof buckets>();
   for (const bucket of buckets) {
     byProduct.set(bucket.product_slug, [
@@ -148,10 +148,10 @@ export function getAdminStats(): AdminStats {
     ordersLast30,
     customersLast30,
     byStatus,
-    recentOrders: listOrders({ limit: 6 }),
+    recentOrders: (await listOrders({ limit: 6 })),
     lowStockProducts: runningLow.slice(0, 6),
     topProducts: (
-      db
+      (await db
         .prepare(
           `SELECT oi.product_slug AS slug, oi.name AS name,
                   SUM(oi.quantity) AS units,
@@ -161,7 +161,7 @@ export function getAdminStats(): AdminStats {
            GROUP BY oi.product_slug, oi.name
            ORDER BY units DESC, revenue DESC LIMIT 6`
         )
-        .all() as Row[]
+        .all()) as Row[]
     ).map((r) => ({
       slug: str(r.slug),
       name: str(r.name),
@@ -197,7 +197,7 @@ function customerWhere(query: CustomerQuery) {
   return { where, params };
 }
 
-export function listCustomers(query: CustomerQuery = {}): CustomerSummary[] {
+export async function listCustomers(query: CustomerQuery = {}): Promise<CustomerSummary[]> {
   const { where, params } = customerWhere(query);
   const bind = [...params];
   let limit = "";
@@ -212,7 +212,7 @@ export function listCustomers(query: CustomerQuery = {}): CustomerSummary[] {
   }
 
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT u.id, u.name, u.email, u.phone, u.role, u.created_at,
                 (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS order_count,
@@ -222,7 +222,7 @@ export function listCustomers(query: CustomerQuery = {}): CustomerSummary[] {
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY u.created_at DESC ${limit} ${offset}`
       )
-      .all(...bind) as Row[]
+      .all(...bind)) as Row[]
   ).map((r) => ({
     id: num(r.id),
     name: str(r.name),
@@ -235,15 +235,15 @@ export function listCustomers(query: CustomerQuery = {}): CustomerSummary[] {
   }));
 }
 
-export function countCustomers(query: CustomerQuery = {}): number {
+export async function countCustomers(query: CustomerQuery = {}): Promise<number> {
   const { where, params } = customerWhere(query);
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       `SELECT COUNT(*) AS n FROM users u ${
         where.length ? `WHERE ${where.join(" AND ")}` : ""
       }`
     )
-    .get(...params) as Row | undefined;
+    .get(...params)) as Row | undefined;
   return num(row?.n);
 }
 
@@ -273,7 +273,7 @@ function orderWhere(query: OrderQuery) {
   return { where, params };
 }
 
-export function listOrders(query: OrderQuery = {}): OrderSummary[] {
+export async function listOrders(query: OrderQuery = {}): Promise<OrderSummary[]> {
   const { where, params } = orderWhere(query);
   const bind = [...params];
   let limit = "";
@@ -288,7 +288,7 @@ export function listOrders(query: OrderQuery = {}): OrderSummary[] {
   }
 
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT o.id, o.created_at, o.name, o.email, o.city, o.state, o.total,
                 o.payment_method, o.status, o.user_id,
@@ -297,7 +297,7 @@ export function listOrders(query: OrderQuery = {}): OrderSummary[] {
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY o.created_at DESC ${limit} ${offset}`
       )
-      .all(...bind) as Row[]
+      .all(...bind)) as Row[]
   ).map((r) => ({
     id: str(r.id),
     created_at: str(r.created_at),
@@ -313,15 +313,15 @@ export function listOrders(query: OrderQuery = {}): OrderSummary[] {
   }));
 }
 
-export function countOrders(query: OrderQuery = {}): number {
+export async function countOrders(query: OrderQuery = {}): Promise<number> {
   const { where, params } = orderWhere(query);
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       `SELECT COUNT(*) AS n FROM orders o ${
         where.length ? `WHERE ${where.join(" AND ")}` : ""
       }`
     )
-    .get(...params) as Row | undefined;
+    .get(...params)) as Row | undefined;
   return num(row?.n);
 }
 
@@ -356,7 +356,7 @@ function messageWhere(query: MessageQuery) {
   return { where, params };
 }
 
-export function listMessages(query: MessageQuery = {}): ContactMessage[] {
+export async function listMessages(query: MessageQuery = {}): Promise<ContactMessage[]> {
   const { where, params } = messageWhere(query);
   const bind = [...params];
   let limit = "";
@@ -371,7 +371,7 @@ export function listMessages(query: MessageQuery = {}): ContactMessage[] {
   }
 
   return (
-    getDb()
+    (await getDb()
       .prepare(
         `SELECT m.*, u.name AS handled_by_name
          FROM contact_messages m
@@ -379,7 +379,7 @@ export function listMessages(query: MessageQuery = {}): ContactMessage[] {
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY m.created_at DESC ${limit} ${offset}`
       )
-      .all(...bind) as Row[]
+      .all(...bind)) as Row[]
   ).map((r) => ({
     id: num(r.id),
     name: str(r.name),
@@ -395,15 +395,15 @@ export function listMessages(query: MessageQuery = {}): ContactMessage[] {
   }));
 }
 
-export function countMessages(query: MessageQuery = {}): number {
+export async function countMessages(query: MessageQuery = {}): Promise<number> {
   const { where, params } = messageWhere(query);
-  const row = getDb()
+  const row = (await getDb()
     .prepare(
       `SELECT COUNT(*) AS n FROM contact_messages m ${
         where.length ? `WHERE ${where.join(" AND ")}` : ""
       }`
     )
-    .get(...params) as Row | undefined;
+    .get(...params)) as Row | undefined;
   return num(row?.n);
 }
 
@@ -430,21 +430,21 @@ export function catalogueQuery(filters: CatalogueFilters): ProductQuery {
 }
 
 /** The catalogue with each product's variants attached. */
-export function listAdminProducts(
+export async function listAdminProducts(
   query: ProductQuery = {}
-): ProductWithVariants[] {
+): Promise<ProductWithVariants[]> {
   // The back office always sees the whole catalogue — drafts, archived
   // products and delisted ones included — and narrows it with the filters
   // it is given.
-  const products = getProducts({ ...query, includeUnlisted: true });
+  const products = (await getProducts({ ...query, includeUnlisted: true }));
   if (!products.length) return [];
 
   const placeholders = products.map(() => "?").join(",");
-  const rows = getDb()
+  const rows = (await getDb()
     .prepare(
       `SELECT * FROM variants WHERE product_slug IN (${placeholders}) ORDER BY position`
     )
-    .all(...products.map((p) => p.slug)) as Row[];
+    .all(...products.map((p) => p.slug))) as Row[];
 
   const bySlug = new Map<string, Variant[]>();
   for (const r of rows) {
@@ -518,14 +518,14 @@ export type NewProduct = {
  * history is the opening balance rather than a number with nothing behind
  * it.
  */
-export function createProduct(
+export async function createProduct(
   p: NewProduct
-): { ok: boolean; slug?: string; reason?: string; field?: string } {
+): Promise<{ ok: boolean; slug?: string; reason?: string; field?: string }> {
   const db = getDb();
 
-  const exists = db
+  const exists = (await db
     .prepare("SELECT slug FROM products WHERE slug = ?")
-    .get(p.slug);
+    .get(p.slug));
   if (exists) {
     return {
       ok: false,
@@ -535,7 +535,7 @@ export function createProduct(
   }
 
   let sku = normalizeSku(p.sku ?? "");
-  if (sku && skuTakenByAnother(sku, p.slug)) {
+  if (sku && (await skuTakenByAnother(sku, p.slug))) {
     return {
       ok: false,
       reason: "Another product already uses this SKU.",
@@ -543,20 +543,20 @@ export function createProduct(
     };
   }
   if (!sku) {
-    sku = uniqueSku(skuFromSlug(p.slug), (candidate) =>
-      skuTakenByAnother(candidate, p.slug)
-    );
+    sku = (await uniqueSku(skuFromSlug(p.slug), async (candidate) =>
+      (await skuTakenByAnother(candidate, p.slug))
+    ));
   }
 
   const position = num(
     (
-      db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS n FROM products").get() as {
+      (await db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS n FROM products").get()) as {
         n: number;
       }
     ).n
   );
 
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO products
        (slug, sku, name, brand, category_slug, subcategory, model_number,
         price, mrp, sale_price, purchase_cost, rating, reviews, stock, condition,
@@ -594,24 +594,24 @@ export function createProduct(
     p.warranty,
     p.returns,
     position
-  );
+  ));
 
   // The product is written with no stock, and the count is put on by the
   // inventory — so the first movement in its history is the opening
   // balance rather than a number with nothing behind it.
-  recordOpeningBalance(p.slug, p.stock, p.userId ?? null);
+  (await recordOpeningBalance(p.slug, p.stock, p.userId ?? null));
 
   return { ok: true, slug: p.slug };
 }
 
 /** Every product photograph already in the catalogue, for the image picker. */
-export function listProductImages(): string[] {
+export async function listProductImages(): Promise<string[]> {
   return (
-    getDb()
+    (await getDb()
       .prepare(
         "SELECT DISTINCT image FROM products WHERE image IS NOT NULL ORDER BY image"
       )
-      .all() as Row[]
+      .all()) as Row[]
   ).map((r) => str(r.image));
 }
 
@@ -652,14 +652,14 @@ function labelFor(input: VariantInput): string {
 }
 
 /** True when another option of the same product already has these values. */
-function combinationTaken(
+async function combinationTaken(
   slug: string,
   key: string,
   exceptVariantId: string | null
-): boolean {
-  const rows = getDb()
+): Promise<boolean> {
+  const rows = (await getDb()
     .prepare("SELECT id, name, attributes FROM variants WHERE product_slug = ?")
-    .all(slug) as { id: string; name: string; attributes: string | null }[];
+    .all(slug)) as { id: string; name: string; attributes: string | null }[];
 
   return rows.some((r) => {
     if (exceptVariantId && r.id === exceptVariantId) return false;
@@ -669,26 +669,26 @@ function combinationTaken(
 }
 
 /** True when another product or option already uses this code. */
-function variantSkuTaken(sku: string, exceptVariantId: string | null): boolean {
+async function variantSkuTaken(sku: string, exceptVariantId: string | null): Promise<boolean> {
   const db = getDb();
-  const product = db
+  const product = (await db
     .prepare("SELECT slug FROM products WHERE sku = ? LIMIT 1")
-    .get(sku);
+    .get(sku));
   if (product) return true;
-  const variant = db
+  const variant = (await db
     .prepare("SELECT id FROM variants WHERE sku = ? AND id IS NOT ? LIMIT 1")
-    .get(sku, exceptVariantId);
+    .get(sku, exceptVariantId));
   return Boolean(variant);
 }
 
 /** True when another option already uses this barcode. */
-function variantBarcodeTaken(
+async function variantBarcodeTaken(
   barcode: string,
   exceptVariantId: string | null
-): boolean {
-  const row = getDb()
+): Promise<boolean> {
+  const row = (await getDb()
     .prepare("SELECT id FROM variants WHERE barcode = ? AND id IS NOT ? LIMIT 1")
-    .get(barcode, exceptVariantId);
+    .get(barcode, exceptVariantId));
   return Boolean(row);
 }
 
@@ -699,13 +699,13 @@ function variantBarcodeTaken(
  * options already on the product keep their own values — this is the list
  * the back office offers, not a rewrite of the options themselves.
  */
-export function setProductAttributes(
+export async function setProductAttributes(
   slug: string,
   attributes: ProductAttributes
-): boolean {
-  const info = getDb()
+): Promise<boolean> {
+  const info = (await getDb()
     .prepare("UPDATE products SET attributes = ? WHERE slug = ?")
-    .run(JSON.stringify(cleanAttributes(attributes)), slug);
+    .run(JSON.stringify(cleanAttributes(attributes)), slug));
   return info.changes > 0;
 }
 
@@ -716,16 +716,16 @@ export function setProductAttributes(
  * one is refused, because it would be the same thing twice under a
  * different name.
  */
-export function createVariant(
+export async function createVariant(
   slug: string,
   input: VariantInput,
   userId: number | null = null
-): VariantResult {
+): Promise<VariantResult> {
   const db = getDb();
 
-  const product = db
+  const product = (await db
     .prepare("SELECT slug FROM products WHERE slug = ?")
-    .get(slug) as { slug?: string } | undefined;
+    .get(slug)) as { slug?: string } | undefined;
   if (!product) return { ok: false, reason: "That product no longer exists." };
 
   const attributes = cleanVariantAttributes(input.attributes);
@@ -735,7 +735,7 @@ export function createVariant(
   }
 
   const key = combinationKey(attributes, label);
-  if (combinationTaken(slug, key, null)) {
+  if ((await combinationTaken(slug, key, null))) {
     return {
       ok: false,
       reason: "This product already has an option with those values.",
@@ -744,7 +744,7 @@ export function createVariant(
   }
 
   const wantedSku = normalizeSku(input.sku ?? "");
-  if (wantedSku && variantSkuTaken(wantedSku, null)) {
+  if (wantedSku && (await variantSkuTaken(wantedSku, null))) {
     return {
       ok: false,
       reason: "Another product or option already uses that code.",
@@ -753,7 +753,7 @@ export function createVariant(
   }
 
   const barcode = input.barcode?.trim() || null;
-  if (barcode && variantBarcodeTaken(barcode, null)) {
+  if (barcode && (await variantBarcodeTaken(barcode, null))) {
     return {
       ok: false,
       reason: "Another option already uses that barcode.",
@@ -766,28 +766,28 @@ export function createVariant(
   const base = `${slug}::${slugifyPart(label)}`;
   let id = base;
   let n = 2;
-  while (db.prepare("SELECT id FROM variants WHERE id = ?").get(id)) {
+  while ((await db.prepare("SELECT id FROM variants WHERE id = ?").get(id))) {
     id = `${base}-${n}`;
     n++;
   }
 
   const sku = wantedSku
     ? wantedSku
-    : uniqueSku(skuFromSlug(`${slug}-${label}`), (candidate) =>
-        variantSkuTaken(candidate, null)
-      );
+    : (await uniqueSku(skuFromSlug(`${slug}-${label}`), async (candidate) =>
+        (await variantSkuTaken(candidate, null))
+      ));
 
   const position = num(
     (
-      db
+      (await db
         .prepare(
           "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM variants WHERE product_slug = ?"
         )
-        .get(slug) as { n: number }
+        .get(slug)) as { n: number }
     ).n
   );
 
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO variants
        (id, product_slug, name, sku, price, mrp, stock, low_stock_threshold,
         image, barcode, attributes, position)
@@ -804,13 +804,13 @@ export function createVariant(
     barcode,
     JSON.stringify(attributes),
     position
-  );
+  ));
 
   // The opening count is put on the shelf by the inventory, so the option's
   // history starts at zero rather than at a number with nothing behind it.
-  recordOpeningBalance(slug, Math.max(0, Math.round(input.stock ?? 0)), userId, id);
+  (await recordOpeningBalance(slug, Math.max(0, Math.round(input.stock ?? 0)), userId, id));
 
-  return { ok: true, variant: getVariant(slug, id) ?? undefined };
+  return { ok: true, variant: (await getVariant(slug, id)) ?? undefined };
 }
 
 /**
@@ -819,17 +819,17 @@ export function createVariant(
  * The stock is not set here — it goes through the inventory, so the change
  * is written down with its reason.
  */
-export function updateVariant(
+export async function updateVariant(
   slug: string,
   variantId: string,
   input: VariantInput,
   userId: number | null = null
-): VariantResult {
+): Promise<VariantResult> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT * FROM variants WHERE id = ? AND product_slug = ?")
-    .get(variantId, slug) as Row | undefined;
+    .get(variantId, slug)) as Row | undefined;
   if (!existing) {
     return { ok: false, reason: "That option no longer exists." };
   }
@@ -849,7 +849,7 @@ export function updateVariant(
   }
 
   const key = combinationKey(attributes, label);
-  if (combinationTaken(slug, key, variantId)) {
+  if ((await combinationTaken(slug, key, variantId))) {
     return {
       ok: false,
       reason: "This product already has an option with those values.",
@@ -861,7 +861,7 @@ export function updateVariant(
     input.sku !== undefined
       ? normalizeSku(input.sku ?? "") || null
       : strOrNull(existing.sku);
-  if (wantedSku && variantSkuTaken(wantedSku, variantId)) {
+  if (wantedSku && (await variantSkuTaken(wantedSku, variantId))) {
     return {
       ok: false,
       reason: "Another product or option already uses that code.",
@@ -873,7 +873,7 @@ export function updateVariant(
     input.barcode !== undefined
       ? input.barcode?.trim() || null
       : strOrNull(existing.barcode);
-  if (barcode && variantBarcodeTaken(barcode, variantId)) {
+  if (barcode && (await variantBarcodeTaken(barcode, variantId))) {
     return {
       ok: false,
       reason: "Another option already uses that barcode.",
@@ -914,25 +914,25 @@ export function updateVariant(
   }
 
   params.push(variantId);
-  db.prepare(`UPDATE variants SET ${sets.join(", ")} WHERE id = ?`).run(
+  (await db.prepare(`UPDATE variants SET ${sets.join(", ")} WHERE id = ?`).run(
     ...params
-  );
+  ));
 
   // The stock goes through the inventory, so the change is written down.
   if (input.stock !== undefined) {
     const wanted = Math.max(0, Math.round(input.stock));
-    const moved = adjustStock({
+    const moved = (await adjustStock({
       productSlug: slug,
       variantId,
       mode: "set",
       quantity: wanted,
       reason: "Stock set in the variation editor",
       userId,
-    });
+    }));
     if (!moved.ok) return { ok: false, reason: moved.reason, field: "stock" };
   }
 
-  return { ok: true, variant: getVariant(slug, variantId) ?? undefined };
+  return { ok: true, variant: (await getVariant(slug, variantId)) ?? undefined };
 }
 
 /**
@@ -943,24 +943,24 @@ export function updateVariant(
  * been ordered can be: the order keeps its own copy of the name and the
  * price, so the order history is not touched.
  */
-export function deleteVariant(
+export async function deleteVariant(
   slug: string,
   variantId: string
-): { ok: boolean; reason?: string } {
+): Promise<{ ok: boolean; reason?: string }> {
   const db = getDb();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT id FROM variants WHERE id = ? AND product_slug = ?")
-    .get(variantId, slug);
+    .get(variantId, slug));
   if (!existing) {
     return { ok: false, reason: "That option no longer exists." };
   }
 
   const inBaskets = num(
     (
-      db
+      (await db
         .prepare("SELECT COUNT(*) AS n FROM cart_items WHERE variant_id = ?")
-        .get(variantId) as { n: number }
+        .get(variantId)) as { n: number }
     ).n
   );
   if (inBaskets > 0) {
@@ -972,19 +972,19 @@ export function deleteVariant(
     };
   }
 
-  const info = db
+  const info = (await db
     .prepare("DELETE FROM variants WHERE id = ? AND product_slug = ?")
-    .run(variantId, slug);
+    .run(variantId, slug));
   return info.changes > 0
     ? { ok: true }
     : { ok: false, reason: "That option no longer exists." };
 }
 
 /** One option, as the back office sees it. */
-export function getVariant(slug: string, variantId: string): Variant | null {
-  const row = getDb()
+export async function getVariant(slug: string, variantId: string): Promise<Variant | null> {
+  const row = (await getDb()
     .prepare("SELECT * FROM variants WHERE id = ? AND product_slug = ?")
-    .get(variantId, slug) as Row | undefined;
+    .get(variantId, slug)) as Row | undefined;
   if (!row) return null;
   return {
     id: str(row.id),
@@ -1026,13 +1026,13 @@ function slugifyPart(text: string): string {
 /* --------------------------------------------------------------- gallery */
 
 /** A product's photographs, in the order the back office left them. */
-export function listProductGallery(slug: string): ProductImage[] {
+export async function listProductGallery(slug: string): Promise<ProductImage[]> {
   return (
-    getDb()
+    (await getDb()
       .prepare(
         "SELECT id, product_slug, path, alt, position FROM product_images WHERE product_slug = ? ORDER BY position, id"
       )
-      .all(slug) as Row[]
+      .all(slug)) as Row[]
   ).map((r) => ({
     id: str(r.id),
     product_slug: str(r.product_slug),
@@ -1043,40 +1043,40 @@ export function listProductGallery(slug: string): ProductImage[] {
 }
 
 /** Adds a photograph to a product's gallery, at the end. */
-export function addProductImage(
+export async function addProductImage(
   slug: string,
   path: string,
   alt: string | null
-): ProductImage | null {
+): Promise<ProductImage | null> {
   const db = getDb();
-  const exists = db
+  const exists = (await db
     .prepare("SELECT slug FROM products WHERE slug = ?")
-    .get(slug);
+    .get(slug));
   if (!exists) return null;
 
   const position = num(
     (
-      db
+      (await db
         .prepare(
           "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM product_images WHERE product_slug = ?"
         )
-        .get(slug) as { n: number }
+        .get(slug)) as { n: number }
     ).n
   );
   const id = `${slug}::img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  db.prepare(
+  (await db.prepare(
     "INSERT INTO product_images (id, product_slug, path, alt, position) VALUES (?,?,?,?,?)"
-  ).run(id, slug, path, alt, position);
+  ).run(id, slug, path, alt, position));
 
   // The first picture a product has is its main one, so a product that has
   // never had a photograph still has one to show.
   const count = num(
-    (db
+    ((await db
       .prepare("SELECT COUNT(*) n FROM product_images WHERE product_slug = ?")
-      .get(slug) as { n: number }).n
+      .get(slug)) as { n: number }).n
   );
   if (count === 1) {
-    db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(path, slug);
+    (await db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(path, slug));
   }
 
   return { id, product_slug: slug, path, alt, position };
@@ -1089,58 +1089,53 @@ export function addProductImage(
  * one of ours. A picture that shipped with the catalogue lives in
  * public/products and is left where it is.
  */
-export function removeProductImage(
+export async function removeProductImage(
   slug: string,
   id: string
-): { removed: boolean; path?: string } {
+): Promise<{ removed: boolean; path?: string }> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare("SELECT path FROM product_images WHERE id = ? AND product_slug = ?")
-    .get(id, slug) as Row | undefined;
+    .get(id, slug)) as Row | undefined;
   if (!row) return { removed: false };
 
   const path = str(row.path);
-  db.prepare("DELETE FROM product_images WHERE id = ? AND product_slug = ?").run(
+  (await db.prepare("DELETE FROM product_images WHERE id = ? AND product_slug = ?").run(
     id,
     slug
-  );
+  ));
 
   // If the main picture was the one that went, the next one takes over.
-  const product = db
+  const product = (await db
     .prepare("SELECT image FROM products WHERE slug = ?")
-    .get(slug) as Row | undefined;
+    .get(slug)) as Row | undefined;
   if (product && str(product.image) === path) {
-    const next = db
+    const next = (await db
       .prepare(
         "SELECT path FROM product_images WHERE product_slug = ? ORDER BY position, id LIMIT 1"
       )
-      .get(slug) as Row | undefined;
-    db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(
+      .get(slug)) as Row | undefined;
+    (await db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(
       next ? str(next.path) : null,
       slug
-    );
+    ));
   }
 
   return { removed: true, path };
 }
 
 /** Puts a product's photographs in a new order. */
-export function reorderProductImages(slug: string, ids: string[]): boolean {
-  const db = getDb();
-  const update = db.prepare(
-    "UPDATE product_images SET position = ? WHERE id = ? AND product_slug = ?"
-  );
-  let changed = 0;
-  db.exec("BEGIN");
-  try {
-    ids.forEach((id, i) => {
-      changed += Number(update.run(i, id, slug).changes);
-    });
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+export async function reorderProductImages(slug: string, ids: string[]): Promise<boolean> {
+  const changed = await withTransaction(async (db) => {
+    const update = db.prepare(
+      "UPDATE product_images SET position = ? WHERE id = ? AND product_slug = ?"
+    );
+    let moved = 0;
+    for (const [i, id] of ids.entries()) {
+      moved += Number((await update.run(i, id, slug)).changes);
+    }
+    return moved;
+  });
   return changed > 0;
 }
 
@@ -1151,68 +1146,64 @@ export function reorderProductImages(slug: string, ids: string[]): boolean {
  * catalogue table show, so choosing it also moves it to the front of the
  * gallery.
  */
-export function setMainProductImage(slug: string, id: string): boolean {
-  const db = getDb();
-  const row = db
+export async function setMainProductImage(slug: string, id: string): Promise<boolean> {
+  const row = (await getDb()
     .prepare("SELECT path FROM product_images WHERE id = ? AND product_slug = ?")
-    .get(id, slug) as Row | undefined;
+    .get(id, slug)) as Row | undefined;
   if (!row) return false;
 
   const path = str(row.path);
   const others = (
-    db
+    (await getDb()
       .prepare(
         "SELECT id FROM product_images WHERE product_slug = ? AND id != ? ORDER BY position, id"
       )
-      .all(slug, id) as Row[]
+      .all(slug, id)) as Row[]
   ).map((r) => str(r.id));
 
-  db.exec("BEGIN");
-  try {
-    db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(path, slug);
+  await withTransaction(async (db) => {
+    await db.prepare("UPDATE products SET image = ? WHERE slug = ?").run(path, slug);
     const update = db.prepare(
       "UPDATE product_images SET position = ? WHERE id = ? AND product_slug = ?"
     );
-    update.run(0, id, slug);
-    others.forEach((other, i) => update.run(i + 1, other, slug));
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+    await update.run(0, id, slug);
+    for (const [i, other] of others.entries()) {
+      await update.run(i + 1, other, slug);
+    }
+  });
   return true;
 }
 
 /** Changes the text a screen reader reads for a photograph. */
-export function setProductImageAlt(
+export async function setProductImageAlt(
   slug: string,
   id: string,
   alt: string
-): boolean {
-  const info = getDb()
+): Promise<boolean> {
+  const info = (await getDb()
     .prepare(
       "UPDATE product_images SET alt = ? WHERE id = ? AND product_slug = ?"
     )
-    .run(alt.trim() || null, id, slug);
+    .run(alt.trim() || null, id, slug));
   return info.changes > 0;
 }
 
 /** Pulls a product out of the shop, or puts it back. */
-export function setProductListed(slug: string, listed: boolean): boolean {
-  const info = getDb()
+export async function setProductListed(slug: string, listed: boolean): Promise<boolean> {
+  const info = (await getDb()
     .prepare("UPDATE products SET listed = ? WHERE slug = ?")
-    .run(listed ? 1 : 0, slug);
+    .run(listed ? 1 : 0, slug));
   return info.changes > 0;
 }
 
 /** Moves a product through the catalogue's workflow. */
-export function setProductStatus(
+export async function setProductStatus(
   slug: string,
   status: ProductStatus
-): boolean {
-  const info = getDb()
+): Promise<boolean> {
+  const info = (await getDb()
     .prepare("UPDATE products SET status = ? WHERE slug = ?")
-    .run(status, slug);
+    .run(status, slug));
   return info.changes > 0;
 }
 
@@ -1220,26 +1211,26 @@ export function setProductStatus(
  * Puts a product back on sale. Publishing is more than a status change:
  * the product also has to be un-delisted, or it would stay invisible.
  */
-export function publishProduct(slug: string): boolean {
-  const info = getDb()
+export async function publishProduct(slug: string): Promise<boolean> {
+  const info = (await getDb()
     .prepare("UPDATE products SET status = 'published', listed = 1 WHERE slug = ?")
-    .run(slug);
+    .run(slug));
   return info.changes > 0;
 }
 
 /** Takes a product off sale without touching its data or its history. */
-export function archiveProduct(slug: string): boolean {
-  const info = getDb()
+export async function archiveProduct(slug: string): Promise<boolean> {
+  const info = (await getDb()
     .prepare("UPDATE products SET status = 'archived' WHERE slug = ?")
-    .run(slug);
+    .run(slug));
   return info.changes > 0;
 }
 
 /** True when a different product is already using this SKU. */
-export function skuTakenByAnother(sku: string, exceptSlug: string): boolean {
-  const row = getDb()
+export async function skuTakenByAnother(sku: string, exceptSlug: string): Promise<boolean> {
+  const row = (await getDb()
     .prepare("SELECT slug FROM products WHERE sku = ? AND slug != ? LIMIT 1")
-    .get(sku, exceptSlug);
+    .get(sku, exceptSlug));
   return Boolean(row);
 }
 
@@ -1250,42 +1241,41 @@ export function skuTakenByAnother(sku: string, exceptSlug: string): boolean {
  * a slightly different product, and it should not go on sale before anyone
  * has looked at it. The slug and the SKU are both made unique.
  */
-export function duplicateProduct(
+export async function duplicateProduct(
   slug: string
-): { ok: boolean; slug?: string; reason?: string } {
+): Promise<{ ok: boolean; slug?: string; reason?: string }> {
   const db = getDb();
-  const source = db
+  const source = (await db
     .prepare("SELECT * FROM products WHERE slug = ?")
-    .get(slug) as Row | undefined;
+    .get(slug)) as Row | undefined;
   if (!source) return { ok: false, reason: "That product no longer exists." };
 
-  const slugTaken = (candidate: string) =>
+  const slugTaken = async (candidate: string) =>
     Boolean(
-      db.prepare("SELECT slug FROM products WHERE slug = ? LIMIT 1").get(candidate)
+      (await db.prepare("SELECT slug FROM products WHERE slug = ? LIMIT 1").get(candidate))
     );
 
   const baseSlug = `${slug}-copy`;
   let newSlug = baseSlug;
   let n = 2;
-  while (slugTaken(newSlug)) {
+  while (await slugTaken(newSlug)) {
     newSlug = `${baseSlug}-${n}`;
     n++;
   }
 
   const baseSku = `${normalizeSku(str(source.sku) || slug)}-COPY`;
-  const newSku = uniqueSku(baseSku, (candidate) => skuTakenByAnother(candidate, newSlug));
+  const newSku = (await uniqueSku(baseSku, async (candidate) => (await skuTakenByAnother(candidate, newSlug))));
 
   const position = num(
     (
-      db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS n FROM products").get() as {
+      (await db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS n FROM products").get()) as {
         n: number;
       }
     ).n
   );
 
-  db.exec("BEGIN");
-  try {
-    db.prepare(
+  await withTransaction(async (db) => {
+    await db.prepare(
       `INSERT INTO products
          (slug, sku, name, brand, category_slug, subcategory, model_number,
           price, mrp, sale_price, purchase_cost, rating, reviews, stock, condition,
@@ -1327,9 +1317,9 @@ export function duplicateProduct(
       position
     );
 
-    const variants = db
+    const variants = (await db
       .prepare("SELECT * FROM variants WHERE product_slug = ? ORDER BY position")
-      .all(slug) as Row[];
+      .all(slug)) as Row[];
     const insVariant = db.prepare(
       `INSERT INTO variants
          (id, product_slug, name, sku, price, mrp, stock, low_stock_threshold,
@@ -1344,12 +1334,12 @@ export function duplicateProduct(
 
       // The copy's options need codes and barcodes of their own — they are
       // different things, even if they look the same.
-      const copiedSku = uniqueSku(
+      const copiedSku = (await uniqueSku(
         `${normalizeSku(str(v.sku) || `${newSlug}-${str(v.name)}`)}-COPY`,
-        (candidate) => variantSkuTaken(candidate, null)
-      );
+        async (candidate) => (await variantSkuTaken(candidate, null))
+      ));
 
-      insVariant.run(
+      await insVariant.run(
         id,
         newSlug,
         str(v.name),
@@ -1368,25 +1358,25 @@ export function duplicateProduct(
     // The stock comes with it, as an opening balance — so the copy's
     // history starts at zero, like any other product's.
     if (copiedVariants.length === 0) {
-      recordOpeningBalance(newSlug, num(source.stock), null);
+      (await recordOpeningBalance(newSlug, num(source.stock), null));
     } else {
       for (const v of copiedVariants) {
-        recordOpeningBalance(newSlug, v.stock, null, v.id);
+        (await recordOpeningBalance(newSlug, v.stock, null, v.id));
       }
     }
 
     // The photographs come with it, so the copy looks like the original.
-    const images = db
+    const images = (await db
       .prepare(
         "SELECT path, alt, position FROM product_images WHERE product_slug = ? ORDER BY position"
       )
-      .all(slug) as Row[];
+      .all(slug)) as Row[];
     const insImage = db.prepare(
       `INSERT INTO product_images (id, product_slug, path, alt, position)
        VALUES (?, ?, ?, ?, ?)`
     );
     for (const img of images) {
-      insImage.run(
+      await insImage.run(
         `${newSlug}::img-${num(img.position)}`,
         newSlug,
         str(img.path),
@@ -1394,12 +1384,7 @@ export function duplicateProduct(
         num(img.position)
       );
     }
-
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  });
 
   return { ok: true, slug: newSlug };
 }
@@ -1419,14 +1404,10 @@ export const BULK_PRODUCT_ACTIONS: BulkProductAction[] = [
  * There is no bulk delete: deleting is the last resort and each product
  * needs its own look first.
  */
-export function bulkUpdateProducts(
+export async function bulkUpdateProducts(
   slugs: string[],
   action: BulkProductAction
-): { changed: number; missing: string[] } {
-  const db = getDb();
-  let changed = 0;
-  const missing: string[] = [];
-
+): Promise<{ changed: number; missing: string[] }> {
   const sql =
     action === "publish"
       ? "UPDATE products SET status = 'published', listed = 1 WHERE slug = ?"
@@ -1434,24 +1415,22 @@ export function bulkUpdateProducts(
         ? "UPDATE products SET listed = 0 WHERE slug = ?"
         : "UPDATE products SET status = 'archived' WHERE slug = ?";
 
-  db.exec("BEGIN");
-  try {
+  const result = await withTransaction(async (db) => {
     const update = db.prepare(sql);
     const exists = db.prepare("SELECT slug FROM products WHERE slug = ?");
+    let moved = 0;
+    const gone: string[] = [];
     for (const slug of slugs) {
-      if (!exists.get(slug)) {
-        missing.push(slug);
+      if (!(await exists.get(slug))) {
+        gone.push(slug);
         continue;
       }
-      changed += Number(update.run(slug).changes);
+      moved += Number((await update.run(slug)).changes);
     }
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+    return { moved, gone };
+  });
 
-  return { changed, missing };
+  return { changed: result.moved, missing: result.gone };
 }
 
 /** What still points at a product. */
@@ -1461,16 +1440,16 @@ export type ProductReferences = {
   variants: number;
 };
 
-export function productReferences(slug: string): ProductReferences {
+export async function productReferences(slug: string): Promise<ProductReferences> {
   const db = getDb();
-  const count = (sql: string) =>
-    num((db.prepare(sql).get(slug) as Row | undefined)?.n);
+  const count = async (sql: string) =>
+    num(((await db.prepare(sql).get(slug)) as Row | undefined)?.n);
   return {
-    orderItems: count(
+    orderItems: await count(
       "SELECT COUNT(*) n FROM order_items WHERE product_slug = ?"
     ),
-    cartItems: count("SELECT COUNT(*) n FROM cart_items WHERE product_slug = ?"),
-    variants: count("SELECT COUNT(*) n FROM variants WHERE product_slug = ?"),
+    cartItems: await count("SELECT COUNT(*) n FROM cart_items WHERE product_slug = ?"),
+    variants: await count("SELECT COUNT(*) n FROM variants WHERE product_slug = ?"),
   };
 }
 
@@ -1502,10 +1481,10 @@ function removeUploadedFiles(paths: string[], slug: string) {
  * deleted at all: the order lines reference it, and removing it would leave
  * orders pointing at a product that no longer exists.
  */
-export function deleteProduct(
+export async function deleteProduct(
   slug: string
-): { deleted: boolean; reason?: string } {
-  const refs = productReferences(slug);
+): Promise<{ deleted: boolean; reason?: string }> {
+  const refs = (await productReferences(slug));
 
   if (refs.orderItems > 0) {
     return {
@@ -1526,12 +1505,12 @@ export function deleteProduct(
 
   const db = getDb();
   const uploads = (
-    db
+    (await db
       .prepare("SELECT path FROM product_images WHERE product_slug = ?")
-      .all(slug) as Row[]
+      .all(slug)) as Row[]
   ).map((r) => str(r.path));
 
-  const info = db.prepare("DELETE FROM products WHERE slug = ?").run(slug);
+  const info = (await db.prepare("DELETE FROM products WHERE slug = ?").run(slug));
   if (!info.changes) return { deleted: false, reason: "That product no longer exists." };
 
   removeUploadedFiles(uploads, slug);
@@ -1573,7 +1552,7 @@ export type ProductPatch = {
  * through the inventory, so that every change is written down. `stock` and
  * `lowStockThreshold` are set by `src/lib/inventory.ts` instead.
  */
-export function updateProduct(slug: string, patch: ProductPatch): boolean {
+export async function updateProduct(slug: string, patch: ProductPatch): Promise<boolean> {
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
 
@@ -1681,9 +1660,9 @@ export function updateProduct(slug: string, patch: ProductPatch): boolean {
   if (!sets.length) return false;
 
   params.push(slug);
-  const info = getDb()
+  const info = (await getDb()
     .prepare(`UPDATE products SET ${sets.join(", ")} WHERE slug = ?`)
-    .run(...params);
+    .run(...params));
   return info.changes > 0;
 }
 

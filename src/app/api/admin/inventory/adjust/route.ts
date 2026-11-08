@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
   if (!reason) return fail("Give a reason for the change.", 400);
 
-  const result = adjustStock({
+  const result = (await adjustStock({
     productSlug,
     variantId,
     mode: mode as "set" | "add" | "remove",
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     reason,
     note,
     userId: guard.user.id,
-  });
+  }));
 
   if (!result.ok) return fail(result.reason, 409);
 

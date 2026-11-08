@@ -87,22 +87,22 @@ export function cancellationEligibility(order: Order): {
   };
 }
 
-export function getCancellation(id: string): OrderCancellation | null {
+export async function getCancellation(id: string): Promise<OrderCancellation | null> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT c.*, o.name AS customer_name, o.email AS customer_email
        FROM order_cancellations c
        JOIN orders o ON o.id = c.order_id
        WHERE c.id = ?`
     )
-    .get(id) as Row | undefined;
+    .get(id)) as Row | undefined;
   return row ? mapCancellationRow(row) : null;
 }
 
-export function getCancellationForOrder(orderId: string): OrderCancellation | null {
+export async function getCancellationForOrder(orderId: string): Promise<OrderCancellation | null> {
   const db = getDb();
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT c.*, o.name AS customer_name, o.email AS customer_email
        FROM order_cancellations c
@@ -111,15 +111,15 @@ export function getCancellationForOrder(orderId: string): OrderCancellation | nu
        ORDER BY c.created_at DESC
        LIMIT 1`
     )
-    .get(orderId) as Row | undefined;
+    .get(orderId)) as Row | undefined;
   return row ? mapCancellationRow(row) : null;
 }
 
-export function listCancellations(status?: string): OrderCancellation[] {
+export async function listCancellations(status?: string): Promise<OrderCancellation[]> {
   const db = getDb();
   const rows = (
     status
-      ? db
+      ? (await db
           .prepare(
             `SELECT c.*, o.name AS customer_name, o.email AS customer_email
              FROM order_cancellations c
@@ -127,15 +127,15 @@ export function listCancellations(status?: string): OrderCancellation[] {
              WHERE c.status = ?
              ORDER BY c.created_at DESC`
           )
-          .all(status)
-      : db
+          .all(status))
+      : (await db
           .prepare(
             `SELECT c.*, o.name AS customer_name, o.email AS customer_email
              FROM order_cancellations c
              JOIN orders o ON o.id = c.order_id
              ORDER BY c.created_at DESC`
           )
-          .all()
+          .all())
   ) as Row[];
   return rows.map(mapCancellationRow);
 }
@@ -146,12 +146,12 @@ export function listCancellations(status?: string): OrderCancellation[] {
  * The request is recorded either way. What happens to the order is the
  * back office's decision, and the reason they give is kept with it.
  */
-export function createCancellationRequest(input: {
+export async function createCancellationRequest(input: {
   orderId: string;
   userId: number | null;
   reason: string;
   dispatchState: CancellationDispatchState;
-}): { ok: boolean; message: string; id?: string } {
+}): Promise<{ ok: boolean; message: string; id?: string }> {
   const db = getDb();
   const reason = input.reason.trim();
 
@@ -159,7 +159,7 @@ export function createCancellationRequest(input: {
     return { ok: false, message: "Tell us why you want to cancel." };
   }
 
-  const order = getOrder(input.orderId);
+  const order = (await getOrder(input.orderId));
   if (!order) return { ok: false, message: "Order not found." };
 
   const eligibility = cancellationEligibility(order);
@@ -167,7 +167,7 @@ export function createCancellationRequest(input: {
     return { ok: false, message: eligibility.reason ?? "This order cannot be cancelled." };
   }
 
-  const existing = getCancellationForOrder(input.orderId);
+  const existing = (await getCancellationForOrder(input.orderId));
   if (existing && existing.status === "requested") {
     return {
       ok: false,
@@ -176,11 +176,11 @@ export function createCancellationRequest(input: {
   }
 
   const id = generateCancellationId();
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO order_cancellations
       (id, order_id, user_id, dispatch_state, reason, status)
      VALUES (?, ?, ?, ?, ?, 'requested')`
-  ).run(id, input.orderId, input.userId, input.dispatchState, reason);
+  ).run(id, input.orderId, input.userId, input.dispatchState, reason));
 
   return {
     ok: true,
@@ -200,22 +200,22 @@ export function createCancellationRequest(input: {
  * taken, the refund is recorded as *pending* — approving a refund is a
  * promise, and only the payment provider's confirmation makes it a fact.
  */
-export function approveCancellation(
+export async function approveCancellation(
   id: string,
   staffUser: { id: number; name: string },
   input: { notes?: string; refundAmount?: number }
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
-  const request = getCancellation(id);
+  const request = (await getCancellation(id));
   if (!request) return { ok: false, message: "Cancellation request not found." };
   if (request.status !== "requested") {
     return { ok: false, message: `This request is already '${request.status}'.` };
   }
 
-  const order = getOrder(request.order_id);
+  const order = (await getOrder(request.order_id));
   if (!order) return { ok: false, message: "That order no longer exists." };
 
-  const result = applyOrderStatus(request.order_id, "cancelled", staffUser.id);
+  const result = (await applyOrderStatus(request.order_id, "cancelled", staffUser.id));
   if (!result.ok) {
     return { ok: false, message: result.message ?? "The order could not be cancelled." };
   }
@@ -226,7 +226,7 @@ export function approveCancellation(
     input.refundAmount !== undefined ? Math.max(0, Math.round(input.refundAmount)) : order.total;
   const nowIso = new Date().toISOString();
 
-  db.prepare(
+  (await db.prepare(
     `UPDATE order_cancellations
      SET status = 'approved',
          admin_notes = ?,
@@ -242,7 +242,7 @@ export function approveCancellation(
     nowIso,
     nowIso,
     id
-  );
+  ));
 
   return {
     ok: true,
@@ -256,13 +256,13 @@ export function approveCancellation(
 /**
  * The back office declines the cancellation, and says why.
  */
-export function rejectCancellation(
+export async function rejectCancellation(
   id: string,
   staffUser: { id: number; name: string },
   reason: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
-  const request = getCancellation(id);
+  const request = (await getCancellation(id));
   if (!request) return { ok: false, message: "Cancellation request not found." };
   if (request.status !== "requested") {
     return { ok: false, message: `This request is already '${request.status}'.` };
@@ -272,11 +272,11 @@ export function rejectCancellation(
   }
 
   const nowIso = new Date().toISOString();
-  db.prepare(
+  (await db.prepare(
     `UPDATE order_cancellations
      SET status = 'rejected', rejection_reason = ?, decided_at = ?, updated_at = ?
      WHERE id = ?`
-  ).run(reason.trim(), nowIso, nowIso, id);
+  ).run(reason.trim(), nowIso, nowIso, id));
 
   return { ok: true, message: "The cancellation request has been declined." };
 }
@@ -286,13 +286,13 @@ export function rejectCancellation(
  *
  * Until this is done the refund is a promise; after it, it is a fact.
  */
-export function confirmCancellationRefund(
+export async function confirmCancellationRefund(
   id: string,
   staffUser: { id: number; name: string },
   reference: string
-): { ok: boolean; message: string } {
+): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
-  const request = getCancellation(id);
+  const request = (await getCancellation(id));
   if (!request) return { ok: false, message: "Cancellation request not found." };
   if (request.refund_status !== "pending") {
     return { ok: false, message: "There is no refund waiting to be confirmed." };
@@ -301,11 +301,11 @@ export function confirmCancellationRefund(
     return { ok: false, message: "Give the refund reference from the payment provider." };
   }
 
-  db.prepare(
+  (await db.prepare(
     `UPDATE order_cancellations
      SET refund_status = 'processed', refund_reference = ?, updated_at = ?
      WHERE id = ?`
-  ).run(reference.trim(), new Date().toISOString(), id);
+  ).run(reference.trim(), new Date().toISOString(), id));
 
   return { ok: true, message: "The refund is confirmed as paid." };
 }

@@ -42,8 +42,8 @@ export default async function AdminUsersPage({
     offset: (page - 1) * PER_PAGE,
   };
 
-  const customers = listCustomers(query);
-  const total = countCustomers(query);
+  const customers = (await listCustomers(query));
+  const total = (await countCustomers(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const pageLink = (n: number) => {

@@ -24,7 +24,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = (await getProduct(slug));
   if (!product) return { title: "Not found" };
   const description =
     product.meta_description ?? product.short_desc ?? product.description ?? undefined;
@@ -47,15 +47,17 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = (await getProduct(slug));
   if (!product) notFound();
 
-  const related = getRelatedProducts(product, 4);
-  const category = product.category_slug
-    ? getCategory(product.category_slug)
-    : null;
-  const images = getProductImages(slug);
-  const backorderPolicy = getBackorderPolicy();
+  // The rest are asked for together: the database is a long way off, and
+  // asking one at a time makes the page as slow as the sum of them.
+  const [related, category, images, backorderPolicy] = await Promise.all([
+    getRelatedProducts(product, 4),
+    product.category_slug ? getCategory(product.category_slug) : null,
+    getProductImages(slug),
+    getBackorderPolicy(),
+  ]);
 
   // The specifications, in the order the category asks for them.
   const specRows = orderSpecs(product.specs, category?.spec_fields ?? []);

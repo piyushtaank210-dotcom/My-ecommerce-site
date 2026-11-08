@@ -35,7 +35,7 @@ export async function requestCancellationAction(
 
   if (!orderId) return { ok: false, message: "Order ID is missing." };
 
-  const order = getOrder(orderId);
+  const order = (await getOrder(orderId));
   if (!order) return { ok: false, message: "Order not found." };
 
   if (user && order.user_id && order.user_id !== user.id) {
@@ -51,12 +51,12 @@ export async function requestCancellationAction(
   }
 
   const eligibility = cancellationEligibility(order);
-  const result = createCancellationRequest({
+  const result = (await createCancellationRequest({
     orderId,
     userId: user?.id ?? order.user_id,
     reason,
     dispatchState: eligibility.dispatchState,
-  });
+  }));
 
   if (result.ok) {
     revalidatePath(`/order/${orderId}`);
@@ -86,10 +86,10 @@ export async function approveCancellationAction(
   if (!id) return { ok: false, message: "Cancellation ID missing." };
 
   const refundAmount = refundRaw === "" ? undefined : Number(refundRaw);
-  const result = approveCancellation(id, staff, {
+  const result = (await approveCancellation(id, staff, {
     notes,
     refundAmount: Number.isFinite(refundAmount) ? refundAmount : undefined,
-  });
+  }));
 
   if (result.ok) {
     revalidatePath("/admin/orders");
@@ -122,7 +122,7 @@ export async function rejectCancellationAction(
     };
   }
 
-  const result = rejectCancellation(id, staff, reason);
+  const result = (await rejectCancellation(id, staff, reason));
 
   if (result.ok) {
     revalidatePath("/admin/orders");
@@ -151,7 +151,7 @@ export async function confirmCancellationRefundAction(
 
   if (!id) return { ok: false, message: "Cancellation ID missing." };
 
-  const result = confirmCancellationRefund(id, staff, reference);
+  const result = (await confirmCancellationRefund(id, staff, reference));
 
   if (result.ok) {
     revalidatePath("/admin/orders");
