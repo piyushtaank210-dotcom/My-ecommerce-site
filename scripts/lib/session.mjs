@@ -10,6 +10,9 @@
  */
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
+// The shop's environment is read first, so that the connection string is
+// there before it is asked for.
+import "./env.mjs";
 import { databaseUrl, sslOption } from "../../src/lib/database-url.ts";
 
 /** The shop's database. */

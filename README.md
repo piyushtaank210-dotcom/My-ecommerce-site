@@ -29,9 +29,9 @@ To re-seed the SQLite file at any point, run `npm run seed` and then `npm run db
 
 ### The database
 
-The shop's data lives in one PostgreSQL database, which every instance of the shop reads and writes — so an order placed on one instance is on the next one too. The connection string is in [`src/lib/database-url.ts`](src/lib/database-url.ts), so a deployment works from the repository alone; `DATABASE_URL` in the environment still wins when it is set, which is how a different database is pointed at.
+The shop's data lives in one PostgreSQL database, which every instance of the shop reads and writes — so an order placed on one instance is on the next one too. The connection string is read from the environment, from `DATABASE_URL`.
 
-> The connection string is a secret. It is in the repository, so it is in the repository's history too. If the repository is ever public, rotate the password in the database console and update that one file.
+> The connection string is a secret, so it is never written into the source. Put it in `.env.local` in the project root — that file is ignored by Git, so the password stays out of the repository — or set `DATABASE_URL` in the environment settings of whichever machine runs the shop. If the variable is missing, the shop says so rather than starting up against a database nobody chose.
 
 The SQLite file in `data/` is what the shop kept its data in before. It is now only the seed — the file the migration reads from — and the scripts that check the catalogue read it directly.
 

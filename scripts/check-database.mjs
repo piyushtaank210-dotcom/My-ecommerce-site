@@ -8,6 +8,7 @@
  *
  *   node scripts/check-database.mjs
  */
+import "./lib/env.mjs";
 import { databaseUrl, sslOption } from "../src/lib/database-url.ts";
 import { Pool } from "pg";
 

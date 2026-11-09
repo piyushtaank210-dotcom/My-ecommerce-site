@@ -21,6 +21,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { SCHEMA_SQL } from "../src/lib/schema.ts";
+import "./lib/env.mjs";
 import { databaseUrl, sslOption } from "../src/lib/database-url.ts";
 import { toPostgres } from "../src/lib/db.ts";
 import { applyMigrations } from "../src/lib/migrations.ts";

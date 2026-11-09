@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Pool } from "pg";
+import "./lib/env.mjs";
 import { databaseUrl, sslOption } from "../src/lib/database-url.ts";
 import {
   clickByText,

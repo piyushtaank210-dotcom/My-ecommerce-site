@@ -17,7 +17,7 @@ instance shares.
 
 | | |
 |---|---|
-| `src/lib/db.ts` | The database layer. It talks to PostgreSQL when `DATABASE_URL` is set, and to the SQLite file otherwise. The PostgreSQL half is a pool of connections, a statement handle in the same shape the shop already uses, a translation of the shop's `?` placeholders into PostgreSQL's `$1`, and transactions carried in an `AsyncLocalStorage` so that a transaction's work follows it across every `await` and two requests never see each other's transaction. |
+| `src/lib/db.ts` | The database layer. It talks to PostgreSQL, through the connection string the environment names. The PostgreSQL half is a pool of connections, a statement handle in the same shape the shop already uses, a translation of the shop's `?` placeholders into PostgreSQL's `$1`, and transactions carried in an `AsyncLocalStorage` so that a transaction's work follows it across every `await` and two requests never see each other's transaction. |
 | `src/lib/schema.ts` | The schema, written once and built for either database. Three things differ between them — the id column, the clock, and the timestamp default — and they are spelled out in `schemaSql()`. PostgreSQL gets `shop_now()`, which writes UTC ISO 8601 so the shop's timestamps keep sorting and reading the way they always have. |
 | `src/lib/migrations.ts` | The migrations, for both databases. The `ALTER TABLE` statements are checked per database, because PostgreSQL can add a column without being told and SQLite cannot. |
 | `scripts/migrate-to-postgres.mjs` | Copies the shop's data out of the SQLite file and into PostgreSQL. Every table, in the order the foreign keys need, and it is safe to run again. |
