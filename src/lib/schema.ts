@@ -175,7 +175,12 @@ CREATE TABLE IF NOT EXISTS hero_slides (
   side            TEXT NOT NULL DEFAULT 'left',
   position        INTEGER DEFAULT 0,
   video           TEXT,
-  video_poster    TEXT
+  video_poster    TEXT,
+  mobile_image    TEXT,
+  mobile_alt      TEXT,
+  mobile_position TEXT DEFAULT '50% 50%',
+  mobile_video    TEXT,
+  mobile_video_poster TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (

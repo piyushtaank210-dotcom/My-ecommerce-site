@@ -136,6 +136,24 @@ export async function applyMigrations(db: Db): Promise<void> {
   // from showing the photograph and then jumping to the film.
   add("hero_slides", "video_poster", "video_poster TEXT");
 
+  // A phone gets its own picture. A wide screen is a landscape frame and
+  // a phone is not, so a photograph cut for one is cropped badly in the
+  // other; the slide keeps both and the screen takes the one that fits
+  // it.
+  add("hero_slides", "mobile_image", "mobile_image TEXT");
+  // And its own description, because it is a different photograph.
+  add("hero_slides", "mobile_alt", "mobile_alt TEXT");
+  // And where that photograph is cropped to, which is its own frame.
+  add("hero_slides", "mobile_position", "mobile_position TEXT DEFAULT '50% 50%'");
+
+  // And a phone gets its own film, cut to a phone's portrait shape. A
+  // film cut for a wide screen is mostly black when it is cut to a
+  // phone's, so it is a separate file rather than the same one cut
+  // differently in the browser.
+  add("hero_slides", "mobile_video", "mobile_video TEXT");
+  // The phone's film's own first frame, held as a still.
+  add("hero_slides", "mobile_video_poster", "mobile_video_poster TEXT");
+
   // A replacement is a shipment of its own. These are what is going out
   // (which may not be the unit that came back), when it went, and where
   // it has got to — so the customer can be told the truth about it.

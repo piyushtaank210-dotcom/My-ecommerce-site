@@ -12,6 +12,15 @@ const SLIDE_MS = 6000;
 /** A drag of at least this many pixels counts as a swipe. */
 const SWIPE_PX = 48;
 
+/**
+ * The width below which a phone's own picture and film are shown.
+ *
+ * It is the same boundary the CSS uses, to the hundredth of a pixel, so
+ * that a browser at a fractional zoom lands on one side of it or the other
+ * and never in the gap between the two.
+ */
+const PHONE_MAX = 767.98;
+
 /** What a film has told us about itself. */
 type FilmInfo = {
   /** How long the film runs, in seconds. */
@@ -19,6 +28,29 @@ type FilmInfo = {
   /** The browser would not play it, so the photograph carries the slide. */
   failed: boolean;
 };
+
+/**
+ * The key a slide's film is filed under.
+ *
+ * A slide can carry two films — one cut for a wide screen and one cut
+ * for a phone — and they are different films of different lengths, so
+ * each is filed under its own key.
+ */
+function filmKey(id: string, narrow: boolean): string {
+  return narrow ? `${id}:narrow` : `${id}:wide`;
+}
+
+/**
+ * Whether the screen in front of the shopper is a phone's.
+ *
+ * It is asked of the browser directly rather than read from the state,
+ * so that a film which fails while the screen is in the other shape is
+ * not mistaken for one that cannot be played at all.
+ */
+function screenIsNarrow(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(`(max-width: ${PHONE_MAX}px)`).matches;
+}
 
 export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const count = slides.length;
@@ -29,15 +61,24 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [reduced, setReduced] = useState(false);
   const [wideEnough, setWideEnough] = useState(false);
   /**
-   * What each film has told us, by slide. A slide with no film has no
-   * entry. The films are independent of one another: one of them failing
-   * says nothing about the next, and each decides the length of its own
-   * slide.
+   * Whether the screen in front of the shopper is a phone's.
+   *
+   * A phone shows its own picture and its own film, each cut to the shape
+   * of a phone's screen; a tablet and a desktop show the wide ones.
+   */
+  const [narrow, setNarrow] = useState(false);
+  /**
+   * What each film has told us, by slide and by the shape it was cut
+   * for. A slide with no film has no entry. The films are independent of
+   * one another: one of them failing says nothing about the next, and
+   * each decides the length of its own slide.
    */
   const [films, setFilms] = useState<Record<string, FilmInfo>>({});
   const swipeStart = useRef<number | null>(null);
-  /** The film element on each slide. */
+  /** The film element on each slide, for the wide shape. */
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  /** The film element on each slide, for the phone's shape. */
+  const mobileVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   /**
    * Whether each film's end has already been dealt with. If a film ends
    * before the page has finished waking up, the event is never heard, and
@@ -74,20 +115,32 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }, []);
 
   const active = slides[index];
-  /** Whether the slide on screen carries a film. */
-  const onFilm = Boolean(active?.video);
+  /**
+   * The shape of the screen in front of the shopper.
+   *
+   * A phone takes the picture and the film cut for a phone; a tablet and
+   * a desktop take the wide ones.
+   */
+  const isNarrow = narrow;
+  /** The film the slide on screen carries, for the shape of the screen. */
+  const activeFilmSrc = isNarrow ? active?.mobile_video : active?.video;
+  /** Whether the slide on screen carries a film here. */
+  const onFilm = Boolean(activeFilmSrc);
   /** What the film on the slide on screen has told us. */
-  const activeFilm = active?.video ? films[active.id] : undefined;
+  const activeFilm = activeFilmSrc
+    ? films[filmKey(active.id, isNarrow)]
+    : undefined;
   const filmLength = activeFilm?.length ?? 0;
   const filmFailed = activeFilm?.failed ?? false;
 
   /**
-   * The film on the slide the hero opens on. It is the one that is
-   * fetched and running from the very first byte; the others are fetched
-   * when the carousel reaches them, so a visitor who never gets there
-   * never pays for them.
+   * The film on the slide the hero opens on, for the shape of the
+   * screen. It is the one that is fetched and running from the very
+   * first byte; the others are fetched when the carousel reaches them,
+   * so a visitor who never gets there never pays for them.
    */
   const openingFilm = slides[0]?.video ? 0 : -1;
+  const openingMobileFilm = slides[0]?.mobile_video ? 0 : -1;
 
   /**
    * How long the slide on screen lasts. A slide with a film lasts as long
@@ -112,12 +165,12 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   );
 
   /** Records what a film has told us, without churning the state. */
-  const setFilm = useCallback((id: string, patch: Partial<FilmInfo>) => {
+  const setFilm = useCallback((key: string, patch: Partial<FilmInfo>) => {
     setFilms((prev) => {
-      const now = prev[id] ?? { length: 0, failed: false };
+      const now = prev[key] ?? { length: 0, failed: false };
       const next = { ...now, ...patch };
       if (next.length === now.length && next.failed === now.failed) return prev;
-      return { ...prev, [id]: next };
+      return { ...prev, [key]: next };
     });
   }, []);
 
@@ -130,16 +183,24 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // A film is only worth playing on a screen with room for it. A phone
-  // keeps the photograph: the film's own source rules it out there, so a
-  // phone never downloads the film at all, and this is where the browser
-  // is asked whether there is room for it before it is started.
+  // A film is only worth playing on a screen with room for it. A wide
+  // screen has room for the wide cut; a phone has room for the cut made
+  // for it. The browser is asked which shape the screen is before the
+  // film is started.
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const update = () => setWideEnough(mq.matches);
+    const wide = window.matchMedia("(min-width: 768px)");
+    const phone = window.matchMedia(`(max-width: ${PHONE_MAX}px)`);
+    const update = () => {
+      setWideEnough(wide.matches);
+      setNarrow(phone.matches);
+    };
     update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    wide.addEventListener("change", update);
+    phone.addEventListener("change", update);
+    return () => {
+      wide.removeEventListener("change", update);
+      phone.removeEventListener("change", update);
+    };
   }, []);
 
   // Advance on a timer. Depending on `index` restarts the countdown whenever
@@ -147,14 +208,14 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   //
   // A slide with a film is not timed at all while the film is playing: it
   // runs to its end and hands over to the next picture itself. The timer
-  // takes over where the film is not playing — on a phone, or if the
-  // browser would not play it — so the carousel never sits on one slide.
+  // takes over where the film is not playing — or where there is no film
+  // for this shape of screen — so the carousel never sits on one slide.
   useEffect(() => {
     if (count < 2 || paused || reduced) return;
-    if (onFilm && wideEnough && !filmFailed) return;
+    if (onFilm && !filmFailed) return;
     const id = window.setTimeout(() => setIndex((index + 1) % count), SLIDE_MS);
     return () => window.clearTimeout(id);
-  }, [count, index, paused, reduced, onFilm, wideEnough, filmFailed]);
+  }, [count, index, paused, reduced, onFilm, filmFailed]);
 
   // Don't burn through the slides while the tab is in the background.
   useEffect(() => {
@@ -170,6 +231,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     for (let i = 0; i < count; i++) {
       if (i === index) continue;
       videoRefs.current[i]?.pause();
+      mobileVideoRefs.current[i]?.pause();
     }
   }, [index, count]);
 
@@ -179,22 +241,31 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   // picture on the slide, not a thing the shopper has to hold still for.
   useEffect(() => {
     const slide = slides[index];
-    if (!slide?.video) return;
-    const video = videoRefs.current[index];
+    if (!slide) return;
+
+    // The film for the shape of the screen in front of the shopper, and
+    // the element that plays it.
+    const forPhone = narrow;
+    const src = forPhone ? slide.mobile_video : slide.video;
+    if (!src) return;
+    const video = forPhone
+      ? mobileVideoRefs.current[index]
+      : videoRefs.current[index];
     if (!video) return;
+    const key = filmKey(slide.id, forPhone);
 
     // The length of the film. The browser may have worked it out before
     // this page finished waking up, in which case the event that carries
     // it has already gone by — so it is read off the element as well.
     if (Number.isFinite(video.duration) && video.duration > 0) {
-      setFilm(slide.id, { length: video.duration });
+      setFilm(key, { length: video.duration });
     }
 
     if (video.ended) {
-      if (!endedSeen.current.has(slide.id)) {
+      if (!endedSeen.current.has(key)) {
         // The film ran to its end while the page was still waking up and
         // nobody heard it. Move on to the next picture.
-        endedSeen.current.add(slide.id);
+        endedSeen.current.add(key);
         setIndex((n) => (n + 1) % count);
         return;
       }
@@ -207,20 +278,29 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       }
     }
 
-    if (wideEnough && !reduced && !hidden && !filmFailed) {
+    if (!reduced && !hidden && !filmFailed) {
       video.play().catch((err: unknown) => {
         const name = (err as { name?: string } | null)?.name;
         // The browser would not start the film — it wants a gesture first,
         // or it cannot play the file. The photograph carries the slide
         // instead, and the carousel goes back to its usual timing.
         if (name === "NotAllowedError" || name === "NotSupportedError") {
-          setFilm(slide.id, { failed: true });
+          setFilm(key, { failed: true });
         }
       });
     } else {
       video.pause();
     }
-  }, [index, wideEnough, reduced, hidden, filmFailed, count, slides, setFilm]);
+  }, [
+    index,
+    narrow,
+    reduced,
+    hidden,
+    filmFailed,
+    count,
+    slides,
+    setFilm,
+  ]);
 
   // A browser that cannot play the file says so quietly. play() stays
   // pending rather than rejecting, and the error arrives while the page
@@ -230,18 +310,24 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   // over and the carousel goes back to its usual timing.
   useEffect(() => {
     const slide = slides[index];
-    if (!slide?.video) return;
-    const video = videoRefs.current[index];
-    if (!video || !wideEnough || reduced) return;
-    if (films[slide.id]?.failed) return;
+    if (!slide) return;
+    const forPhone = narrow;
+    const src = forPhone ? slide.mobile_video : slide.video;
+    if (!src) return;
+    const video = forPhone
+      ? mobileVideoRefs.current[index]
+      : videoRefs.current[index];
+    if (!video || reduced) return;
+    const key = filmKey(slide.id, forPhone);
+    if (films[key]?.failed) return;
     const id = window.setInterval(() => {
       // 3 is NETWORK_NO_SOURCE: there is no film this browser can play.
       if (video.error || video.networkState === 3) {
-        setFilm(slide.id, { failed: true });
+        setFilm(key, { failed: true });
       }
     }, 400);
     return () => window.clearInterval(id);
-  }, [index, slides, wideEnough, reduced, films, setFilm]);
+  }, [index, narrow, reduced, films, slides, setFilm]);
 
   function onPointerDown(e: React.PointerEvent) {
     // The pointer has the shopper's attention, so the keyboard is not
@@ -284,7 +370,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           A slide may also carry a film. A film is on the page from the
           start and is running when the hero opens; it plays to its end
           and then hands over to the next picture. A phone keeps the
-          photograph, and never downloads the film at all. */}
+          picture, and never downloads the wide film at all. */}
       <div className="absolute inset-0 grid select-none">
         {slides.map((s, i) => (
           <div
@@ -295,116 +381,178 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 : "pointer-events-none opacity-0 blur-[8px] scale-[1.03]"
             }`}
           >
-            {s.video ? (
-              <>
-                {/* The still sits underneath. It is what a phone shows —
-                    the film never plays there, and the film is a
-                    landscape picture, so on a phone the still is cut for
-                    the screen instead. It is also what the slide falls
-                    back to when the film cannot be played at all.
-
-                    Where the film does play, this still is not painted:
-                    the film and its own poster are the picture, and the
-                    two can never be seen swapping over one another. */}
-                <Image
-                  src={s.image}
-                  alt={s.alt}
-                  fill
-                  loading="eager"
-                  fetchPriority="low"
-                  unoptimized
-                  sizes="100vw"
-                  className={`hero-still object-cover transition-transform duration-[6000ms] ease-linear ${
-                    i === index ? "scale-[1.06]" : "scale-100"
-                  }`}
-                  style={{
-                    objectPosition: s.image_position,
-                    // Where the film cannot be played at all, this still is
-                    // the picture — so it has to be shown even on a screen
-                    // the film would have played on.
-                    display: films[s.id]?.failed ? "block" : undefined,
-                  }}
+            {/* The picture. A phone gets its own, cut for the shape of a
+                phone's screen — a wide screen is a landscape frame and a
+                phone is not, so a photograph cut for one is cropped badly
+                in the other. The browser takes the one that fits the
+                screen it is on and downloads only that one. */}
+            <picture className="absolute inset-0">
+              {s.mobile_image && (
+                <source
+                  media={`(max-width: ${PHONE_MAX}px)`}
+                  srcSet={s.mobile_image}
                 />
-                {/* The film. The film on the slide the hero opens on is in
-                    the page from the very first byte, so it is already
-                    running when the hero opens instead of swapping in over
-                    the photograph a moment later.
-
-                    Every film is fetched whole, not just the one on screen.
-                    A film that is fetched only when the carousel reaches it
-                    has to download before it can start, and a visitor
-                    sees that as the hero stuttering. Fetching both up
-                    front means neither ever waits — a phone still fetches
-                    neither, because the source rules them out there.
-
-                    The poster is the film's own first frame, so the picture
-                    on screen does not change when the film takes over from
-                    the still — the hero opens on the scene the film opens
-                    on, and simply starts moving.
-
-                    The film carries the hero's own background colour. A
-                    video is see-through until it has a poster or a frame,
-                    and the photograph underneath arrives after the first
-                    paint — without this, the hero would flash the
-                    photograph on the way to the film.
-
-                    The source carries the width and the motion preference,
-                    so a phone — and a reader who has asked for less
-                    movement — never downloads the film at all. */}
-                <video
-                  ref={(el) => {
-                    videoRefs.current[i] = el;
-                  }}
-                  poster={s.video_poster ?? s.image}
-                  aria-hidden="true"
-                  autoPlay={i === openingFilm}
-                  muted
-                  playsInline
-                  preload="auto"
-                  tabIndex={-1}
-                  onEnded={() => {
-                    // The film has run to its end: hand over to the next
-                    // picture, which is what the shopper sees next.
-                    if (i !== index) return;
-                    endedSeen.current.add(s.id);
-                    setIndex((n) => (n + 1) % count);
-                  }}
-                  onLoadedMetadata={(e) => {
-                    const d = e.currentTarget.duration;
-                    if (Number.isFinite(d)) setFilm(s.id, { length: d });
-                  }}
-                  onError={() => setFilm(s.id, { failed: true })}
-                  className={`hero-film absolute inset-0 h-full w-full bg-ink object-cover ${
-                    films[s.id]?.failed ? "opacity-0" : ""
-                  }`}
-                  style={{ objectPosition: s.image_position }}
-                >
-                  <source
-                    src={s.video}
-                    type="video/mp4"
-                    media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"
-                    onError={() => setFilm(s.id, { failed: true })}
-                  />
-                </video>
-              </>
-            ) : (
+              )}
               <Image
                 src={s.image}
                 alt={s.alt}
                 fill
                 loading="eager"
                 fetchPriority="low"
-                /* The photograph is served as it is. The optimiser would
-                   re-encode it a second time — the files are already sized
-                   for the job — and the browser scales it far better than a
-                   second pass through a lossy encoder does. */
                 unoptimized
                 sizes="100vw"
-                className={`object-cover transition-transform duration-[6000ms] ease-linear ${
+                className={`${
+                  s.video ? "hero-still" : ""
+                } ${s.mobile_video ? "hero-still-narrow" : ""} object-cover transition-transform duration-[6000ms] ease-linear ${
                   i === index ? "scale-[1.06]" : "scale-100"
                 }`}
-                style={{ objectPosition: s.image_position }}
+                style={{
+                  objectPosition: s.image_position,
+                  // Where the film cannot be played at all, this picture is
+                  // the picture — so it has to be shown even on a screen
+                  // the film would have played on.
+                  display:
+                    (isNarrow
+                      ? films[filmKey(s.id, true)]?.failed
+                      : films[filmKey(s.id, false)]?.failed)
+                      ? "block"
+                      : undefined,
+                }}
               />
+            </picture>
+
+            {/* The wide screen's film. The film on the slide the hero
+                opens on is in the page from the very first byte, so it is
+                already running when the hero opens instead of swapping in
+                over the photograph a moment later.
+
+                Every film is fetched whole, not just the one on screen.
+                A film that is fetched only when the carousel reaches it
+                has to download before it can start, and a visitor sees
+                that as the hero stuttering. Fetching both up front means
+                neither ever waits — a phone still fetches neither, because
+                the source rules them out there.
+
+                The poster is the film's own first frame, so the picture
+                on screen does not change when the film takes over from
+                the still — the hero opens on the scene the film opens
+                on, and simply starts moving.
+
+                The film carries the hero's own background color. A video
+                is see-through until it has a poster or a frame, and the
+                photograph underneath arrives after the first paint —
+                without this, the hero would flash the photograph on the
+                way to the film.
+
+                The source carries the width and the motion preference,
+                so a phone — and a reader who has asked for less
+                movement — never downloads the wide film at all. */}
+            {s.video && (
+              <video
+                ref={(el) => {
+                  videoRefs.current[i] = el;
+                }}
+                poster={s.video_poster ?? s.image}
+                aria-hidden="true"
+                autoPlay={i === openingFilm}
+                muted
+                playsInline
+                preload="auto"
+                tabIndex={-1}
+                onEnded={() => {
+                  // The film has run to its end: hand over to the next
+                  // picture, which is what the shopper sees next.
+                  if (i !== index) return;
+                  endedSeen.current.add(filmKey(s.id, false));
+                  setIndex((n) => (n + 1) % count);
+                }}
+                onLoadedMetadata={(e) => {
+                  const d = e.currentTarget.duration;
+                  if (Number.isFinite(d)) {
+                    setFilm(filmKey(s.id, false), { length: d });
+                  }
+                }}
+                onError={() => {
+                  // A film whose source is ruled out by the screen it is
+                  // on is not a film that failed — it is a film for the
+                  // other shape of screen, and it is not the one playing
+                  // here.
+                  if (!screenIsNarrow()) {
+                    setFilm(filmKey(s.id, false), { failed: true });
+                  }
+                }}
+                className={`hero-film absolute inset-0 h-full w-full bg-ink object-cover ${
+                  films[filmKey(s.id, false)]?.failed ? "opacity-0" : ""
+                }`}
+                style={{ objectPosition: s.image_position }}
+              >
+                <source
+                  src={s.video}
+                  type="video/mp4"
+                  media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"
+                  onError={() => {
+                    if (!screenIsNarrow()) {
+                      setFilm(filmKey(s.id, false), { failed: true });
+                    }
+                  }}
+                />
+              </video>
+            )}
+
+            {/* The phone's own film. A film cut for a wide screen is
+                mostly black when it is cut to a phone's portrait shape,
+                so the phone gets a different file — the same footage,
+                cut to the shape it is shown in. It plays on a phone and
+                nowhere else, and the source rules it out on a wide
+                screen, so a desktop never downloads it. */}
+            {s.mobile_video && (
+              <video
+                ref={(el) => {
+                  mobileVideoRefs.current[i] = el;
+                }}
+                poster={s.mobile_video_poster ?? s.mobile_image ?? s.image}
+                aria-hidden="true"
+                autoPlay={i === openingMobileFilm}
+                muted
+                playsInline
+                preload="auto"
+                tabIndex={-1}
+                onEnded={() => {
+                  // The film has run to its end: hand over to the next
+                  // picture, which is what the shopper sees next.
+                  if (i !== index) return;
+                  endedSeen.current.add(filmKey(s.id, true));
+                  setIndex((n) => (n + 1) % count);
+                }}
+                onLoadedMetadata={(e) => {
+                  const d = e.currentTarget.duration;
+                  if (Number.isFinite(d)) {
+                    setFilm(filmKey(s.id, true), { length: d });
+                  }
+                }}
+                onError={() => {
+                  // The same as above: a film for the other shape of
+                  // screen is not a film that failed.
+                  if (screenIsNarrow()) {
+                    setFilm(filmKey(s.id, true), { failed: true });
+                  }
+                }}
+                className={`hero-film-narrow absolute inset-0 h-full w-full bg-ink object-cover ${
+                  films[filmKey(s.id, true)]?.failed ? "opacity-0" : ""
+                }`}
+                style={{ objectPosition: s.image_position }}
+              >
+                <source
+                  src={s.mobile_video}
+                  type="video/mp4"
+                  media={`(max-width: ${PHONE_MAX}px) and (prefers-reduced-motion: no-preference)`}
+                  onError={() => {
+                    if (screenIsNarrow()) {
+                      setFilm(filmKey(s.id, true), { failed: true });
+                    }
+                  }}
+                />
+              </video>
             )}
           </div>
         ))}

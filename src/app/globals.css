@@ -405,6 +405,28 @@
     }
   }
 
+  /* A phone's own film.
+
+     A film cut for a wide screen is mostly black when it is cut to a
+     phone's portrait shape, so the phone plays a different file — the
+     same footage, cut to the shape it is shown in. It is shown on a phone
+     and nowhere else, and the rule is the mirror of the one above: the
+     wide screen's film is hidden below the breakpoint, and the phone's
+     film is hidden above it.
+
+     The two boundaries are a hundredth of a pixel apart so that a browser
+     at a fractional zoom falls on one side of them or the other, and
+     never in the gap between. */
+  .hero-film-narrow {
+    display: none;
+  }
+
+  @media (max-width: 767.98px) {
+    .hero-film-narrow {
+      display: block;
+    }
+  }
+
   /* The still under a film is for the screens the film does not play on.
      A phone keeps the picture and never downloads the film; a wide
      screen plays the film, and the film and its own poster are the
@@ -415,6 +437,15 @@
      wherever the film is shown. */
   @media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
     .hero-still {
+      display: none;
+    }
+  }
+
+  /* And the same for a phone's film: where the phone's film plays, the
+     picture beneath it is not painted, so the two are never seen
+     swapping over one another. */
+  @media (max-width: 767.98px) and (prefers-reduced-motion: no-preference) {
+    .hero-still-narrow {
       display: none;
     }
   }
@@ -533,8 +564,11 @@
   /* The film is movement, so it is not shown at all where movement is
      unwelcome. The photograph carries the slide instead. This rule sits
      outside the layers above, so it wins over the one that shows the
-     film on a wide screen. */
-  .hero-film {
+     film on a wide screen.
+
+     A phone's own film is movement too, so it goes the same way. */
+  .hero-film,
+  .hero-film-narrow {
     display: none;
   }
 }

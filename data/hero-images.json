@@ -4,5 +4,10 @@
   "hero-couch": "/hero/hero-couch.jpg",
   "hero-neon": "/hero/hero-neon.jpg",
   "hero-setup": "/hero/hero-setup.jpg",
-  "hero-dualsense": "/hero/hero-dualsense.jpg"
+  "hero-dualsense": "/hero/hero-dualsense.jpg",
+  "hero-mobile-showcase": "/hero/hero-mobile-showcase-poster.jpg",
+  "hero-mobile-lounge": "/hero/hero-mobile-lounge.webp",
+  "hero-mobile-neon": "/hero/hero-mobile-neon.webp",
+  "hero-mobile-setup": "/hero/hero-mobile-setup.webp",
+  "hero-mobile-dualsense": "/hero/hero-mobile-dualsense.webp"
 }

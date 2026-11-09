@@ -267,8 +267,46 @@ export type HeroSlide = {
    * on — the scene does not jump when the film takes over from the still.
    */
   video_poster: string | null;
+  /**
+   * The picture a phone shows, in the shape of a phone's screen.
+   *
+   * A wide screen is a landscape frame and a phone is not, so the same
+   * photograph cut for one is cropped badly in the other. Each slide can
+   * name its own picture for a phone, and the wide screen keeps the one it
+   * has.
+   */
+  mobile_image: string | null;
+  /**
+   * The description of the phone's own picture.
+   *
+   * It is a different photograph, so it is described differently — the
+   * words that fit one picture do not fit the other.
+   */
+  mobile_alt: string | null;
+  /**
+   * The film's own first frame, for the phone's own film.
+   *
+   * The same job as `video_poster`, for the cut that a phone plays.
+   */
+  mobile_video_poster: string | null;
+  /**
+   * A film to play on a phone, in the shape of a phone's screen.
+   *
+   * A film cut for a wide screen is mostly black when it is cut to a
+   * phone's portrait shape, so a phone gets its own cut — a different
+   * file, cut to the shape it is shown in.
+   */
+  mobile_video: string | null;
   alt: string;
   image_position: string;
+  /**
+   * Where the phone's own picture is cropped to.
+   *
+   * The same rule as `image_position`, for the phone's cut: where the
+   * frame the picture is taken from sits when the picture is cropped to
+   * the shape of the screen it is shown on.
+   */
+  mobile_position: string | null;
   eyebrow: string | null;
   title: string;
   body: string | null;

@@ -133,8 +133,9 @@ for (const [i, p] of catalog.products.entries()) {
 const insHero = db.prepare(
   `INSERT INTO hero_slides
      (id, image, alt, image_position, eyebrow, title, body,
-      primary_label, primary_href, secondary_label, secondary_href, note, side, position, video)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      primary_label, primary_href, secondary_label, secondary_href, note, side, position, video,
+      video_poster, mobile_image, mobile_alt, mobile_video, mobile_video_poster)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
 hero.slides.forEach((s, i) => {
@@ -148,6 +149,22 @@ hero.slides.forEach((s, i) => {
   const video = s.video ?? null;
   if (video && !existsSync(join(ROOT, "public", video.replace(/^\//, "")))) {
     console.warn(`  ! no file for the video on slide "${s.id}" (${video})`);
+  }
+
+  // A phone has its own picture, cut for a phone's screen, and its own
+  // film cut to the same shape. The same rule applies: a slide that left
+  // them behind would show the wide screen's media on a phone.
+  const mobileImage = s.mobile_image ? (heroImages[s.mobile_image] ?? null) : null;
+  if (s.mobile_image && !mobileImage) {
+    console.warn(`  ! no image for the phone on hero slide "${s.id}" (key "${s.mobile_image}")`);
+  }
+  const mobileVideo = s.mobile_video ?? null;
+  if (mobileVideo && !existsSync(join(ROOT, "public", mobileVideo.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the phone's video on slide "${s.id}" (${mobileVideo})`);
+  }
+  const mobileVideoPoster = s.mobile_video_poster ?? null;
+  if (mobileVideoPoster && !existsSync(join(ROOT, "public", mobileVideoPoster.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the phone's poster on slide "${s.id}" (${mobileVideoPoster})`);
   }
 
   insHero.run(
@@ -165,7 +182,12 @@ hero.slides.forEach((s, i) => {
     s.note ?? null,
     s.side === "right" ? "right" : "left",
     i,
-    video
+    video,
+    s.video_poster ?? null,
+    mobileImage,
+    s.mobile_alt ?? null,
+    mobileVideo,
+    mobileVideoPoster
   );
 });
 
