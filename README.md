@@ -33,6 +33,33 @@ The shop's data lives in one PostgreSQL database, which every instance of the sh
 
 > The connection string is a secret, so it is never written into the source. Put it in `.env.local` in the project root — that file is ignored by Git, so the password stays out of the repository — or set `DATABASE_URL` in the environment settings of whichever machine runs the shop. If the variable is missing, the shop says so rather than starting up against a database nobody chose.
 
+#### The deployment needs `DATABASE_URL` set
+
+A deployment has no `.env.local` — that file is ignored by Git and never
+travels — so the connection string has to be in the **environment settings of
+the host**. On Vercel that is *Settings → Environment Variables*, and the
+variable must be named `DATABASE_URL`. It has to be set for **every
+environment** the shop is built in, including *Preview*, because a preview
+build is a build too.
+
+If it is missing, every page that needs the catalogue fails. The shop now
+says so plainly instead of failing with a bare "something went wrong", and
+it says what to do:
+
+```
+https://your-shop.example/api/health
+```
+
+answers the question in one line, for a script to read:
+
+```json
+{ "ok": false, "database": "not set",
+  "hint": "Set DATABASE_URL in the environment of the host this is deployed to, and redeploy." }
+```
+
+A `.env.local` is not enough for a deployment, and a variable set only in
+Vercel's *Production* environment is not enough for a preview build.
+
 The SQLite file in `data/` is what the shop kept its data in before. It is now only the seed — the file the migration reads from — and the scripts that check the catalogue read it directly.
 
 To check the database is there and holds together:
@@ -601,6 +628,15 @@ phone, and the phone's picture and film are not painted on a wide screen —
 and neither of the films is ever fetched on the screen it does not belong
 to, so a phone never downloads the wide film and a desktop never downloads
 the phone's.
+
+The pictures are kept apart by a **`<picture>` element**, not by two images
+and a CSS rule. Two `<img>` elements side by side are both fetched — the
+browser fetches a picture it cannot see, and only the CSS decides which one
+is painted — so a phone would carry half a megabyte of landscape
+photographs it never shows. With a `<picture>`, the browser reads the media
+query itself and fetches the one that fits the screen it is on, before
+anything is painted. A phone fetches five files from `/hero/`; a desktop
+fetches five.
 
 The pieces are:
 

@@ -335,6 +335,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       className="relative isolate flex min-h-[36rem] touch-pan-y flex-col overflow-hidden bg-ink lg:h-[clamp(38rem,48vw,50rem)] lg:min-h-[38rem]"
       onFocusCapture={() => setFocused(true)}
       onBlurCapture={() => setFocused(false)}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
@@ -360,67 +362,70 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           on the screen it belongs to. */}
       <div className="absolute inset-0 grid select-none">
         {slides.map((s, i) => {
-          // A slide with a picture of its own for a phone shows that one
-          // there, and the wide one is not painted at all — so the two
-          // are never seen swapping over one another.
-          const widePicture = (
-            <Image
-              src={s.image}
-              alt={s.alt}
-              fill
-              loading="eager"
-              fetchPriority="low"
-              /* The photograph is served as it is. The optimiser would
-                 re-encode it a second time — the files are already sized
-                 for the job — and the browser scales it far better than a
-                 second pass through a lossy encoder does. */
-              unoptimized
-              sizes="100vw"
-              className={`${s.mobile_image ? "hero-picture-wide" : ""} ${
+          // The picture, in one `<picture>` element.
+          //
+          // A `<picture>` is what stops the wide picture being downloaded
+          // on a phone. Two `<img>` elements side by side would both be
+          // fetched — the browser fetches a picture it cannot see, and
+          // only the CSS decides which one is painted — so a phone would
+          // carry half a megabyte of landscape photographs it never
+          // shows. With a `<picture>`, the browser reads the media
+          // query itself and fetches the one that fits the screen it is
+          // on, before anything is painted.
+          //
+          // The picture is a still under the film where there is one, and
+          // so is hidden by the CSS wherever its own film plays.
+          const picture = (
+            <picture
+              /* No display utility here: the CSS rules that hide this
+                 picture where its own film plays live in the components
+                 layer, and a utility class would win over them. */
+              className={`absolute inset-0 ${
                 s.video ? "hero-still" : ""
-              } object-cover transition-transform duration-[6000ms] ease-linear ${
-                i === index ? "scale-[1.06]" : "scale-100"
-              }`}
-              style={{
-                objectPosition: s.image_position,
-                // Where the wide film cannot be played at all, this
-                // picture is the picture — so it has to be shown even on
-                // a screen the film would have played on.
-                display:
-                  !isNarrow && films[filmKey(s.id, false)]?.failed
-                    ? "block"
-                    : undefined,
-              }}
-            />
+              } ${s.mobile_video ? "hero-still-narrow" : ""}`}
+            >
+              {s.mobile_image && (
+                <source
+                  media={`(max-width: ${PHONE_MAX}px)`}
+                  srcSet={s.mobile_image}
+                  sizes="100vw"
+                />
+              )}
+              <Image
+                src={s.image}
+                /* A phone's picture is a different photograph, so it is
+                   described differently. The browser picks the picture;
+                   the words follow it. */
+                alt={isNarrow ? (s.mobile_alt ?? s.alt) : s.alt}
+                fill
+                loading="eager"
+                fetchPriority="low"
+                /* The photograph is served as it is. The optimiser would
+                   re-encode it a second time — the files are already sized
+                   for the job — and the browser scales it far better than a
+                   second pass through a lossy encoder does. */
+                unoptimized
+                sizes="100vw"
+                className={`object-cover transition-transform duration-[6000ms] ease-linear ${
+                  i === index ? "scale-[1.06]" : "scale-100"
+                }`}
+                style={{
+                  objectPosition: isNarrow
+                    ? (s.mobile_position ?? "50% 50%")
+                    : s.image_position,
+                  // Where the film cannot be played at all, this picture
+                  // is the picture — so it has to be shown even on the
+                  // screen the film would have played on.
+                  display:
+                    (isNarrow
+                      ? films[filmKey(s.id, true)]?.failed
+                      : films[filmKey(s.id, false)]?.failed)
+                      ? "block"
+                      : undefined,
+                }}
+              />
+            </picture>
           );
-
-          // The phone's own picture. It is a different photograph, so it
-          // is described differently, and it is cropped to its own frame.
-          const narrowPicture = s.mobile_image ? (
-            <Image
-              src={s.mobile_image}
-              alt={s.mobile_alt ?? s.alt}
-              fill
-              loading="eager"
-              fetchPriority="low"
-              unoptimized
-              sizes="100vw"
-              className={`hero-picture-narrow ${
-                s.mobile_video ? "hero-still-narrow" : ""
-              } object-cover transition-transform duration-[6000ms] ease-linear ${
-                i === index ? "scale-[1.06]" : "scale-100"
-              }`}
-              style={{
-                objectPosition: s.mobile_position ?? "50% 50%",
-                // Where the phone's film cannot be played at all, this
-                // picture is the picture.
-                display:
-                  isNarrow && films[filmKey(s.id, true)]?.failed
-                    ? "block"
-                    : undefined,
-              }}
-            />
-          ) : null;
 
           return (
             <div
@@ -431,8 +436,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   : "pointer-events-none opacity-0 blur-[8px] scale-[1.03]"
               }`}
             >
-              {widePicture}
-              {narrowPicture}
+              {picture}
 
               {/* The wide screen's film. The film on the slide the hero
                   opens on is in the page from the very first byte, so it

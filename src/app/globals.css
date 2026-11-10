@@ -427,33 +427,6 @@
     }
   }
 
-  /* The wide screen's picture.
-
-     It is painted on a wide screen. On a phone it is painted only where
-     the slide has no picture of its own for one — and where it does, the
-     phone's picture is the one on screen, so the two are never seen
-     swapping over one another. */
-  .hero-picture-wide {
-    display: none;
-  }
-
-  @media (min-width: 768px) {
-    .hero-picture-wide {
-      display: block;
-    }
-  }
-
-  /* The phone's own picture, cut for the shape of a phone's screen. */
-  .hero-picture-narrow {
-    display: none;
-  }
-
-  @media (max-width: 767.98px) {
-    .hero-picture-narrow {
-      display: block;
-    }
-  }
-
   /* The still under a film is for the screens the film does not play on.
      A wide screen plays the film, and the film and its own poster are the
      picture there — so the still is not painted at all, and the two can

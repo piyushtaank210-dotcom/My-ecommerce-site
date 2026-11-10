@@ -54,6 +54,23 @@ export function databaseUrl(): string {
 }
 
 /**
+ * Whether the environment has named a database the shop can use.
+ *
+ * It is the check the shop makes before it renders anything, so that a
+ * shop which has not been set up says so plainly instead of failing on
+ * every page in its own way. It says nothing about the connection string
+ * itself — only whether there is one and whether it is a PostgreSQL one.
+ */
+export function databaseConfigured():
+  | { ok: true }
+  | { ok: false; reason: "missing" | "malformed" } {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) return { ok: false, reason: "missing" };
+  if (!/^postgres(ql)?:\/\//i.test(url)) return { ok: false, reason: "malformed" };
+  return { ok: true };
+}
+
+/**
  * The sslmode in the connection string, if it names one.
  */
 function sslModeFromUrl(url: string): string | undefined {

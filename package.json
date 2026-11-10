@@ -45,7 +45,7 @@
     "check:admin-returns": "node scripts/check-admin-returns.mjs",
     "check:return-policy": "node scripts/check-return-policy.mjs",
     "check:returns": "node scripts/check-returns.mjs && node scripts/check-return-policy.mjs",
-    "check:hero": "node scripts/check-hero-video.mjs && node scripts/check-hero-pause.mjs",
+    "check:hero": "node scripts/check-hero-video.mjs && node scripts/check-hero-pause.mjs && node scripts/check-hero-swipe.mjs",
     "clean:e2e": "node scripts/clean-e2e-accounts.mjs",
     "shot": "node scripts/screenshot.mjs",
     "shot:at": "node scripts/shot-at.mjs",

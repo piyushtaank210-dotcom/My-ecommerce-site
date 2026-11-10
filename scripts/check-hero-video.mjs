@@ -151,13 +151,17 @@ try {
     const slideDivs = [...pictureLayer.children];
     const firstSlide = slideDivs[0];
     const v = firstSlide.querySelector('video');
-    // The pictures of this slide, and the ones that are painted.
-    const painted = [...firstSlide.querySelectorAll('img')]
-      .filter((p) => getComputedStyle(p).display !== 'none');
+    // The picture of this slide. It is a <picture> element, and it is
+    // the <picture> that the CSS hides where the film plays — so it is
+    // the <picture> that is measured.
+    const picture = firstSlide.querySelector('picture');
+    const img = picture?.querySelector('img');
+    const pr = picture?.getBoundingClientRect();
     return {
       poster: v?.getAttribute('poster') ?? null,
-      still: painted[0]?.getAttribute('src') ?? null,
-      stillShown: painted.length > 0,
+      still: img?.getAttribute('src') ?? null,
+      // A picture that is not painted has no size.
+      stillShown: pr ? pr.width > 0 && pr.height > 0 : null,
       playing: v ? !v.paused : null,
       t: v ? Number(v.currentTime.toFixed(2)) : null,
       background: v ? getComputedStyle(v).backgroundColor : null,
