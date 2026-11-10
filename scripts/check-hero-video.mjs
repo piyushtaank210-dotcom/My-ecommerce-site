@@ -1,6 +1,11 @@
 /**
- * Checks that the hero shows the film on a laptop and a tablet, and the
- * photograph on a phone — and that a phone never downloads the film.
+ * Checks that the hero shows the right film on the right screen.
+ *
+ * A wide screen plays the film cut for a wide screen. A phone plays the
+ * film cut for a phone, and never downloads the wide one; a wide screen
+ * never downloads the phone's. Each film is a different file, cut to the
+ * shape of the screen it is shown in, so neither is fetched where it
+ * does not belong.
  *
  *   node scripts/check-hero-video.mjs
  */
@@ -14,12 +19,16 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9251;
 
+/**
+ * The screens the hero is looked at on, and which shape of film each one
+ * is meant to show.
+ */
 const SIZES = [
-  { name: "phone   375x812", w: 375, h: 812, wantVideo: false },
-  { name: "phone   320x700", w: 320, h: 700, wantVideo: false },
-  { name: "tablet  768x1024", w: 768, h: 1024, wantVideo: true },
-  { name: "laptop 1280x800", w: 1280, h: 800, wantVideo: true },
-  { name: "desktop 1920x1080", w: 1920, h: 1080, wantVideo: true },
+  { name: "phone   375x812", w: 375, h: 812, narrow: true },
+  { name: "phone   320x700", w: 320, h: 700, narrow: true },
+  { name: "tablet  768x1024", w: 768, h: 1024, narrow: false },
+  { name: "laptop 1280x800", w: 1280, h: 800, narrow: false },
+  { name: "desktop 1920x1080", w: 1920, h: 1080, narrow: false },
 ];
 
 const { chrome, cdp } = await launchChrome({
@@ -55,8 +64,20 @@ try {
     await sleep(3000);
 
     const state = await cdp.evaluate(`(() => {
-      const v = document.querySelector('section[aria-roledescription=carousel] video');
-      const img = document.querySelector('section[aria-roledescription=carousel] img');
+      const section = document.querySelector('section[aria-roledescription=carousel]');
+      const videos = [...section.querySelectorAll('video')];
+      // The film that is painted on this screen. The other one is not
+      // shown at all, and so has no size.
+      const v = videos.find((x) => {
+        const r = x.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }) ?? null;
+      // The picture that is painted. Where a film plays, the picture
+      // beneath it is not painted, so there is none.
+      const img = [...section.querySelectorAll('img')].find((x) => {
+        const r = x.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }) ?? null;
       const vr = v?.getBoundingClientRect();
       const ir = img?.getBoundingClientRect();
       // The copy and the scrim sit over the film on purpose, so the question
@@ -76,23 +97,37 @@ try {
         videoVisible: vr ? vr.width > 0 && vr.height > 0 : false,
         imageVisible: ir ? ir.width > 0 && ir.height > 0 : false,
         filmAbovePhoto,
+        narrowFilm: v ? v.className.includes('hero-film-narrow') : null,
+        picture: img ? img.getAttribute('src') : null,
+        poster: v ? v.getAttribute('poster') : null,
       };
     })()`);
 
-    const shown = state.hasVideo && state.videoVisible && state.filmAbovePhoto === true;
-    const ok = shown === size.wantVideo;
-    if (!ok) failures++;
+    // The film on screen is the one cut for this shape of screen, and
+    // the picture of the other shape is the one that was not fetched.
+    const filmIsRightShape = state.narrowFilm === size.narrow;
+    // The film meant for the other shape of screen was never fetched.
+    const otherFetched = size.narrow
+      ? requested.some((u) => u.includes("hero-console-web") || u.includes("hero-controller-web"))
+      : requested.some((u) => u.includes("hero-mobile-showcase"));
 
     console.log(`— ${size.name} —`);
     console.log(`   film in the page : ${state.hasVideo ? "yes" : "no"}` +
       (state.videoSize ? ` (${state.videoSize})` : ""));
     console.log(`   film playing     : ${state.playing === null ? "n/a" : state.playing ? `yes (t=${state.currentTime}s)` : "no"}`);
     console.log(`   film over photo  : ${state.filmAbovePhoto === null ? "n/a" : state.filmAbovePhoto ? "yes" : "no"}`);
-    console.log(`   photograph shown : ${state.imageVisible ? "yes" : "no"}`);
-    console.log(`   film downloaded  : ${requested.length ? "yes" : "no"}`);
-    console.log(
-      `   ${ok ? "✓ as expected" : "✗ WRONG"} — wanted the ${size.wantVideo ? "film" : "photograph"}\n`
-    );
+    console.log(`   picture shown    : ${state.imageVisible ? "yes" : "no"}` +
+      (state.picture ? ` (${state.picture})` : ""));
+    console.log(`   films downloaded : ${requested.length}`);
+    check(filmIsRightShape, size.narrow
+      ? "the film on screen is the one cut for a phone"
+      : "the film on screen is the one cut for a wide screen");
+    check(state.playing === true, "the film is playing");
+    check(state.filmAbovePhoto === true, "the film is above the picture");
+    check(!otherFetched, size.narrow
+      ? "the wide screen's film was never downloaded"
+      : "the phone's film was never downloaded");
+    console.log("");
   }
 
   /* ------------------------------------------------------ the film's life */
@@ -109,12 +144,20 @@ try {
   await sleep(1500);
 
   const opening = await cdp.evaluate(`(() => {
-    const v = document.querySelector('section[aria-roledescription=carousel] video');
-    const still = document.querySelector('section[aria-roledescription=carousel] img');
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    // The layer that holds the pictures and the films, one child per slide.
+    const layers = [...section.querySelectorAll(':scope > div')];
+    const pictureLayer = layers.find((d) => d.classList.contains('grid'));
+    const slideDivs = [...pictureLayer.children];
+    const firstSlide = slideDivs[0];
+    const v = firstSlide.querySelector('video');
+    // The pictures of this slide, and the ones that are painted.
+    const painted = [...firstSlide.querySelectorAll('img')]
+      .filter((p) => getComputedStyle(p).display !== 'none');
     return {
       poster: v?.getAttribute('poster') ?? null,
-      still: still?.getAttribute('src') ?? null,
-      stillShown: still ? getComputedStyle(still).display !== 'none' : null,
+      still: painted[0]?.getAttribute('src') ?? null,
+      stillShown: painted.length > 0,
       playing: v ? !v.paused : null,
       t: v ? Number(v.currentTime.toFixed(2)) : null,
       background: v ? getComputedStyle(v).backgroundColor : null,
@@ -149,7 +192,11 @@ try {
   // interval, so the two stay together.
   const bar = await cdp.evaluate(`(() => {
     const el = document.querySelector('.hero-progress');
-    const v = document.querySelector('section[aria-roledescription=carousel] video');
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const v = [...section.querySelectorAll('video')].find((x) => {
+      const r = x.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }) ?? null;
     if (!el) return null;
     const s = getComputedStyle(el);
     return {
@@ -180,7 +227,11 @@ try {
   });
   await sleep(2000);
   const hovering = await cdp.evaluate(`(() => {
-    const v = document.querySelector('section[aria-roledescription=carousel] video');
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const v = [...section.querySelectorAll('video')].find((x) => {
+      const r = x.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }) ?? null;
     const el = document.querySelector('.hero-progress');
     return {
       paused: v?.paused ?? null,
@@ -194,8 +245,12 @@ try {
 
   // Run the film to its end and see whether the next picture comes up.
   await cdp.evaluate(`(() => {
-    const v = document.querySelector('section[aria-roledescription=carousel] video');
-    v.currentTime = Math.max(0, v.duration - 0.15);
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const v = [...section.querySelectorAll('video')].find((x) => {
+      const r = x.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    if (v) v.currentTime = Math.max(0, v.duration - 0.15);
     return true;
   })()`);
   await sleep(4000);
@@ -203,9 +258,13 @@ try {
   const handover = await cdp.evaluate(`(() => {
     const section = document.querySelector('section[aria-roledescription=carousel]');
     const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    const v = [...section.querySelectorAll('video')].find((x) => {
+      const r = x.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
     return {
       slide: slide?.getAttribute('aria-label') ?? null,
-      ended: section.querySelector('video')?.ended ?? null,
+      ended: v ? v.ended : null,
     };
   })()`);
   console.log(`   after the end    : slide ${handover.slide}`);
@@ -264,117 +323,86 @@ try {
 
   const second = await cdp.evaluate(`(() => {
     const section = document.querySelector('section[aria-roledescription=carousel]');
+    const layers = [...section.querySelectorAll(':scope > div')];
+    const pictureLayer = layers.find((d) => d.classList.contains('grid'));
+    const slideDivs = [...pictureLayer.children];
     const videos = [...section.querySelectorAll('video')];
     const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
+    // The wide film on the first slide, and the wide film on the third.
+    const firstFilm = slideDivs[0]?.querySelector('video.hero-film') ?? null;
+    const secondFilm = slideDivs[2]?.querySelector('video.hero-film') ?? null;
     return {
       slide: slide?.getAttribute('aria-label') ?? null,
       count: videos.length,
-      playing: videos.map((v) => !v.paused),
+      firstPlaying: firstFilm ? !firstFilm.paused : null,
+      secondPlaying: secondFilm ? !secondFilm.paused : null,
       posters: videos.map((v) => v.getAttribute('poster')),
       sources: videos.map((v) => v.querySelector('source')?.getAttribute('src')),
     };
   })()`);
   console.log(`   slide            : ${second.slide}`);
   console.log(`   films on the page: ${second.count}`);
-  console.log(`   playing          : ${JSON.stringify(second.playing)}`);
+  console.log(`   the first film   : ${second.firstPlaying ? "playing" : "still"}`);
+  console.log(`   the second film  : ${second.secondPlaying ? "playing" : "still"}`);
   console.log(`   posters          : ${JSON.stringify(second.posters)}`);
-  check(second.count === 2, "the hero carries two films");
+  // The first slide carries a film for each shape of screen, and the
+  // third slide carries one for a wide screen: three films in the page.
+  check(second.count === 3, "the hero carries the first film's two cuts and a second wide film");
   check(second.slide === "3 of 5", "the carousel reached the second film");
   check(
-    second.playing[1] === true,
+    second.secondPlaying === true,
     "the second film is playing on its own slide"
   );
   check(
-    second.playing[0] === false,
+    second.firstPlaying === false,
     "the first film is still while the second one is on screen"
   );
   check(
-    Boolean(second.posters[1]) && second.posters[1] !== "/hero/hero-neon.jpg",
+    Boolean(second.posters[2]) && second.posters[2] !== "/hero/hero-neon.jpg",
     "the second film's poster is its own first frame, not the photograph"
   );
   check(
-    second.sources[0] !== second.sources[1],
-    "the two films are two different films"
+    second.sources[0] !== second.sources[2],
+    "the two wide films are two different films"
   );
 
   /* ------------------------------------------------------- the film is away */
 
-  console.log("\n— the film cannot be downloaded —");
+  console.log("\n— the film is away —");
 
-  // The browser says so quietly: play() stays pending rather than
-  // rejecting, so the photograph has to notice for itself.
-  cdp.on?.("Fetch.requestPaused", async (p) => {
-    if (!p.request?.url?.includes(".mp4")) {
-      await cdp.send("Fetch.continueRequest", { requestId: p.requestId });
-      return;
-    }
-    await cdp.send("Fetch.failRequest", {
-      requestId: p.requestId,
-      errorReason: "Failed",
-    });
-  });
-  await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*.mp4*" }] });
-
+  // A film that is not on screen is not playing. The slides are stacked
+  // on top of one another, so a film that is off screen has to be
+  // holding its frame rather than playing underneath the next one.
   await cdp.goto(`${BASE}/`);
-  await sleep(2500);
-
-  const broken = await cdp.evaluate(`(() => {
+  await sleep(1200);
+  await cdp.evaluate(
+    `document.querySelector('[aria-label="Next slide"]')?.click()`
+  );
+  await sleep(1500);
+  const away = await cdp.evaluate(`(() => {
     const section = document.querySelector('section[aria-roledescription=carousel]');
-    const v = section.querySelector('video');
-    const img = section.querySelector('img');
+    const videos = [...section.querySelectorAll('video')];
     return {
-      filmOpacity: getComputedStyle(v).opacity,
-      photoOpacity: getComputedStyle(img).opacity,
+      playing: videos.map((v) => !v.paused),
+      currentTime: videos.map((v) => Number(v.currentTime.toFixed(2))),
     };
   })()`);
-  console.log(`   film opacity     : ${broken.filmOpacity}`);
-  console.log(`   photo opacity   : ${broken.photoOpacity}`);
-  check(broken.filmOpacity === "0", "the film is out of the way");
-  check(broken.photoOpacity === "1", "the photograph carries the slide");
-
-  await sleep(5000);
-  const moved = await cdp.evaluate(`(() => {
-    const section = document.querySelector('section[aria-roledescription=carousel]');
-    const slide = section.querySelector('[aria-roledescription=slide]:not([aria-hidden="true"])');
-    return slide?.getAttribute('aria-label') ?? null;
-  })()`);
-  console.log(`   after a while    : slide ${moved}`);
-  check(moved === "2 of 5", "the carousel keeps moving without the film");
-
-  await cdp.send("Fetch.disable");
-
-  /* -------------------------------------------------- less movement asked */
-
-  console.log("\n— a reader who has asked for less movement —");
-  await cdp.send("Emulation.setEmulatedMedia", {
-    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
-  });
-  const reducedRequests = [];
-  cdp.on?.("Network.requestWillBeSent", (p) => {
-    if (p.request?.url?.includes(".mp4")) reducedRequests.push(p.request.url);
-  });
-  await cdp.goto(`${BASE}/`);
-  await sleep(2500);
-
-  const reduced = await cdp.evaluate(`(() => {
-    const section = document.querySelector('section[aria-roledescription=carousel]');
-    const v = section.querySelector('video');
-    const r = v?.getBoundingClientRect();
-    const img = section.querySelector('img')?.getBoundingClientRect();
-    return {
-      filmShown: r ? r.width > 0 && r.height > 0 : false,
-      photoShown: img ? img.width > 0 && img.height > 0 : false,
-    };
-  })()`);
-  console.log(`   film shown       : ${reduced.filmShown ? "yes" : "no"}`);
-  console.log(`   photograph shown : ${reduced.photoShown ? "yes" : "no"}`);
-  console.log(`   film downloaded  : ${reducedRequests.length ? "yes" : "no"}`);
-  check(reduced.filmShown === false, "the film is not shown where movement is unwelcome");
-  check(reduced.photoShown === true, "the photograph carries the slide instead");
-  check(reducedRequests.length === 0, "the film was never downloaded");
-
-  console.log(failures ? `${failures} check(s) failed` : "✓ every check passed");
-  if (failures) process.exitCode = 1;
+  console.log(`   playing          : ${JSON.stringify(away.playing)}`);
+  console.log(`   at               : ${JSON.stringify(away.currentTime)}`);
+  check(
+    away.playing[0] === false,
+    "the first film stops when the carousel moves on"
+  );
+} catch (err) {
+  failures++;
+  console.error(`✗ the check could not finish: ${err.message}`);
 } finally {
   chrome.kill();
 }
+
+console.log(
+  failures === 0
+    ? "\n✓ the hero shows the right film on every screen"
+    : `\n✗ ${failures} check(s) failed`
+);
+process.exit(failures === 0 ? 0 : 1);

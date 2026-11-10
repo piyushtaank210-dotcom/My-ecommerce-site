@@ -1,9 +1,15 @@
 /**
- * Syncs data/hero.json into the hero_slides table.
+ * Syncs data/hero.json into the hero_slides table of the SQLite seed
+ * file.
  *
  * `npm run seed` rebuilds the whole database and needs the dev server
  * stopped (Windows keeps data/store.db locked). This only touches
  * hero_slides, so it can run against a live dev server.
+ *
+ * The columns a slide carries for a phone are added first, if they are
+ * not there already: they are new, and the table was made before they
+ * were thought of. SQLite cannot add a column without being told whether
+ * it is there, so each one is checked before its statement runs.
  *
  *   node scripts/sync-hero.mjs
  */
@@ -21,12 +27,39 @@ const heroImages = JSON.parse(
 
 const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
+/**
+ * The columns a slide carries for a phone.
+ *
+ * They are added if they are not there, and left alone if they are. This
+ * is the same rule the migrations use, so the two never disagree.
+ */
+const PHONE_COLUMNS = [
+  ["mobile_image", "mobile_image TEXT"],
+  ["mobile_alt", "mobile_alt TEXT"],
+  ["mobile_position", "mobile_position TEXT DEFAULT '50% 50%'"],
+  ["mobile_video", "mobile_video TEXT"],
+  ["mobile_video_poster", "mobile_video_poster TEXT"],
+];
+
+const existing = new Set(
+  db
+    .prepare("PRAGMA table_info(hero_slides)")
+    .all()
+    .map((c) => c.name)
+);
+
+for (const [name, definition] of PHONE_COLUMNS) {
+  if (existing.has(name)) continue;
+  db.exec(`ALTER TABLE hero_slides ADD COLUMN ${definition}`);
+  console.log(`  · added the column ${name}`);
+}
+
 const upsert = db.prepare(`
   INSERT INTO hero_slides
     (id, image, alt, image_position, eyebrow, title, body,
      primary_label, primary_href, secondary_label, secondary_href, note, side, position,
-     video, video_poster)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     video, video_poster, mobile_image, mobile_alt, mobile_position, mobile_video, mobile_video_poster)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     image = excluded.image,
     alt = excluded.alt,
@@ -42,7 +75,12 @@ const upsert = db.prepare(`
     side = excluded.side,
     position = excluded.position,
     video = excluded.video,
-    video_poster = excluded.video_poster
+    video_poster = excluded.video_poster,
+    mobile_image = excluded.mobile_image,
+    mobile_alt = excluded.mobile_alt,
+    mobile_position = excluded.mobile_position,
+    mobile_video = excluded.mobile_video,
+    mobile_video_poster = excluded.mobile_video_poster
 `);
 
 hero.slides.forEach((s, i) => {
@@ -63,6 +101,21 @@ hero.slides.forEach((s, i) => {
     console.warn(`  ! no file for the poster on slide "${s.id}" (${videoPoster})`);
   }
 
+  // A phone has its own picture, cut for a phone's screen, and its own
+  // film cut to the same shape.
+  const mobileImage = s.mobile_image ? (heroImages[s.mobile_image] ?? null) : null;
+  if (s.mobile_image && !mobileImage) {
+    console.warn(`  ! no image for the phone on hero slide "${s.id}" (key "${s.mobile_image}")`);
+  }
+  const mobileVideo = s.mobile_video ?? null;
+  if (mobileVideo && !existsSync(join(ROOT, "public", mobileVideo.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the phone's video on slide "${s.id}" (${mobileVideo})`);
+  }
+  const mobileVideoPoster = s.mobile_video_poster ?? null;
+  if (mobileVideoPoster && !existsSync(join(ROOT, "public", mobileVideoPoster.replace(/^\//, "")))) {
+    console.warn(`  ! no file for the phone's poster on slide "${s.id}" (${mobileVideoPoster})`);
+  }
+
   upsert.run(
     s.id,
     image,
@@ -79,7 +132,12 @@ hero.slides.forEach((s, i) => {
     s.side === "right" ? "right" : "left",
     i,
     video,
-    videoPoster
+    videoPoster,
+    mobileImage,
+    s.mobile_alt ?? null,
+    s.mobile_position ?? "50% 50%",
+    mobileVideo,
+    mobileVideoPoster
   );
 });
 
@@ -94,11 +152,11 @@ for (const row of db.prepare("SELECT id FROM hero_slides").all()) {
 
 for (const r of db
   .prepare(
-    "SELECT id, title, primary_label, secondary_label FROM hero_slides ORDER BY position"
+    "SELECT id, title, mobile_image, mobile_video FROM hero_slides ORDER BY position"
   )
   .all()) {
   console.log(
-    `  ${r.id.padEnd(6)} | ${r.title.padEnd(42)} | ${r.primary_label} / ${r.secondary_label}`
+    `  ${r.id.padEnd(10)} | ${String(r.title).padEnd(38)} | phone: ${r.mobile_image ?? "(none)"}${r.mobile_video ? " + film" : ""}`
   );
 }
 

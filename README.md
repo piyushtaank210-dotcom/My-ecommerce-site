@@ -587,6 +587,51 @@ npm run sync-hero
 `npm run sync-hero` only rewrites the `hero_slides` table, so it works
 against a running dev server.
 
+### The hero on a phone
+
+A phone gets a hero of its own. A wide screen is a landscape frame and a
+phone is not, so a photograph cut for one is cropped badly in the other — a
+console with its shelf cut away, a face taken off the frame, a film that is
+mostly black once it is cut to a portrait shape. Each slide therefore
+carries a picture of its own for a phone, and the first slide carries a film
+of its own as well, cut to the shape a phone shows it in.
+
+The two never meet. The wide picture and the wide film are not painted on a
+phone, and the phone's picture and film are not painted on a wide screen —
+and neither of the films is ever fetched on the screen it does not belong
+to, so a phone never downloads the wide film and a desktop never downloads
+the phone's.
+
+The pieces are:
+
+| | |
+|---|---|
+| `hero_slides.mobile_image` | The picture for a phone. Its own key in `data/hero-images.json`. |
+| `hero_slides.mobile_alt` | The description of that picture. It is a different photograph, so it is described differently. |
+| `hero_slides.mobile_position` | Where that picture is cropped to. Its own frame. |
+| `hero_slides.mobile_video` | The film for a phone. A separate file, cut to a phone's shape. |
+| `hero_slides.mobile_video_poster` | That film's own first frame. |
+
+The phone's film is encoded by `npm run encode:hero:mobile` and its poster
+by `npm run hero:posters:mobile`; `npm run hero:build` does both films and
+both sets of posters. The phone's film is cut from the same master as the
+wide one, starting a second later so that it does not open on the fade up
+from black, and it is trimmed to 1080x1434 — the shape of a phone's frame.
+
+A slide that names no picture for a phone shows the wide one there instead,
+so nothing is left blank.
+
+To point the hero at a different picture or film, edit `data/hero.json`,
+then:
+
+```bash
+npm run sync-hero        # the SQLite seed file
+npm run sync-hero:live   # the shop's own database
+```
+
+`npm run sync-hero:live` touches the `hero_slides` table and nothing else,
+and adds the columns above if the database does not have them yet.
+
 ## Product photography
 
 Real photographs, downloaded once by `scripts/fetch-images.mjs` into

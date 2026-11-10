@@ -38,6 +38,7 @@ const heroImages = JSON.parse(
 const PHONE_COLUMNS = [
   ["mobile_image", "mobile_image TEXT"],
   ["mobile_alt", "mobile_alt TEXT"],
+  ["mobile_position", "mobile_position TEXT DEFAULT '50% 50%'"],
   ["mobile_video", "mobile_video TEXT"],
   ["mobile_video_poster", "mobile_video_poster TEXT"],
 ];
@@ -58,8 +59,8 @@ try {
     INSERT INTO hero_slides
       (id, image, alt, image_position, eyebrow, title, body,
        primary_label, primary_href, secondary_label, secondary_href, note, side, position,
-       video, video_poster, mobile_image, mobile_alt, mobile_video, mobile_video_poster)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       video, video_poster, mobile_image, mobile_alt, mobile_position, mobile_video, mobile_video_poster)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
     ON CONFLICT (id) DO UPDATE SET
       image = excluded.image,
       alt = excluded.alt,
@@ -78,6 +79,7 @@ try {
       video_poster = excluded.video_poster,
       mobile_image = excluded.mobile_image,
       mobile_alt = excluded.mobile_alt,
+      mobile_position = excluded.mobile_position,
       mobile_video = excluded.mobile_video,
       mobile_video_poster = excluded.mobile_video_poster
   `;
@@ -130,6 +132,7 @@ try {
       videoPoster,
       mobileImage,
       s.mobile_alt ?? null,
+      s.mobile_position ?? "50% 50%",
       mobileVideo,
       mobileVideoPoster,
     ]);

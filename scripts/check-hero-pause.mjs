@@ -32,6 +32,18 @@ const read = `(() => {
   const videos = [...section.querySelectorAll('video')];
   const slide = [...section.querySelectorAll('[aria-roledescription=slide]')]
     .find((s) => s.getAttribute('aria-hidden') !== 'true');
+  // The films are filed by the slide they are on, so that a slide
+  // carrying a film for a wide screen and one for a phone can be told
+  // apart. The wide screen is the one being looked at here.
+  const layers = [...section.querySelectorAll(':scope > div')];
+  const pictureLayer = layers.find((d) => d.classList.contains('grid'));
+  const slideDivs = [...pictureLayer.children];
+  const filmOn = (n) => {
+    const v = slideDivs[n]?.querySelector('video.hero-film');
+    return v
+      ? { paused: v.paused, t: Number(v.currentTime.toFixed(2)), duration: Number((v.duration || 0).toFixed(2)) }
+      : null;
+  };
   return {
     slide: slide?.getAttribute('aria-label') ?? null,
     films: videos.map((v) => ({
@@ -39,6 +51,8 @@ const read = `(() => {
       t: Number(v.currentTime.toFixed(2)),
       duration: Number(v.duration.toFixed(2)),
     })),
+    first: filmOn(0),
+    second: filmOn(2),
   };
 })()`;
 
@@ -59,9 +73,9 @@ try {
   await sleep(1500);
 
   const first = await cdp.evaluate(read);
-  console.log(`1. on the first slide      : ${first.slide} paused=${first.films[0]?.paused} t=${first.films[0]?.t}s`);
-  check(first.films[0]?.paused === false, "the film is playing");
-  check((first.films[0]?.t ?? 0) > 0, "the film is under way, not sitting on frame 0");
+  console.log(`1. on the first slide      : ${first.slide} paused=${first.first?.paused} t=${first.first?.t}s`);
+  check(first.first?.paused === false, "the film is playing");
+  check((first.first?.t ?? 0) > 0, "the film is under way, not sitting on frame 0");
 
   // Move to the next slide.
   await cdp.evaluate(
@@ -69,8 +83,8 @@ try {
   );
   await sleep(800);
   const second = await cdp.evaluate(read);
-  console.log(`\n2. on the second slide     : ${second.slide} paused=${second.films[0]?.paused} t=${second.films[0]?.t}s`);
-  check(second.films[0]?.paused === true, "the film stopped");
+  console.log(`\n2. on the second slide     : ${second.slide} paused=${second.first?.paused} t=${second.first?.t}s`);
+  check(second.first?.paused === true, "the film stopped");
 
   // And back again.
   await cdp.evaluate(
@@ -78,10 +92,10 @@ try {
   );
   await sleep(800);
   const third = await cdp.evaluate(read);
-  console.log(`\n3. back on the first slide : ${third.slide} paused=${third.films[0]?.paused} t=${third.films[0]?.t}s`);
-  check(third.films[0]?.paused === false, "the film plays again");
+  console.log(`\n3. back on the first slide : ${third.slide} paused=${third.first?.paused} t=${third.first?.t}s`);
+  check(third.first?.paused === false, "the film plays again");
   check(
-    (third.films[0]?.t ?? 0) > (second.films[0]?.t ?? 0),
+    (third.first?.t ?? 0) > (second.first?.t ?? 0),
     "the film picked up where it left off rather than starting again"
   );
 
@@ -98,17 +112,20 @@ try {
 
   const fourth = await cdp.evaluate(read);
   console.log(`\n4. on the second film's slide: ${fourth.slide}`);
-  console.log(`   first film  : paused=${fourth.films[0]?.paused} t=${fourth.films[0]?.t}s`);
-  console.log(`   second film : paused=${fourth.films[1]?.paused} t=${fourth.films[1]?.t}s`);
-  check(fourth.films[1]?.paused === false, "the second film is playing");
-  check(fourth.films[0]?.paused === true, "the first film stopped");
-  check((fourth.films[1]?.t ?? 0) > 0, "the second film is under way");
+  console.log(`   first film  : paused=${fourth.first?.paused} t=${fourth.first?.t}s`);
+  console.log(`   second film : paused=${fourth.second?.paused} t=${fourth.second?.t}s`);
+  check(fourth.second?.paused === false, "the second film is playing");
+  check(fourth.first?.paused === true, "the first film stopped");
+  check((fourth.second?.t ?? 0) > 0, "the second film is under way");
 
   // Run the second film to its end and see whether the slide moves on by
   // itself — a film that has finished hands over to the next picture.
   await cdp.evaluate(`(() => {
-    const v = document.querySelectorAll('section[aria-roledescription=carousel] video')[1];
-    v.currentTime = Math.max(0, v.duration - 0.2);
+    const section = document.querySelector('section[aria-roledescription=carousel]');
+    const layers = [...section.querySelectorAll(':scope > div')];
+    const pictureLayer = layers.find((d) => d.classList.contains('grid'));
+    const v = [...pictureLayer.children][2]?.querySelector('video.hero-film');
+    if (v) v.currentTime = Math.max(0, v.duration - 0.2);
     return true;
   })()`);
   await sleep(2500);
@@ -116,7 +133,7 @@ try {
   const fifth = await cdp.evaluate(read);
   console.log(`\n5. after the second film ends: ${fifth.slide}`);
   check(fifth.slide !== fourth.slide, "the hero moved on by itself when the film ended");
-  check(fifth.films[1]?.paused === true, "the finished film stopped");
+  check(fifth.second?.paused === true, "the finished film stopped");
 } finally {
   chrome.kill();
 }
