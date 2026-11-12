@@ -30,6 +30,9 @@ import {
 import { getProduct } from "@/lib/queries";
 import { money, formatDate } from "@/lib/format";
 import { CancelReturnButton } from "@/components/returns/CancelReturnButton";
+import { AddEvidencePanel } from "@/components/returns/AddEvidencePanel";
+import { customerStageIndex, customerStagesFor } from "@/lib/return-stages";
+import { evidenceMayBeAdded } from "@/lib/returns-records";
 
 export async function generateMetadata({
   params,
@@ -78,281 +81,49 @@ export default async function CustomerReturnDetailPage({
 
   const isTerminalNegative = ret.status === "rejected" || ret.status === "cancelled";
 
-  // The statuses that mean a stage has been passed. A request moves
-  // forward through them, so every stage before the current one is done.
-  const UNDER_REVIEW = ["requested", "info_requested"];
-  const PAST_REVIEW = [
-    "approved",
-    "pickup_scheduled",
-    "received",
-    "qc_passed",
-    "qc_failed",
-    "refund_pending",
-    "replacement_pending",
-    "completed",
-  ];
-  const PAST_APPROVAL = [
-    "pickup_scheduled",
-    "received",
-    "qc_passed",
-    "qc_failed",
-    "refund_pending",
-    "replacement_pending",
-    "completed",
-  ];
-  const PAST_PICKUP = [
-    "received",
-    "qc_passed",
-    "qc_failed",
-    "refund_pending",
-    "replacement_pending",
-    "completed",
-  ];
-  const PAST_RECEIPT = [
-    "qc_passed",
-    "qc_failed",
-    "refund_pending",
-    "replacement_pending",
-    "completed",
-  ];
-  const PAST_INSPECTION = ["refund_pending", "replacement_pending", "completed"];
-  const SETTLED = ["refund_pending", "replacement_pending"];
+  // Where the request has got to on its journey, and the stages before
+  // it. The stages are the statuses the request actually takes, so each
+  // one can be dated from the request own history.
+  const currentStage = customerStageIndex(ret.status);
+  const stages = customerStagesFor(ret.type);
 
-  // Helper to extract event timestamp by status
-  const findEventDate = (statusKey: string): string | null => {
-    const ev = ret.events.find((e) => e.status === statusKey);
+  /** The date a stage was reached, from the request own history. */
+  const stageDate = (key: string): string | null => {
+    const ev = ret.events.find((e) => e.status === key);
     return ev ? formatDate(ev.created_at) : null;
   };
 
-  // Find latest staff note from events if any
+  const timelineStages: TimelineStage[] = stages.map((stage, index) => {
+    const isDone = currentStage > index;
+    const isCurrent = currentStage === index;
+    const date =
+      stage.key === "requested"
+        ? formatDate(ret.created_at)
+        : stageDate(stage.key) ??
+          (stage.key === "received" && ret.received_at
+            ? formatDate(ret.received_at)
+            : null);
+
+    return {
+      key: stage.key,
+      label: stage.label,
+      description: "",
+      status: isDone ? "completed" : isCurrent ? "current" : "pending",
+      date,
+      note: null,
+    };
+  });
+
+  // The note the shop left for the customer, when it has asked for more.
+  // It is the message that was written for them — never an internal note.
   const latestStaffEvent = [...ret.events]
     .reverse()
     .find((e) => e.actor_type === "staff" && e.note);
 
-  // Construct the exact 8 stages:
-  // Request Submitted → Under Review → Approved → Pickup Scheduled → Product Received → Inspection Completed → Refund Initiated / Replacement Dispatched → Completed
-  const timelineStages: TimelineStage[] =
-    ret.type === "accessories"
-      ? [
-          {
-            key: "requested",
-            label: "Request Submitted",
-            description: "Your request has been received",
-            status: "completed",
-            date: formatDate(ret.created_at),
-            note: "Request logged in our system.",
-          },
-          {
-            key: "under_review",
-            label: "Under Review",
-            description: "We are checking what is missing",
-            status:
-              UNDER_REVIEW.includes(ret.status)
-                ? "current"
-                : PAST_REVIEW.includes(ret.status)
-                  ? "completed"
-                  : "pending",
-            date:
-              UNDER_REVIEW.includes(ret.status)
-                ? "In progress"
-                : findEventDate("under_review") ||
-                  findEventDate("approved") ||
-                  formatDate(ret.created_at),
-            note:
-              ret.status === "info_requested"
-                ? ret.admin_notes || "We have asked you for more information."
-                : "We are looking at the photographs you sent.",
-          },
-          {
-            key: "approved",
-            label: "Approved",
-            description: "We are sending the missing parts",
-            status:
-              UNDER_REVIEW.includes(ret.status)
-                ? "pending"
-                : ret.status === "approved"
-                  ? "current"
-                  : PAST_APPROVAL.includes(ret.status)
-                    ? "completed"
-                    : "pending",
-            date: findEventDate("approved"),
-            note:
-              ret.status === "info_requested"
-                ? null
-                : ret.admin_notes ||
-                  (ret.status === "approved"
-                    ? "The parts will be on their way to you shortly."
-                    : null),
-          },
-          {
-            key: "settlement",
-            label: "Accessories Dispatched",
-            description: "The missing parts are on their way to you",
-            status: ret.accessories_dispatched_at ? "completed" : "pending",
-            date: ret.accessories_dispatched_at
-              ? formatDate(ret.accessories_dispatched_at)
-              : null,
-            note: ret.accessories_tracking
-              ? `${ret.accessories_courier} — ${ret.accessories_tracking}.`
-              : null,
-          },
-          {
-            key: "completed",
-            label: "Completed",
-            description: "Case closed successfully",
-            status: ret.status === "completed" ? "completed" : "pending",
-            date: findEventDate("completed"),
-            note: null,
-          },
-        ]
-      : [
-    {
-      key: "requested",
-      label: "Request Submitted",
-      description: "Return request received",
-      status: "completed",
-      date: formatDate(ret.created_at),
-      note: "Request logged in our system.",
-    },
-    {
-      key: "under_review",
-      label: "Under Review",
-      description: "Support team reviewing claim",
-      status:
-        UNDER_REVIEW.includes(ret.status)
-          ? "current"
-          : PAST_REVIEW.includes(ret.status)
-            ? "completed"
-            : "pending",
-      date:
-        UNDER_REVIEW.includes(ret.status)
-          ? "In progress"
-          : findEventDate("under_review") || findEventDate("approved") || formatDate(ret.created_at),
-      note:
-        ret.status === "info_requested"
-          ? ret.admin_notes || "Our support team has asked for more information."
-          : UNDER_REVIEW.includes(ret.status)
-            ? "Our support team is reviewing your claim and submitted photos."
-            : "Claim verified by support team.",
-    },
-    {
-      key: "approved",
-      label: "Approved",
-      description: "Request authorized for return",
-      status:
-        UNDER_REVIEW.includes(ret.status)
-          ? "pending"
-          : ret.status === "approved"
-            ? "current"
-            : PAST_APPROVAL.includes(ret.status)
-              ? "completed"
-              : "pending",
-      date: findEventDate("approved"),
-      note:
-        ret.status === "info_requested"
-          ? null
-          : ret.admin_notes || (ret.status === "approved" ? "Pickup will be scheduled soon." : null),
-    },
-    {
-      key: "pickup_scheduled",
-      label: "Pickup Scheduled",
-      description: "Courier pickup arranged",
-      status:
-        ["requested", "info_requested", "approved"].includes(ret.status)
-          ? "pending"
-          : ret.status === "pickup_scheduled"
-            ? "current"
-            : PAST_PICKUP.includes(ret.status)
-              ? "completed"
-              : "pending",
-      date: ret.pickup_date || findEventDate("pickup_scheduled"),
-      note: ret.pickup_courier ? `Courier: ${ret.pickup_courier}` : null,
-    },
-    {
-      key: "received",
-      label: "Product Received",
-      description: "Arrived at inspection hub",
-      status:
-        ["requested", "info_requested", "approved", "pickup_scheduled"].includes(ret.status)
-          ? "pending"
-          : ret.status === "received"
-            ? "current"
-            : PAST_RECEIPT.includes(ret.status)
-              ? "completed"
-              : "pending",
-      date: ret.received_at ? formatDate(ret.received_at) : findEventDate("received"),
-      note: ret.status === "received" ? "Package received at warehouse. QC in queue." : null,
-    },
-    {
-      key: "qc_passed",
-      label: "Inspection Completed",
-      description: "Quality & condition verified",
-      status:
-        ["requested", "info_requested", "approved", "pickup_scheduled", "received"].includes(
-          ret.status
-        )
-          ? "pending"
-          : ret.status === "qc_passed" || ret.status === "completed"
-            ? "completed"
-            : PAST_INSPECTION.includes(ret.status)
-              ? "completed"
-              : "pending",
-      date: findEventDate("qc_passed") || (ret.status === "completed" ? findEventDate("completed") : null),
-      note: ret.qc_notes || (ret.qc_status === "passed" ? "Device condition verified." : null),
-    },
-    {
-      key: "settlement",
-      label: ret.type === "replacement" ? "Replacement Dispatched" : "Refund Initiated",
-      description:
-        ret.type === "replacement"
-          ? "New replacement shipped"
-          : "Refund credited to source",
-      status:
-        ret.type === "replacement"
-          ? // A replacement is only done when it has arrived. Writing the
-            // courier number down is not the same as delivering it.
-            ret.replacement_delivery_status === "delivered" ||
-            ret.replacement_delivery_status === "returned" ||
-            ret.status === "completed"
-            ? "completed"
-            : "current"
-          : ret.status === "completed" || ret.refund_status === "processed"
-            ? "completed"
-            : ret.status === "qc_passed" || SETTLED.includes(ret.status)
-              ? "current"
-              : "pending",
-      date:
-        ret.type === "replacement"
-          ? ret.replacement_delivered_at
-            ? formatDate(ret.replacement_delivered_at)
-            : findEventDate("replacement_pending") || findEventDate("completed")
-          : ret.refund_processed_at
-            ? formatDate(ret.refund_processed_at)
-            : findEventDate("refund_pending") || findEventDate("completed"),
-      note:
-        ret.type === "replacement"
-          ? ret.replacement_order_id
-            ? `Shipment ${ret.replacement_order_id}${
-                ret.replacement_courier ? ` via ${ret.replacement_courier}` : ""
-              }${ret.replacement_tracking ? ` · ${ret.replacement_tracking}` : ""}.`
-            : "The replacement is being prepared."
-          : ret.refund_status === "processed"
-            ? `Refund of ${money(ret.refund_amount)} has been credited to you.`
-            : ret.refund_status === "failed"
-              ? "The refund was refused. Our team will be in touch."
-              : ret.refund_status === "pending"
-                ? `Refund of ${money(ret.refund_amount)} has been approved and is on its way back to you.`
-                : "Refund settlement pending.",
-    },
-    {
-      key: "completed",
-      label: "Completed",
-      description: "Case closed successfully",
-      status: ret.status === "completed" ? "completed" : "pending",
-      date: ret.status === "completed" ? findEventDate("completed") : null,
-      note: ret.status === "completed" ? "All steps finalized." : null,
-    },
-  ];
+  const customerMessage =
+    ret.status === "info_requested"
+      ? (latestStaffEvent?.note ?? "We have asked you for more information.")
+      : null;
 
   return (
     <div className="space-y-6">
@@ -399,7 +170,7 @@ export default async function CustomerReturnDetailPage({
         </div>
       </header>
 
-      {/* 8-Stage Status Timeline */}
+      {/* The request timeline. */}
       {!isTerminalNegative && (
         <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-xs">
           <div className="border-b border-gray-100 pb-3 mb-5 flex items-center justify-between">
@@ -410,7 +181,12 @@ export default async function CustomerReturnDetailPage({
           </div>
 
           {/* Desktop & Tablet Stepper Grid (8 stages) */}
-          <ol className="hidden lg:grid grid-cols-8 gap-2">
+          <ol
+            className="hidden gap-2 lg:grid"
+            style={{
+              gridTemplateColumns: `repeat(${timelineStages.length}, minmax(0, 1fr))`,
+            }}
+          >
             {timelineStages.map((stage, idx) => {
               const isDone = stage.status === "completed";
               const isCurrent = stage.status === "current";
@@ -562,40 +338,36 @@ export default async function CustomerReturnDetailPage({
         </section>
       )}
 
-      {/* Admin Remarks Card (Prominently displayed) */}
-      {(ret.admin_notes || ret.qc_notes || latestStaffEvent?.note) && (
+      {/* What the shop has told the customer. */}
+      {(customerMessage || latestStaffEvent?.note) && (
         <section className="rounded-xl border border-blue-200 bg-blue-50/60 p-5 shadow-xs">
           <div className="flex items-center gap-2 border-b border-blue-200/70 pb-2.5">
             <MessageSquare className="h-4 w-4 text-brand" />
-            <h2 className="text-[14px] font-bold text-ink">Admin Remarks & Support Updates</h2>
+            <h2 className="text-[14px] font-bold text-ink">
+              {customerMessage ? "We need a little more" : "Latest update from the shop"}
+            </h2>
             <span className="ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
               ConsoleSeller Support
             </span>
           </div>
 
           <div className="mt-3.5 space-y-3 text-[13px]">
-            {ret.admin_notes && (
+            {customerMessage && (
               <div>
-                <span className="font-semibold text-ink">Store Review Note:</span>
+                <span className="font-semibold text-ink">What we need:</span>
                 <p className="mt-1 rounded-lg bg-white border border-blue-100 p-3 text-gray-800 leading-relaxed whitespace-pre-wrap">
-                  {ret.admin_notes}
+                  {customerMessage}
+                </p>
+                <p className="mt-2 text-[12.5px] text-gray-600">
+                  You can add what is missing on this page, under
+                  &ldquo;Add more evidence&rdquo;.
                 </p>
               </div>
             )}
 
-            {ret.qc_notes && (
+            {!customerMessage && latestStaffEvent?.note && (
               <div>
-                <span className="font-semibold text-ink">Quality Inspection (QC) Remarks:</span>
-                <p className="mt-1 rounded-lg bg-white border border-blue-100 p-3 text-gray-800 leading-relaxed">
-                  {ret.qc_notes}
-                </p>
-              </div>
-            )}
-
-            {!ret.admin_notes && !ret.qc_notes && latestStaffEvent?.note && (
-              <div>
-                <span className="font-semibold text-ink">Latest Staff Update:</span>
-                <p className="mt-1 rounded-lg bg-white border border-blue-100 p-3 text-gray-800 leading-relaxed">
+                <p className="rounded-lg bg-white border border-blue-100 p-3 text-gray-800 leading-relaxed">
                   {latestStaffEvent.note}
                 </p>
               </div>
@@ -870,6 +642,28 @@ export default async function CustomerReturnDetailPage({
             </div>
           )}
 
+          {ret.delivery_date && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">
+                Date of delivery:
+              </span>
+              <p className="text-gray-600 leading-relaxed">
+                {formatDate(ret.delivery_date)}
+              </p>
+            </div>
+          )}
+
+          {ret.customer_email && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold text-ink min-w-[90px]">Contact:</span>
+              <p className="text-gray-600 leading-relaxed">
+                {ret.customer_name}
+                {ret.customer_phone ? ` · ${ret.customer_phone}` : ""} ·{" "}
+                {ret.customer_email}
+              </p>
+            </div>
+          )}
+
           {ret.serial_number && (
             <div className="flex items-baseline gap-2">
               <span className="font-bold text-ink min-w-[90px]">Serial:</span>
@@ -905,25 +699,28 @@ export default async function CustomerReturnDetailPage({
           )}
         </div>
 
-        {/* The evidence — photographs and unboxing videos. */}
+        {/* The evidence — photographs and unboxing videos. Each one is
+            fetched through the route that checks who is asking, so a
+            customer's evidence is theirs and the shop's alone. */}
         {ret.images.length > 0 && (
           <div className="mt-5 border-t border-gray-100 pt-4">
             <h3 className="mb-2.5 text-[13px] font-bold text-ink">
               Your Evidence ({ret.images.length})
             </h3>
             <div className="flex flex-wrap gap-3">
-              {ret.images.map((img) =>
-                img.kind === "video" ? (
+              {ret.images.map((img) => {
+                const src = `/api/returns/${ret.id}/evidence/${img.id}`;
+                return img.kind === "video" ? (
                   <a
                     key={img.id}
-                    href={img.path}
+                    href={src}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-brand transition-colors"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <video
-                      src={img.path}
+                      src={src}
                       className="h-full w-full object-cover"
                       muted
                       playsInline
@@ -935,23 +732,37 @@ export default async function CustomerReturnDetailPage({
                 ) : (
                   <a
                     key={img.id}
-                    href={img.path}
+                    href={src}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-brand transition-colors"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={img.path}
+                      src={src}
                       alt="Return photo"
                       className="h-full w-full object-cover transition-transform group-hover:scale-105"
                     />
                     <span className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </a>
-                )
-              )}
+                );
+              })}
             </div>
+            <p className="mt-2.5 text-[11.5px] text-gray-500">
+              Sent on {formatDate(ret.images[0].created_at)}
+              {ret.images.length > 1 &&
+                ` — the most recent on ${formatDate(
+                  ret.images[ret.images.length - 1].created_at
+                )}`}
+              . Evidence cannot be changed once a request has been decided
+              on.
+            </p>
           </div>
+        )}
+
+        {/* More evidence, when the shop has asked for it. */}
+        {evidenceMayBeAdded(ret.status) && (
+          <AddEvidencePanel returnId={ret.id} askedFor={customerMessage} />
         )}
       </section>
 

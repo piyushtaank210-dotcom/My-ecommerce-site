@@ -8,12 +8,18 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
+  FileWarning,
+  Truck,
+  Ban,
+  Inbox,
+  PackageCheck,
+  Wallet,
+  CheckCheck,
 } from "lucide-react";
 import { requirePermission } from "@/lib/guard";
 import {
   listReturnRequests,
   countReturnRequests,
-  getReturnSummaryStats,
   RETURN_STATUS_LABEL,
   RETURN_STATUS_TONE,
   RETURN_TYPE_LABEL,
@@ -21,6 +27,7 @@ import {
   RETURN_TYPES,
   returnReasonLabel,
 } from "@/lib/returns";
+import { getReturnsOverview } from "@/lib/returns-records";
 import { money, formatDate } from "@/lib/format";
 import { StatCard } from "@/components/admin/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";
@@ -48,15 +55,26 @@ const TABS: {
   params: Record<string, string | undefined>;
 }[] = [
   { key: "all", label: "All Requests", params: {} },
+  { key: "new", label: "New Requests", params: { status: "requested" } },
   { key: "returns", label: "Returns", params: { type: "return" } },
   { key: "replacements", label: "Replacements", params: { type: "replacement" } },
   { key: "accessories", label: "Missing Accessories", params: { type: "accessories" } },
-  { key: "pending_review", label: "Pending Review", params: { status: "requested" } },
+  { key: "pending_review", label: "Pending Review", params: { status: "under_review" } },
+  {
+    key: "evidence_required",
+    label: "Evidence Required",
+    params: { status: "info_requested" },
+  },
   { key: "approved", label: "Approved", params: { status: "approved" } },
   { key: "pickup_pending", label: "Pickup Pending", params: { status: "pickup_scheduled" } },
   { key: "product_received", label: "Product Received", params: { status: "received" } },
-  { key: "refunds", label: "Refunds", params: { refunds: "1" } },
-  { key: "completed", label: "Completed", params: { status: "completed" } },
+  {
+    key: "replacement_dispatched",
+    label: "Replacement Dispatched",
+    params: { status: "replacement_dispatched" },
+  },
+  { key: "refunds", label: "Refund Requests", params: { refunds: "1" } },
+  { key: "completed", label: "Resolved", params: { status: "resolved" } },
   { key: "rejected", label: "Rejected", params: { status: "rejected" } },
 ];
 
@@ -92,7 +110,7 @@ export default async function AdminReturnsPage({
   const returns = (await listReturnRequests(query));
   const total = (await countReturnRequests(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-  const stats = (await getReturnSummaryStats());
+  const stats = (await getReturnsOverview());
 
   /**
    * A link that keeps the search, the dates and the order, and changes
@@ -189,8 +207,8 @@ export default async function AdminReturnsPage({
         </p>
       </header>
 
-      {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* Summary cards — the whole of the returns desk, at a glance. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard
           label="Total requests"
           value={String(stats.total)}
@@ -198,36 +216,86 @@ export default async function AdminReturnsPage({
           icon={RotateCcw}
         />
         <StatCard
-          label="Pending review"
-          value={String(stats.requested)}
-          hint={
-            stats.infoRequested
-              ? `${stats.infoRequested} waiting on the customer`
-              : "Needs a decision from staff"
-          }
-          icon={Clock}
-          tone={stats.requested > 0 ? "warn" : "good"}
+          label="New requests"
+          value={String(stats.newRequests)}
+          hint="Waiting for a first look"
+          icon={Inbox}
+          tone={stats.newRequests > 0 ? "warn" : "good"}
         />
         <StatCard
-          label="Approved"
-          value={String(stats.approved)}
-          hint="Cleared for pickup"
+          label="Pending review"
+          value={String(stats.pendingReview)}
+          hint="Being looked at now"
+          icon={Clock}
+        />
+        <StatCard
+          label="Evidence required"
+          value={String(stats.evidenceRequired)}
+          hint="Waiting on the customer"
+          icon={FileWarning}
+          tone={stats.evidenceRequired > 0 ? "warn" : "good"}
+        />
+        <StatCard
+          label="Approved replacements"
+          value={String(stats.approvedReplacements)}
+          hint="Approved, waiting to go out"
+          icon={PackageCheck}
+        />
+        <StatCard
+          label="Replacement dispatched"
+          value={String(stats.replacementDispatched)}
+          hint="On its way to the customer"
+          icon={Truck}
+        />
+        <StatCard
+          label="Refund requests"
+          value={String(stats.refundRequests)}
+          hint="Every refund on a request"
+          icon={Wallet}
+        />
+        <StatCard
+          label="Refund approved"
+          value={String(stats.refundApproved)}
+          hint="Decided, money not yet sent"
           icon={CircleCheck}
         />
         <StatCard
-          label="Refunds pending"
-          value={String(stats.refundsPending)}
-          hint="Raised, waiting to be settled"
+          label="Refund processing"
+          value={String(stats.refundProcessing)}
+          hint="With the payment provider"
           icon={IndianRupee}
-          tone={stats.refundsPending > 0 ? "warn" : "good"}
+          tone={stats.refundProcessing > 0 ? "warn" : "good"}
         />
         <StatCard
-          label="Completed"
-          value={String(stats.completed)}
-          hint="Closed and settled"
+          label="Refund processed"
+          value={String(stats.refundProcessed)}
+          hint={`${money(stats.totalRefunded)} paid back`}
+          icon={CheckCheck}
+          tone="good"
+        />
+        <StatCard
+          label="Rejected requests"
+          value={String(stats.rejected)}
+          hint="Declined, with the reason on file"
+          icon={Ban}
+        />
+        <StatCard
+          label="Closed requests"
+          value={String(stats.closed)}
+          hint="Resolved and finished"
           icon={CircleCheck}
           tone="good"
         />
+      </div>
+
+      {/* The records that are kept about refunds and replacements. */}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link href="/admin/refunds" className="btn btn-outline btn-sm">
+          Refund records
+        </Link>
+        <Link href="/admin/replacements" className="btn btn-outline btn-sm">
+          Replacement records
+        </Link>
       </div>
 
       {/* The views */}

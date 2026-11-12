@@ -84,7 +84,7 @@ const doc: PolicyDoc = {
             "You have sent clear photographs of all sides of the sealed package.",
             "You have sent a continuous video showing the sealed product and its condition.",
             "The order is eligible under the published return conditions.",
-            "The request was made within 7 calendar days of delivery.",
+            `The request was made within ${RETURN_WINDOW_DAYS} calendar days of delivery.`,
           ],
         },
         {
@@ -249,14 +249,94 @@ const doc: PolicyDoc = {
       ],
     },
     {
+      id: "inspection",
+      heading: "I. Inspection of the Returned Product",
+      blocks: [
+        {
+          kind: "p",
+          text: "Where a product has to come back to us, it is inspected before we settle the claim. The inspection is carried out by a person, and what they find is recorded on your request along with the date and their name.",
+        },
+        {
+          kind: "ul",
+          items: [
+            "We check the unit against your claim and against the photographs you sent.",
+            "We read the serial number off the unit, where it carries one, and match it against what you told us.",
+            "We check the condition of the unit and of the packaging it came in.",
+            "The result is recorded as a pass or a fail, with notes on what we found.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "The inspection is what a refund waits on. A refund is not raised because photographs were uploaded — it is raised after the product has come back and has been checked. The only time we settle a claim without the physical product is where the law requires us to.",
+        },
+        {
+          kind: "p",
+          text: "If the inspection does not match your claim, we tell you what we found and why, and we give you the chance to send us anything further before the case is closed.",
+        },
+      ],
+    },
+    {
+      id: "replacement-procedure",
+      heading: "J. The Replacement Procedure",
+      blocks: [
+        {
+          kind: "p",
+          text: "Where a damaged, faulty or incorrect product is replaced, this is what happens.",
+        },
+        {
+          kind: "ol",
+          items: [
+            "You raise the request with your photographs and your description of the problem.",
+            "We accept the claim and approve a replacement.",
+            "We arrange the pickup of the unit that came back, and it is inspected when it reaches us.",
+            "We dispatch a brand-new unit. We give you the courier's name and the tracking number, and the date it went out.",
+            "You can follow the shipment from your account — the status moves from dispatched, to in transit, to out for delivery, to delivered.",
+            "The request is closed once the replacement has been delivered to you.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "A replacement is provided without additional cost wherever the law requires us to provide it, and wherever a suitable replacement is available. If a replacement is not available, we review the case and give you the remedy the law requires, which may be a refund.",
+        },
+        {
+          kind: "p",
+          text: "Where you have sent us a unit with a serial number, we record that serial number, and we record the serial number of the unit that goes out, so that the two can be matched against each other afterwards.",
+        },
+      ],
+    },
+    {
+      id: "warranty",
+      heading: "K. Warranty",
+      blocks: [
+        {
+          kind: "p",
+          text: "Every product we sell carries the manufacturer's warranty, and the warranty period is stated on the product page. The warranty is the manufacturer's, and it is honoured by them, through us.",
+        },
+        {
+          kind: "ul",
+          items: [
+            "Keep your invoice and the order confirmation — the warranty is claimed against the purchase.",
+            "Raise a warranty claim with us and we will take it up with the manufacturer on your behalf.",
+            "A warranty repair or replacement is arranged through the manufacturer's service network, which we will give you.",
+            "Where a unit is covered by warranty and has failed within the warranty period, the remedy is the manufacturer's, and it is not limited by the return rules in this document.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "A product that fails within its warranty period is a fault, not a change of mind. Raise it under the reason that fits — a defective product — and it is handled under section A, on your statutory rights as well as the warranty.",
+        },
+      ],
+    },
+    {
       id: "how-to-request",
-      heading: "I. How to Request a Return, Replacement or Cancellation",
+      heading: "L. How to Request a Return, Replacement or Cancellation",
       blocks: [
         {
           kind: "ol",
           items: [
             "Open the order in your account — My Orders — and choose the order.",
             "Choose the item, the reason, and how you would like it put right. The form shows you exactly what to send with your claim.",
+            "Give us the date the parcel arrived, and the best way to reach you.",
             "Add your photographs, and your unboxing video if you have one.",
             "Send it. We confirm what we have and what happens next.",
             "Where a return is needed, we arrange the pickup and send you the address.",
@@ -265,13 +345,21 @@ const doc: PolicyDoc = {
         },
         {
           kind: "p",
+          text: "If you cannot send one of the pieces of evidence we ask for, tell us why in the box on the form. Your request still goes forward, and a person still looks at it. We will not turn a genuine claim away only because a photograph or an unboxing video is missing.",
+        },
+        {
+          kind: "p",
           text: "You can also raise anything of this kind by writing to us with your order number. The form is quicker, because it shows you the evidence we need for the reason you pick.",
+        },
+        {
+          kind: "p",
+          text: "Every request gets a reference number, and every change to it is recorded against that number and shown to you on your account, with the date it happened.",
         },
       ],
     },
     {
       id: "contact",
-      heading: "J. Contact Information",
+      heading: "M. Contact Information",
       blocks: [
         {
           kind: "p",
@@ -291,6 +379,32 @@ const doc: PolicyDoc = {
         {
           kind: "p",
           text: "When you contact us about a return, please have your order number ready so we can pull the order up straight away.",
+        },
+      ],
+    },
+    {
+      id: "grievances",
+      heading: "N. Consumer Grievances",
+      blocks: [
+        {
+          kind: "p",
+          text: "If you are not satisfied with how a claim has been handled, you can take it further. This is what that looks like.",
+        },
+        {
+          kind: "ol",
+          items: [
+            "Write to us first, at consoleseller.in@gmail.com, with your request reference and what you are not happy about. We will look at it again and come back to you.",
+            "If you still are not satisfied, write to our grievance officer at the same address, marked for the attention of the Grievance Officer. We will acknowledge it in writing within seven days.",
+            "We will then resolve the grievance and inform you of the outcome, and of how to take the matter further if you remain dissatisfied.",
+          ],
+        },
+        {
+          kind: "p",
+          text: "You also have the right to approach the consumer forum or the National Consumer Helpline if your grievance is not resolved to your satisfaction. Nothing in these rules takes that right away from you.",
+        },
+        {
+          kind: "p",
+          text: "The Consumer Protection Act, 2019 and the rules made under it apply to every purchase you make from us. Where this document says something that is not consistent with those laws, the law is what we follow.",
         },
       ],
     },

@@ -11,6 +11,7 @@ import {
 } from "@/lib/returns";
 import { getProduct } from "@/lib/queries";
 import { money, formatDate } from "@/lib/format";
+import { RETURN_WINDOW_DAYS } from "@/lib/return-policy";
 
 export const metadata = { title: "My Returns & Replacements — ConsoleSeller" };
 
@@ -39,7 +40,7 @@ export default async function AccountReturnsPage() {
         </span>
         <h2 className="mt-4 text-[16px] font-bold text-ink">No return or replacement requests</h2>
         <p className="mt-1.5 text-[13.5px] text-gray-500 max-w-md mx-auto">
-          Need to return or replace an item? You can submit a request directly from any delivered order within the 5-day return window.
+          {`Need to return or replace an item? You can submit a request directly from any delivered order within the ${RETURN_WINDOW_DAYS}-day return window.`}
         </p>
         <Link href="/account/orders" className="btn btn-primary btn-sm mt-5">
           View My Orders
@@ -108,17 +109,6 @@ export default async function AccountReturnsPage() {
               </span>
             )}
           </div>
-
-          {/* Admin remarks preview if available */}
-          {ret.admin_notes && (
-            <div className="mt-2.5 flex items-start gap-2 rounded-lg bg-blue-50/60 border border-blue-100 px-3 py-2 text-[12px] text-blue-900">
-              <MessageSquare className="h-3.5 w-3.5 shrink-0 text-brand mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <span className="font-semibold">Store Remarks: </span>
-                <span className="text-blue-950">{ret.admin_notes}</span>
-              </div>
-            </div>
-          )}
 
           {/* Items with thumbnails */}
           <ul className="mt-3 divide-y divide-gray-100 border-t border-gray-100 pt-2">

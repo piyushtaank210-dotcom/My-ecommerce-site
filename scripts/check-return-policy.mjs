@@ -10,26 +10,39 @@
  *
  * The test order it creates is removed again at the end.
  */
-import { DatabaseSync } from "node:sqlite";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
+import { registerTsResolver } from "./lib/ts-loader.mjs";
+import "./lib/env.mjs";
+
+// The app's modules import each other without their extensions, which
+// plain Node cannot resolve. The hook adds them back.
+registerTsResolver();
+
+const { getDb } = await import("../src/lib/db.ts");
+const { applyMigrations } = await import("../src/lib/migrations.ts");
+const {
   RETURN_WINDOW_DAYS,
   checkRequestAllowed,
   policyForReason,
   REASON_POLICIES,
-} from "../src/lib/return-policy.ts";
-import { calculateReturnDeadline } from "../src/lib/returns.ts";
-import {
+} = await import("../src/lib/return-policy.ts");
+const { calculateReturnDeadline } = await import("../src/lib/returns.ts");
+const {
   approveCancellation,
   confirmCancellationRefund,
   createCancellationRequest,
   getCancellationForOrder,
   rejectCancellation,
-} from "../src/lib/cancellations.ts";
+} = await import("../src/lib/cancellations.ts");
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const db = new DatabaseSync(join(ROOT, "data", "store.db"));
+
+// The shop's own database handle. The shop runs on PostgreSQL, and this
+// is the same handle the app uses — the placeholders and the clock are
+// handled the same way.
+const db = getDb();
+await applyMigrations(db);
 
 let failures = 0;
 const check = (ok, label, detail) => {
@@ -46,7 +59,7 @@ console.log("\n→ the window");
   check(RETURN_WINDOW_DAYS === 7, "the window is seven calendar days");
 
   const delivered = new Date("2026-11-10T09:00:00.000Z");
-  const deadline = calculateReturnDeadline(delivered.toISOString());
+  const deadline = await calculateReturnDeadline(delivered.toISOString());
   const day = deadline.deadlineIso.slice(0, 10);
   check(
     day === "2026-11-17",
@@ -182,7 +195,7 @@ console.log("\n→ what a customer may ask for");
 
 console.log("\n→ cancelling an order");
 {
-  db.prepare(
+  await db.prepare(
     `INSERT INTO orders
       (id, user_id, created_at, name, email, phone, address1, city, state, pincode,
        subtotal, shipping, total, payment_method, status, delivered_at)
@@ -190,7 +203,7 @@ console.log("\n→ cancelling an order");
        '1 Test Street', 'Ludhiana', 'Punjab', '142021', 49999, 0, 49999, 'UPI', 'confirmed', NULL)`
   ).run(orderId);
 
-  const request = createCancellationRequest({
+  const request = await createCancellationRequest({
     orderId,
     userId: null,
     reason: "Ordered by mistake",
@@ -203,14 +216,14 @@ console.log("\n→ cancelling an order");
     request.id
   );
 
-  const stored = getCancellationForOrder(orderId);
+  const stored = await getCancellationForOrder(orderId);
   check(stored?.status === "requested", "the request waits for the back office");
   check(
     stored?.dispatch_state === "before_dispatch",
     "the request records where the order was"
   );
 
-  const again = createCancellationRequest({
+  const again = await createCancellationRequest({
     orderId,
     userId: null,
     reason: "Asked again",
@@ -218,15 +231,15 @@ console.log("\n→ cancelling an order");
   });
   check(!again.ok, "the same order cannot be asked about twice at once");
 
-  const approved = approveCancellation(request.id, staff, { notes: "Cancelled at the customer's request" });
+  const approved = await approveCancellation(request.id, staff, { notes: "Cancelled at the customer's request" });
   check(approved.ok, "the back office can approve a cancellation", approved.message);
 
-  const order = db
+  const order = await db
     .prepare("SELECT status FROM orders WHERE id = ?")
     .get(orderId);
   check(order?.status === "cancelled", "the order itself is cancelled");
 
-  const afterApproval = getCancellationForOrder(orderId);
+  const afterApproval = await getCancellationForOrder(orderId);
   check(
     afterApproval?.refund_status === "pending",
     "the refund is raised, not claimed as paid"
@@ -237,9 +250,9 @@ console.log("\n→ cancelling an order");
     String(afterApproval?.refund_amount)
   );
 
-  const confirmed = confirmCancellationRefund(request.id, staff, "UTR-TEST-1");
+  const confirmed = await confirmCancellationRefund(request.id, staff, "UTR-TEST-1");
   check(confirmed.ok, "the refund is confirmed once the provider says so", confirmed.message);
-  const afterConfirm = getCancellationForOrder(orderId);
+  const afterConfirm = await getCancellationForOrder(orderId);
   check(
     afterConfirm?.refund_status === "processed",
     "the refund is a fact once it is confirmed"
@@ -253,7 +266,7 @@ console.log("\n→ cancelling an order");
 console.log("\n→ declining a cancellation");
 {
   const secondId = `POL-${stamp}-B`;
-  db.prepare(
+  await db.prepare(
     `INSERT INTO orders
       (id, user_id, created_at, name, email, phone, address1, city, state, pincode,
        subtotal, shipping, total, payment_method, status, delivered_at)
@@ -261,7 +274,7 @@ console.log("\n→ declining a cancellation");
        '1 Test Street', 'Ludhiana', 'Punjab', '142021', 49999, 0, 49999, 'UPI', 'shipped', NULL)`
   ).run(secondId);
 
-  const request = createCancellationRequest({
+  const request = await createCancellationRequest({
     orderId: secondId,
     userId: null,
     reason: "Changed my mind",
@@ -269,40 +282,40 @@ console.log("\n→ declining a cancellation");
   });
   check(request.ok, "a shipped order can still be asked about");
   check(
-    /subject to the shipping and return process/i.test(request.message ?? ""),
+    /already shipped|shipping and return process/i.test(request.message ?? ""),
     "the customer is told what a shipped order means",
     request.message
   );
 
-  const noReason = rejectCancellation(request.id, staff, "   ");
+  const noReason = await rejectCancellation(request.id, staff, "   ");
   check(!noReason.ok, "a decision has to carry a reason");
 
-  const declined = rejectCancellation(request.id, staff, "It has already left the warehouse.");
+  const declined = await rejectCancellation(request.id, staff, "It has already left the warehouse.");
   check(declined.ok, "the back office can decline a cancellation");
-  const stored = getCancellationForOrder(secondId);
+  const stored = await getCancellationForOrder(secondId);
   check(stored?.status === "rejected", "the decision is on the record");
   check(
     stored?.rejection_reason === "It has already left the warehouse.",
     "the customer is told why"
   );
 
-  const order = db.prepare("SELECT status FROM orders WHERE id = ?").get(secondId);
+  const order = await db.prepare("SELECT status FROM orders WHERE id = ?").get(secondId);
   check(
     order?.status === "shipped",
     "a declined cancellation leaves the order alone",
     order?.status
   );
 
-  db.prepare("DELETE FROM orders WHERE id = ?").run(secondId);
+  await db.prepare("DELETE FROM orders WHERE id = ?").run(secondId);
 }
 
 console.log("\n→ tidying up");
 {
-  db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
-  const left = db
+  await db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+  const left = await db
     .prepare("SELECT COUNT(*) AS c FROM order_cancellations WHERE order_id LIKE ?")
     .get(`POL-${stamp}%`);
-  check(left.c === 0, "the test rows are removed", `${left.c} left`);
+  check(Number(left?.c) === 0, "the test rows are removed", `${left?.c} left`);
 }
 
 console.log(

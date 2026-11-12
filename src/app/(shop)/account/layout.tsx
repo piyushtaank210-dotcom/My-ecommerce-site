@@ -4,7 +4,7 @@ import { logoutAction } from "@/lib/actions";
 import { requireUser } from "@/lib/guard";
 import { isStaff, ROLE_LABEL } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
-import { AccountNav } from "@/components/account/AccountNav";
+import { AccountNav, ACCOUNT_NAV } from "@/components/account/AccountNav";
 
 export const metadata = {
   title: "My account",
@@ -56,15 +56,7 @@ export default async function AccountLayout({
           </div>
         </header>
 
-        <AccountNav
-          items={[
-            { href: "/account", label: "Overview", icon: "overview" },
-            { href: "/account/orders", label: "Orders", icon: "orders" },
-            { href: "/account/returns", label: "Returns", icon: "returns" },
-            { href: "/account/addresses", label: "Addresses", icon: "addresses" },
-            { href: "/account/profile", label: "Profile", icon: "profile" },
-          ]}
-        />
+        <AccountNav items={ACCOUNT_NAV} />
 
         <div className="pt-7">{children}</div>
 

@@ -1,6 +1,6 @@
 # ConsoleSeller — Consoles & Gaming Accessories
 
-Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 5-day return, replacement & refund management system.
+Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 7-day return, replacement & refund management system.
 
 **Stack:** Next.js 16 (App Router, Turbopack, React 19) · Tailwind CSS v4 · PostgreSQL via `pg` · Zod.
 
@@ -101,16 +101,17 @@ Typography is Inter with tabular numbers (`tnum`) for prices and tracking codes.
 | `/cart` | Real-time shopping cart and summary |
 | `/checkout` | Single-page checkout with saved addresses and address verification |
 | `/order/[id]` | Real-time order status, invoice details, delivery tracking, and return actions |
-| `/order/[id]/return` | 5-day return and replacement request form with photo upload |
+| `/order/[id]/return` | 7-day return and replacement request form — photographs and video, uploaded with live progress, kept private |
 | `/account` | Customer account dashboard |
-| `/account/orders` | Customer order history with 5-day return window indicators |
+| `/account/orders` | Customer order history with 7-day return window indicators |
 | `/account/returns` | Customer return & replacement requests list |
-| `/account/returns/[id]` | 8-stage interactive return tracking timeline and courier pickup updates |
+| `/account/returns/[id]` | Interactive status timeline, the customer's own evidence, and the option to send more when the shop asks for it |
+| `/account/notifications` | Every message the shop has sent about the customer's requests |
 | `/contact` | Store contact info, FAQs, and validated inquiry submission |
 | `/about` | Store background, mission, and hardware authenticity promise |
 | `/privacy-policy` | Customer data handling & privacy guarantees |
 | `/terms-of-service` | Standard customer terms of service |
-| `/refund-policy` | 5-calendar-day return & replacement policy |
+| `/refund-policy` | The 7-calendar-day return, replacement and refund policy, as published |
 
 ### The customer panel
 
@@ -155,6 +156,10 @@ account.
 | `/admin` | Revenue, orders, customers, open enquiries, low stock, best sellers, orders by status |
 | `/admin/orders` | Every order, searchable, with the status changed in place |
 | `/admin/orders/[id]` | One order in full, with a link to the customer's view |
+| `/admin/returns` | Every return, replacement and refund request — the whole request list with its counters, filters, and a link to each case |
+| `/admin/returns/[id]` | One request in full: the claim, the evidence, the customer, the audit log, and every action the back office can take |
+| `/admin/refunds` | Every refund raised — the amount, the method, the transaction reference, who approved it, and what became of it |
+| `/admin/replacements` | Every replacement and accessory shipment — the serials, the courier, the tracking number, and where the parcel has got to |
 | `/admin/inventory` | Every stock line, its threshold and its level; manual adjustments; returns waiting to be checked |
 | `/admin/inventory/history` | Every change to a stock level, and why it was made |
 | `/admin/categories` | The categories, their subcategories and specification fields, and the brands |
@@ -463,6 +468,49 @@ columns an administrator may see, only in a file an administrator may
 apply, and it never appears in a preview — the preview says "purchase cost"
 without giving the number away.
 
+### Returns, replacements and refunds
+
+The whole of a claim lives in the database, and the back office sees
+everything the customer sent.
+
+**The claim.** A customer raises a request from the order page. The form
+is driven by the rules for the reason they pick, so it asks for what that
+reason actually needs — the delivery date, the serial number where the
+unit carries one, the list of missing parts, the description. Everything
+is checked again on the server: the order has to belong to the person
+making the claim, the delivery date is compared with the order's own
+record of it, and a second claim about the same unit is refused.
+
+**The evidence.** Photographs and videos are sent up one at a time, so
+the page can show how each file is getting on. What a file *is* is
+decided by reading its own bytes, not by the name or the type the browser
+sent. The files are written outside the public folder and are fetched
+through `/api/returns/[id]/evidence/[fileId]`, which answers to the back
+office or to the customer who sent them and to nobody else. Nothing is
+served from a guessable URL.
+
+**The alternative.** Where the rules ask for a piece of evidence the
+customer cannot send, the form says so and asks them why. The claim still
+goes forward, because a genuine claim is never turned away for the want
+of a photograph — the reason is recorded on the request and shown to the
+back office.
+
+**The records.** A request, its items, its evidence, its history and its
+audit log are one case. Beside them:
+
+| Record | What it keeps |
+|---|---|
+| `return_refunds` | The amount, the method, the gateway reference, who approved it, when it was initiated and when the money actually went back |
+| `return_replacements` | The serial that came in, the serial going out, the courier, the tracking number, the dispatch date and where the parcel has got to |
+| `return_inspections` | Who inspected the unit, when, what they found, and the serial they read off it |
+| `admin_actions` | Every button a member of staff pressed on a request, with who, when, and the status it moved from and to |
+| `notifications` | Every message the shop sent about a request, and what became of it |
+
+**A refund is not a refund until the money has moved.** It is *approved*,
+then *processing*, and only then *completed* — and completing it needs
+the transaction reference. The customer is told the same way, and the
+customer never sees the shop's internal notes.
+
 ### The dashboard
 
 The overview counts the catalogue properly:
@@ -521,6 +569,19 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `GET` | `/api/account/orders` | The signed-in customer's own orders |
 | `GET` `POST` | `/api/account/addresses` | The address book |
 | `PATCH` `DELETE` | `/api/account/addresses/[id]` | Edit or remove one address |
+
+| `GET` `POST` | `/api/returns` | The signed-in customer's own requests; `POST` raises one (`{"orderId":"PF…","type":"replacement","reason":"product_damaged","customerNotes":"…","deliveryDate":"2026-11-01","contactName":"…","contactEmail":"…","uploadIds":["UPL-…"],"items":[…]}`) |
+| `GET` `POST` | `/api/returns/[id]` | One request with its evidence and history; `POST` attaches more evidence to a request that is still open |
+| `GET` | `/api/returns/[id]/history` | Every status the request has been through, with the date and who made the change |
+| `POST` | `/api/returns/evidence` | Send evidence up, before the request is submitted (a form, under `files`); the file is checked by its own bytes, not by what the browser said it was |
+| `GET` | `/api/returns/[id]/evidence/[fileId]` | One piece of evidence — a photograph or a video. The back office or the customer who sent it, and nobody else |
+| `GET` | `/api/admin/returns` | Every request; `?q=`, `?status=`, `?type=`, `?refunds=1`, `?from=`, `?to=`, `?sort=`, `?page=`, `?limit=` |
+| `GET` `PATCH` | `/api/admin/returns/[id]` | One request with its evidence, its history, its refunds, its replacements and its inspections; `PATCH` moves it to another status |
+| `POST` | `/api/admin/returns/[id]/decision` | Pick a claim up, approve it, reject it (a reason is required), or ask the customer for more evidence |
+| `GET` `POST` | `/api/admin/refunds` | Every refund raised; `POST` raises one (`{"returnId":"RET-…","amount":49999,"paymentMethod":"Original Payment Source"}`) |
+| `PATCH` | `/api/admin/refunds/[id]` | Move a refund along — `"processing"`, `"completed"` (the transaction reference is required) or `"failed"` |
+| `GET` | `/api/admin/replacements` | Every replacement and accessory shipment; `?q=`, `?status=`, `?from=`, `?to=` |
+| `PATCH` | `/api/admin/replacements/[id]` | Record where a shipment has got to |
 
 ### Navigation
 The header is a three-section CSS grid:
@@ -1050,7 +1111,11 @@ This is a **demonstration store**. The commerce flows are complete, but:
 - **No real payments.** Checkout records the order; no processor is contacted
   and no card details are collected. To go live, add Stripe or Razorpay inside
   `placeOrderAction` and finalise the order from the webhook.
-- **No email.** Order confirmation is rendered on-screen; nothing is sent.
+- **Email is optional.** Every message the shop sends about a return is
+  written to the database and shown on the customer's dashboard, whether
+  or not the shop is set up to send mail. Set `RESEND_API_KEY` (or
+  `MAIL_WEBHOOK_URL`) and the same messages go out by email as well. Order
+  confirmation is still on-screen only.
 - **"Forgot password?" is a placeholder** — there is no password-reset flow.
 - **No saved payment methods.** Addresses are saved on the account; cards are
   not.

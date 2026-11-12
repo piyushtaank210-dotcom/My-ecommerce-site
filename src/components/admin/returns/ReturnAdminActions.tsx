@@ -4,9 +4,12 @@ import { useActionState, useState } from "react";
 import {
   approveReturnAction,
   rejectReturnAction,
+  startReviewAction,
+  startInspectionAction,
   schedulePickupAction,
   recordQcAction,
   initiateRefundAction,
+  startRefundProcessingAction,
   confirmRefundPaidAction,
   rejectRefundAction,
   markCompletedAction,
@@ -60,6 +63,14 @@ export function ReturnAdminActions({
     rejectReturnAction,
     initial
   );
+  const [reviewState, reviewAction, isReviewPending] = useActionState(
+    startReviewAction,
+    initial
+  );
+  const [inspectionState, inspectionAction, isInspectionPending] = useActionState(
+    startInspectionAction,
+    initial
+  );
 
   // 2. Pickup Scheduling
   const [pickupState, pickupAction, isPickupPending] = useActionState(
@@ -89,7 +100,13 @@ export function ReturnAdminActions({
     initial
   );
 
-  // 4b. Confirming the refund has actually been paid, and refusing it.
+  // 4b. Putting the refund in front of the payment provider.
+  const [processingState, processingAction, isProcessingPending] = useActionState(
+    startRefundProcessingAction,
+    initial
+  );
+
+  // 4c. Confirming the refund has actually been paid, and refusing it.
   const [paidState, paidAction, isPaidPending] = useActionState(
     confirmRefundPaidAction,
     initial
@@ -172,7 +189,10 @@ export function ReturnAdminActions({
   return (
     <div className="space-y-6">
       {/* 1. APPROVE / REJECT PANEL (For 'requested' state) */}
-      {(ret.status === "requested" || ret.status === "info_requested") && (
+      {(ret.status === "requested" ||
+        ret.status === "under_review" ||
+        ret.status === "info_requested" ||
+        ret.status === "evidence_received") && (
         <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-5">
           <h2 className="text-[15px] font-bold text-ink">Review Request</h2>
           <p className="mt-1 text-[12.5px] text-gray-600">
@@ -188,6 +208,27 @@ export function ReturnAdminActions({
             <p className={`mt-3 text-[13px] ${rejectState.ok ? "text-green-700" : "text-red-600"}`}>
               {rejectState.message}
             </p>
+          )}
+
+          {reviewState.message && (
+            <p className={`mt-3 text-[13px] ${reviewState.ok ? "text-green-700" : "text-red-600"}`}>
+              {reviewState.message}
+            </p>
+          )}
+
+          {/* Picking the request up. It says the claim is being looked at,
+              and moves the customer onto that stage. */}
+          {ret.status === "requested" && (
+            <form action={reviewAction} className="mt-4">
+              <input type="hidden" name="returnId" value={ret.id} />
+              <button
+                type="submit"
+                disabled={isReviewPending}
+                className="btn btn-outline btn-sm"
+              >
+                {isReviewPending ? "Picking it up..." : "Start reviewing this request"}
+              </button>
+            </form>
           )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -280,7 +321,9 @@ export function ReturnAdminActions({
       )}
 
       {/* 2. PICKUP SCHEDULING PANEL (For 'approved' state or updating) */}
-      {(ret.status === "approved" || ret.status === "pickup_scheduled") && (
+      {(ret.status === "approved" ||
+        ret.status === "replacement_approved" ||
+        ret.status === "pickup_scheduled") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Truck className="h-4 w-4 text-brand" />
@@ -374,7 +417,9 @@ export function ReturnAdminActions({
       )}
 
       {/* 3. THE PRODUCT ARRIVING BACK */}
-      {(ret.status === "pickup_scheduled" || ret.status === "approved") && (
+      {(ret.status === "pickup_scheduled" ||
+        ret.status === "approved" ||
+        ret.status === "replacement_approved") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <PackageCheck className="h-4 w-4 text-brand" />
@@ -421,8 +466,49 @@ export function ReturnAdminActions({
         </section>
       )}
 
+      {/* 3b. THE INSPECTION BEING CARRIED OUT */}
+      {ret.status === "received" && (
+        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <ClipboardCheck className="h-4 w-4 text-indigo-600" />
+            Start the Inspection
+          </h2>
+          <p className="mt-1 text-[12.5px] text-gray-500">
+            The parcel has arrived. When somebody begins to open it and
+            check it, mark the inspection as started — the customer sees
+            that their unit is being looked at.
+          </p>
+
+          {inspectionState.message && (
+            <p className={`mt-3 text-[13px] ${inspectionState.ok ? "text-green-700" : "text-red-600"}`}>
+              {inspectionState.message}
+            </p>
+          )}
+
+          <form action={inspectionAction} className="mt-4">
+            <input type="hidden" name="returnId" value={ret.id} />
+            <button
+              type="submit"
+              disabled={isInspectionPending}
+              className="btn btn-outline btn-sm"
+            >
+              {isInspectionPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                "Mark the inspection as started"
+              )}
+            </button>
+          </form>
+        </section>
+      )}
+
       {/* 4. QUALITY CHECK (QC) & RECEIPT PANEL */}
-      {(ret.status === "pickup_scheduled" || ret.status === "received") && (
+      {(ret.status === "pickup_scheduled" ||
+        ret.status === "received" ||
+        ret.status === "inspection_in_progress") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <ClipboardCheck className="h-4 w-4 text-brand" />
@@ -617,7 +703,8 @@ export function ReturnAdminActions({
       )}
 
       {/* 5b. THE REFUND IS RAISED — IS THE MONEY OUT? */}
-      {ret.type === "return" && ret.status === "refund_pending" && (
+      {ret.type === "return" &&
+        (ret.status === "refund_approved" || ret.status === "refund_pending") && (
         <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Banknote className="h-4 w-4 text-amber-700" />
@@ -644,8 +731,58 @@ export function ReturnAdminActions({
             </p>
           )}
 
+          {processingState.message && (
+            <p className={`mt-3 text-[13px] ${processingState.ok ? "text-green-700" : "text-red-600"}`}>
+              {processingState.message}
+            </p>
+          )}
+
           {ret.refund_status !== "processed" && (
             <>
+              {/* The refund is approved but the money has not been sent
+                  yet. This is the step that hands it to the payment
+                  provider. */}
+              {ret.refund_status === "pending" && !ret.refund_processed_at && (
+                <form action={processingAction} className="mt-4 space-y-3 border-b border-amber-200 pb-5">
+                  <input type="hidden" name="returnId" value={ret.id} />
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-600">
+                      Send it to the payment provider
+                    </label>
+                    <p className="mt-1 text-[12px] text-gray-500">
+                      Record this once the refund has been handed to the
+                      payment provider. The customer is told it is on its
+                      way.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-600">
+                      Gateway reference (if you have one)
+                    </label>
+                    <input
+                      type="text"
+                      name="gatewayTransactionId"
+                      placeholder="e.g. pay_9fJ2Kd"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isProcessingPending}
+                    className="btn btn-outline btn-sm"
+                  >
+                    {isProcessingPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Mark the refund as sent"
+                    )}
+                  </button>
+                </form>
+              )}
+
               <form action={paidAction} className="mt-4 space-y-4">
                 <input type="hidden" name="returnId" value={ret.id} />
                 <div>
@@ -716,7 +853,11 @@ export function ReturnAdminActions({
       )}
 
       {/* 6. REPLACEMENT DISPATCH PANEL (When QC is passed and type === 'replacement') */}
-      {ret.type === "replacement" && (ret.status === "qc_passed" || (ret.status === "received" && ret.qc_status === "passed")) && (
+      {ret.type === "replacement" &&
+        (ret.status === "approved" ||
+          ret.status === "replacement_approved" ||
+          ret.status === "qc_passed" ||
+          (ret.status === "received" && ret.qc_status === "passed")) && (
         <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Truck className="h-4 w-4 text-blue-700" />
@@ -890,7 +1031,9 @@ export function ReturnAdminActions({
       )}
 
       {/* 6b. THE REPLACEMENT IS ON ITS WAY */}
-      {ret.type === "replacement" && ret.status === "replacement_pending" && ret.replacement_order_id && (
+      {ret.type === "replacement" &&
+        (ret.status === "replacement_dispatched" || ret.status === "replacement_pending") &&
+        ret.replacement_order_id && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Truck className="h-4 w-4 text-brand" />
@@ -975,7 +1118,10 @@ export function ReturnAdminActions({
         </section>
       )}
       {/* 6b. THE MISSING ACCESSORIES GOING OUT */}
-      {ret.type === "accessories" && ret.status !== "completed" && ret.status !== "rejected" && (
+      {ret.type === "accessories" &&
+        ret.status !== "completed" &&
+        ret.status !== "resolved" &&
+        ret.status !== "rejected" && (
         <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Truck className="h-4 w-4 text-blue-700" />
@@ -1086,7 +1232,10 @@ export function ReturnAdminActions({
       )}
 
       {/* 7. CLOSING THE REQUEST */}
-      {(ret.status === "refund_pending" || ret.status === "replacement_pending") && (
+      {(ret.status === "refund_completed" ||
+        ret.status === "refund_pending" ||
+        ret.status === "replacement_dispatched" ||
+        ret.status === "replacement_pending") && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
             <Flag className="h-4 w-4 text-brand" />

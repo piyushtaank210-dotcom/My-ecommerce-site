@@ -16,7 +16,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
+import { db, closeDb } from "./lib/pg-db.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { launchChrome, setInput } from "./lib/browser.mjs";
 import { tokenForRole } from "./lib/session.mjs";
@@ -25,8 +25,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9263;
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-const token = tokenForRole(db, "admin");
+const token = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -36,31 +35,35 @@ function check(label, ok, extra = "") {
 
 // A replacement on an order that really bought the unit — the case where
 // taking the same shelf twice used to be refused by the database.
-const order = db
+const order = await db
   .prepare("SELECT * FROM orders WHERE status = 'delivered' LIMIT 1")
-  .get() ?? db.prepare("SELECT * FROM orders LIMIT 1").get();
-const orderItem = db
+  .get() ?? await db.prepare("SELECT * FROM orders LIMIT 1").get();
+const orderItem = await db
   .prepare("SELECT * FROM order_items WHERE order_id = ? LIMIT 1")
   .get(order.id);
 
 const requestId = `RET-RPL${Date.now().toString().slice(-6)}`;
-db.prepare(
-  `INSERT INTO return_requests
-    (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
-   VALUES (?, ?, ?, 'replacement', 'requested', 'defective', 'Console will not turn on', 0, 'none')`
-).run(requestId, order.id, order.user_id);
-db.prepare(
-  `INSERT INTO return_items
-    (return_id, order_item_id, product_slug, variant_id, name, price, quantity, reason_detail)
-   VALUES (?, ?, ?, ?, ?, ?, 1, 'Will not power on')`
-).run(
-  requestId,
-  orderItem.id,
-  orderItem.product_slug,
-  orderItem.variant_id ?? null,
-  orderItem.name,
-  orderItem.price
-);
+await db
+  .prepare(
+    `INSERT INTO return_requests
+      (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
+     VALUES (?, ?, ?, 'replacement', 'requested', 'defective', 'Console will not turn on', 0, 'none')`
+  )
+  .run(requestId, order.id, order.user_id);
+await db
+  .prepare(
+    `INSERT INTO return_items
+      (return_id, order_item_id, product_slug, variant_id, name, price, quantity, reason_detail)
+     VALUES (?, ?, ?, ?, ?, ?, 1, 'Will not power on')`
+  )
+  .run(
+    requestId,
+    orderItem.id,
+    orderItem.product_slug,
+    orderItem.variant_id ?? null,
+    orderItem.name,
+    orderItem.price
+  );
 
 const { chrome, cdp } = await launchChrome({
   port: PORT,
@@ -71,7 +74,7 @@ const { chrome, cdp } = await launchChrome({
 /** The status shown on the request page. */
 const STATUS = `(() => {
   const badge = [...document.querySelectorAll('span')].find(s =>
-    /^(Requested|More Info Requested|Approved|Pickup Scheduled|Item Received|QC Passed|QC Failed|Refund Pending|Replacement Pending|Completed|Rejected|Cancelled)$/.test(s.textContent.trim())
+    /^(Request Submitted|Under Review|Evidence Required|Evidence Received|Approved|Rejected|Cancelled|Return Pickup Scheduled|Product Received by ConsoleSeller|Product Inspection in Progress|Inspection Completed|Inspection Failed|Replacement Approved|Replacement Dispatched|Refund Approved|Refund Processing|Refund Completed|Request Resolved)$/.test(s.textContent.trim())
   );
   return badge ? badge.textContent.trim() : null;
 })()`;
@@ -103,9 +106,10 @@ try {
       return Boolean(b);
     })()`);
 
+    await sleep(1200);
     let status = null;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await sleep(500);
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await sleep(750);
       status = await cdp.evaluate(STATUS);
       if (status === expected) break;
     }
@@ -119,13 +123,13 @@ try {
   await sleep(1800);
   check(
     "the replacement request opens in the back office",
-    (await cdp.evaluate(STATUS)) === "Requested"
+    (await cdp.evaluate(STATUS)) === "Request Submitted"
   );
 
   await act(
     { adminNotes: "Checked against the order." },
     "Approve Return Request",
-    "Approved",
+    "Replacement Approved",
     "approving the request"
   );
   await act(
@@ -136,19 +140,19 @@ try {
       notes: "Collect from the front desk.",
     },
     "Save & Dispatch Pickup",
-    "Pickup Scheduled",
+    "Return Pickup Scheduled",
     "scheduling the pickup"
   );
   await act(
     { notes: "One box." },
     "Mark as Received",
-    "Item Received",
+    "Product Received by ConsoleSeller",
     "marking the product received"
   );
   await act(
     { notes: "Box opened, console present, no physical damage." },
     "Submit QC & Update Stock",
-    "QC Passed",
+    "Inspection Completed",
     "marking the inspection completed"
   );
 
@@ -227,8 +231,10 @@ try {
     )
   )[0];
   const stockBefore = choice?.variantId
-    ? db.prepare(`SELECT stock FROM variants WHERE id = ?`).get(choice.variantId)
-    : db
+    ? await db
+        .prepare(`SELECT stock FROM variants WHERE id = ?`)
+        .get(choice.variantId)
+    : await db
         .prepare(`SELECT stock FROM products WHERE slug = ?`)
         .get(choice?.productSlug);
 
@@ -240,11 +246,11 @@ try {
       notes: "Sent from the warehouse.",
     },
     "Create the Replacement Shipment",
-    "Replacement Pending",
+    "Replacement Dispatched",
     "creating the replacement shipment"
   );
 
-  const shipment = db
+  const shipment = await db
     .prepare(
       `SELECT replacement_order_id, replacement_courier, replacement_tracking,
               replacement_dispatch_date, replacement_delivery_status,
@@ -270,7 +276,7 @@ try {
 
   // The stock came off the shelf exactly once, and it came off as a
   // replacement rather than as a second sale of the original order.
-  const movements = db
+  const movements = await db
     .prepare(
       `SELECT movement_type, quantity_changed, reason FROM inventory_movements
        WHERE reason LIKE ? ORDER BY id`
@@ -289,7 +295,7 @@ try {
   );
 
   if (stockBefore) {
-    const stockAfter = db
+    const stockAfter = await db
       .prepare(`SELECT stock FROM variants WHERE id = ?`)
       .get(choice?.variantId);
     check(
@@ -310,24 +316,24 @@ try {
   })()`);
   await sleep(2500);
 
-  const movementsAfter = db
+  const movementsAfter = await db
     .prepare(
       `SELECT COUNT(*) AS c FROM inventory_movements WHERE reason LIKE ?`
     )
     .get(`%${shipment?.replacement_order_id}%`);
-  const shipments = db
+  const shipments = await db
     .prepare(
       `SELECT COUNT(*) AS c FROM inventory_movements WHERE movement_type = 'replacement' AND reason LIKE '%${requestId}%'`
     )
     .get();
   check(
     "a second dispatch takes nothing off the shelf",
-    movementsAfter?.c === 1,
+    Number(movementsAfter?.c) === 1,
     `${movementsAfter?.c} movement(s)`
   );
-  check("there is still only one shipment", shipments?.c === 1);
+  check("there is still only one shipment", Number(shipments?.c) === 1);
 
-  const stillOne = db
+  const stillOne = await db
     .prepare(`SELECT replacement_order_id FROM return_requests WHERE id = ?`)
     .get(requestId);
   check(
@@ -341,11 +347,11 @@ try {
   await act(
     { deliveryStatus: "delivered", notes: "Left with the customer." },
     "Record the delivery",
-    "Replacement Pending",
+    "Request Resolved",
     "recording the delivery as delivered"
   );
 
-  const delivered = db
+  const delivered = await db
     .prepare(
       `SELECT replacement_delivery_status, replacement_delivered_at
        FROM return_requests WHERE id = ?`
@@ -360,7 +366,7 @@ try {
   await act(
     { notes: "The customer has the replacement." },
     "Mark as Completed",
-    "Completed",
+    "Request Resolved",
     "closing the request"
   );
 
@@ -393,7 +399,7 @@ try {
   // The test took a unit off the shelf. It goes back, through the
   // back office's own adjustment, so the store is found as it was.
   console.log("\n— putting the shelf back —");
-  const taken = db
+  const taken = await db
     .prepare(
       `SELECT product_slug, variant_id, quantity_changed FROM inventory_movements
        WHERE reason LIKE ? ORDER BY id DESC LIMIT 1`
@@ -417,7 +423,7 @@ try {
     });
     check("the shelf was put back", res.status === 200, `status ${res.status}`);
 
-    const now = db
+    const now = await db
       .prepare(`SELECT stock FROM variants WHERE id = ?`)
       .get(taken.variant_id);
     check(
@@ -429,11 +435,17 @@ try {
 } finally {
   chrome.kill();
   // The request was made for the test, so it goes when the test is over.
-  db.prepare("DELETE FROM return_events WHERE return_id = ?").run(requestId);
-  db.prepare("DELETE FROM return_items WHERE return_id = ?").run(requestId);
-  db.prepare("DELETE FROM return_requests WHERE id = ?").run(requestId);
-  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
-  db.close();
+  await db.prepare("DELETE FROM return_events WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_items WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_requests WHERE id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_events WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_items WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_requests WHERE id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_events WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_items WHERE return_id = ?").run(requestId);
+  await db.prepare("DELETE FROM return_requests WHERE id = ?").run(requestId);
+  await db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  await closeDb();
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\n✓ every check passed");

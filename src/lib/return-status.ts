@@ -17,52 +17,216 @@ export const RETURN_TYPE_LABEL: Record<ReturnType, string> = {
   accessories: "Missing Accessories",
 };
 
+/**
+ * The states a request can be in.
+ *
+ * The list is the shop's own, and the customer sees these same words. A
+ * request never jumps: it moves from one state to the next, and every
+ * move is written to the request's history with the date it happened and
+ * who made it.
+ *
+ * A few of the older names are kept because requests that were made
+ * before the shop grew them still carry them. They say the same thing
+ * as the newer name beside them, and the customer's label is the same
+ * for both, so nobody is shown a word that means nothing.
+ */
 export const RETURN_STATUSES = [
+  // The claim, from the customer.
   "requested",
+  "under_review",
   "info_requested",
+  "evidence_received",
+  // The decision.
   "approved",
-  "pickup_scheduled",
-  "received",
-  "qc_passed",
-  "qc_failed",
-  "refund_pending",
-  "replacement_pending",
-  "completed",
   "rejected",
   "cancelled",
+  // The unit coming back.
+  "pickup_scheduled",
+  "received",
+  "inspection_in_progress",
+  "qc_passed",
+  "qc_failed",
+  // The replacement going out.
+  "replacement_approved",
+  "replacement_pending",
+  "replacement_dispatched",
+  // The money coming back.
+  "refund_approved",
+  "refund_pending",
+  "refund_processing",
+  "refund_completed",
+  // The end of it.
+  "completed",
+  "resolved",
 ] as const;
 
 export type ReturnStatus = (typeof RETURN_STATUSES)[number];
 
+/**
+ * What the customer is told.
+ *
+ * These are the words the customer reads on their dashboard. The back
+ * office reads the same words, so the customer and the shop are never
+ * talking about two different things.
+ */
 export const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
-  requested: "Requested",
-  info_requested: "More Info Requested",
+  requested: "Request Submitted",
+  under_review: "Under Review",
+  info_requested: "Evidence Required",
+  evidence_received: "Evidence Received",
   approved: "Approved",
-  pickup_scheduled: "Pickup Scheduled",
-  received: "Item Received",
-  qc_passed: "QC Passed",
-  qc_failed: "QC Failed",
-  refund_pending: "Refund Pending",
-  replacement_pending: "Replacement Pending",
-  completed: "Completed",
   rejected: "Rejected",
   cancelled: "Cancelled",
+  pickup_scheduled: "Return Pickup Scheduled",
+  received: "Product Received by ConsoleSeller",
+  inspection_in_progress: "Product Inspection in Progress",
+  qc_passed: "Inspection Completed",
+  qc_failed: "Inspection Failed",
+  replacement_approved: "Replacement Approved",
+  replacement_pending: "Replacement Approved",
+  replacement_dispatched: "Replacement Dispatched",
+  refund_approved: "Refund Approved",
+  refund_pending: "Refund Processing",
+  refund_processing: "Refund Processing",
+  refund_completed: "Refund Completed",
+  completed: "Request Resolved",
+  resolved: "Request Resolved",
 };
 
 export const RETURN_STATUS_TONE: Record<ReturnStatus, string> = {
   requested: "bg-amber-50 text-amber-700 border-amber-200",
+  under_review: "bg-amber-50 text-amber-700 border-amber-200",
   info_requested: "bg-orange-50 text-orange-700 border-orange-200",
+  evidence_received: "bg-sky-50 text-sky-700 border-sky-200",
   approved: "bg-blue-50 text-blue-700 border-blue-200",
-  pickup_scheduled: "bg-purple-50 text-purple-700 border-purple-200",
-  received: "bg-sky-50 text-sky-700 border-sky-200",
-  qc_passed: "bg-teal-50 text-teal-700 border-teal-200",
-  qc_failed: "bg-orange-50 text-orange-700 border-orange-200",
-  refund_pending: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  replacement_pending: "bg-cyan-50 text-cyan-700 border-cyan-200",
-  completed: "bg-green-50 text-green-700 border-green-200",
   rejected: "bg-red-50 text-red-700 border-red-200",
   cancelled: "bg-gray-100 text-gray-600 border-gray-200",
+  pickup_scheduled: "bg-purple-50 text-purple-700 border-purple-200",
+  received: "bg-sky-50 text-sky-700 border-sky-200",
+  inspection_in_progress: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  qc_passed: "bg-teal-50 text-teal-700 border-teal-200",
+  qc_failed: "bg-orange-50 text-orange-700 border-orange-200",
+  replacement_approved: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  replacement_pending: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  replacement_dispatched: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  refund_approved: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  refund_pending: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  refund_processing: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  refund_completed: "bg-green-50 text-green-700 border-green-200",
+  completed: "bg-green-50 text-green-700 border-green-200",
+  resolved: "bg-green-50 text-green-700 border-green-200",
 };
+
+/**
+ * The statuses that mean the case is still open.
+ *
+ * A case is closed when it is resolved, refused or cancelled. Anything
+ * else is still being worked on.
+ */
+export const OPEN_RETURN_STATUSES: ReturnStatus[] = [
+  "requested",
+  "under_review",
+  "info_requested",
+  "evidence_received",
+  "approved",
+  "pickup_scheduled",
+  "received",
+  "inspection_in_progress",
+  "qc_passed",
+  "qc_failed",
+  "replacement_approved",
+  "replacement_pending",
+  "replacement_dispatched",
+  "refund_approved",
+  "refund_pending",
+  "refund_processing",
+];
+
+/** True when the case has not been closed. */
+export function isOpenStatus(status: string): boolean {
+  return (OPEN_RETURN_STATUSES as string[]).includes(status);
+}
+
+/**
+ * The lifecycle of a refund.
+ *
+ * A refund is approved, then it is processed, and only then is it
+ * complete. Nothing shows a customer a completed refund before the
+ * money has actually moved.
+ */
+export const REFUND_STATUSES = [
+  "approved",
+  "processing",
+  "completed",
+  "failed",
+] as const;
+
+export type RefundStatus = (typeof REFUND_STATUSES)[number];
+
+export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  approved: "Refund Approved",
+  processing: "Refund Processing",
+  completed: "Refund Completed",
+  failed: "Refund Failed",
+};
+
+export const REFUND_STATUS_TONE: Record<RefundStatus, string> = {
+  approved: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  processing: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  completed: "bg-green-50 text-green-700 border-green-200",
+  failed: "bg-red-50 text-red-700 border-red-200",
+};
+
+/**
+ * The lifecycle of a replacement, from the point it is decided on to the
+ * point it arrives.
+ */
+export const REPLACEMENT_STATUSES = [
+  "approved",
+  "dispatched",
+  "in_transit",
+  "out_for_delivery",
+  "delivered",
+  "returned",
+  "cancelled",
+] as const;
+
+export type ReplacementStatus = (typeof REPLACEMENT_STATUSES)[number];
+
+export const REPLACEMENT_STATUS_LABEL: Record<ReplacementStatus, string> = {
+  approved: "Replacement Approved",
+  dispatched: "Dispatched",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  returned: "Returned to us",
+  cancelled: "Cancelled",
+};
+
+/**
+ * What a piece of evidence is evidence of.
+ *
+ * The customer says which it is when they send it, so the back office
+ * can sort the photographs without asking.
+ */
+export const EVIDENCE_KINDS = [
+  "product",
+  "package",
+  "serial",
+  "unboxing",
+  "other",
+] as const;
+
+export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
+
+export const EVIDENCE_KIND_LABEL: Record<EvidenceKind, string> = {
+  product: "The product",
+  package: "The packaging",
+  serial: "The serial number",
+  unboxing: "Unboxing video",
+  other: "Other evidence",
+};
+
 
 /**
  * The views a request can be looked at through are the back office's own
@@ -144,10 +308,9 @@ export { RETURN_WINDOW_DAYS };
 export const DEFAULT_RETURN_WINDOW_DAYS = RETURN_WINDOW_DAYS;
 
 /**
- * Returns dynamic timeline stages relevant to the request type.
- * Timeline:
- * Request Submitted → Under Review → Approved → Pickup Scheduled → Product Received → Inspection Completed → Refund Initiated / Replacement Dispatched → Completed
+ * The stages a request travels through, in order.
  *
+ * The customer sees this as a timeline with a date against each stage.
  * A missing-accessories case never travels: the unit stays with the
  * customer and the missing parts are sent to them.
  */
@@ -161,27 +324,29 @@ export function getTimelineStages(type: ReturnType): {
       { key: "requested", label: "Request Submitted", description: "Your request has been received" },
       { key: "under_review", label: "Under Review", description: "We are checking what is missing" },
       { key: "approved", label: "Approved", description: "We are sending the missing parts" },
-      { key: "settlement", label: "Accessories Dispatched", description: "The missing parts are on their way to you" },
-      { key: "completed", label: "Completed", description: "Case resolved successfully" },
+      { key: "replacement_dispatched", label: "Accessories Dispatched", description: "The missing parts are on their way to you" },
+      { key: "resolved", label: "Request Resolved", description: "Case resolved successfully" },
     ];
   }
 
   return [
     { key: "requested", label: "Request Submitted", description: "Your request has been received" },
     { key: "under_review", label: "Under Review", description: "Our team is reviewing the claim" },
-    { key: "approved", label: "Approved", description: "Return approved, arranging pickup" },
-    { key: "pickup_scheduled", label: "Pickup Scheduled", description: "Courier scheduled to collect parcel" },
-    { key: "received", label: "Product Received", description: "Arrived at our inspection center" },
-    { key: "qc_passed", label: "Inspection Completed", description: "Quality check passed" },
+    { key: "info_requested", label: "Evidence Required", description: "We have asked you for more" },
+    { key: "approved", label: "Approved", description: "The claim is accepted, arranging pickup" },
+    { key: "pickup_scheduled", label: "Return Pickup Scheduled", description: "Courier pickup arranged" },
+    { key: "received", label: "Product Received", description: "Arrived at our inspection centre" },
+    { key: "inspection_in_progress", label: "Inspection in Progress", description: "We are checking the unit" },
+    { key: "qc_passed", label: "Inspection Completed", description: "The unit has been checked" },
     {
-      key: "settlement",
-      label: type === "replacement" ? "Replacement Dispatched" : "Refund Initiated",
+      key: "replacement_dispatched",
+      label: type === "replacement" ? "Replacement Dispatched" : "Refund Processing",
       description:
         type === "replacement"
-          ? "Brand new unit shipped to you"
-          : "Refund credited to original payment source",
+          ? "A brand new unit is on its way to you"
+          : "The refund is being sent back to your payment method",
     },
-    { key: "completed", label: "Completed", description: "Case resolved successfully" },
+    { key: "resolved", label: "Request Resolved", description: "Case closed" },
   ];
 }
 
@@ -235,6 +400,25 @@ export type ReturnImage = {
   caption: string | null;
   /** Whether this file is a photograph or a video. */
   kind: "photo" | "video";
+  /** What the file is evidence of. */
+  evidence_kind: EvidenceKind;
+  /** The name of the file in the shop's private evidence store. */
+  stored_name: string | null;
+  /** What the file really is, as far as the shop could tell. */
+  mime_type: string | null;
+  size_bytes: number | null;
+  /** The name the file arrived with. */
+  original_name: string | null;
+  /** Which round of evidence this is. The first is 1. */
+  version: number;
+  /** Whether a later round of evidence has replaced this one. */
+  superseded: number;
+  /** Who sent it. */
+  uploaded_by_type: "customer" | "staff";
+  uploaded_by_id: number | null;
+  sha256: string | null;
+  /** The note the customer gave with the file. */
+  note: string | null;
   created_at: string;
 };
 
@@ -242,10 +426,105 @@ export type ReturnEvent = {
   id: number;
   return_id: string;
   status: string;
+  /** The status the request came from, and the one it went to. */
+  from_status: string | null;
+  to_status: string | null;
   actor_type: "customer" | "staff" | "system";
   actor_id: number | null;
   actor_name: string | null;
   note: string | null;
+  created_at: string;
+};
+
+/** A refund, on its own row. */
+export type ReturnRefund = {
+  id: string;
+  return_id: string;
+  order_id: string;
+  user_id: number | null;
+  amount: number;
+  payment_method: string | null;
+  gateway_transaction_id: string | null;
+  status: RefundStatus;
+  approved_by: number | null;
+  approved_by_name: string | null;
+  approved_at: string;
+  initiated_at: string | null;
+  completed_at: string | null;
+  failed_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A replacement, on its own row. */
+export type ReturnReplacement = {
+  id: string;
+  return_id: string;
+  order_id: string;
+  kind: "replacement" | "accessories";
+  original_serial: string | null;
+  replacement_serial: string | null;
+  product_slug: string | null;
+  variant_id: string | null;
+  quantity: number;
+  shipment_ref: string | null;
+  courier_name: string | null;
+  tracking_number: string | null;
+  dispatch_date: string | null;
+  delivery_status: ReplacementStatus;
+  delivered_at: string | null;
+  created_by: number | null;
+  created_by_name: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** The physical check of a unit that came back. */
+export type ReturnInspection = {
+  id: string;
+  return_id: string;
+  inspected_by: number | null;
+  inspected_by_name: string | null;
+  result: "passed" | "failed";
+  serial_seen: string | null;
+  condition_notes: string | null;
+  notes: string | null;
+  inspected_at: string;
+  created_at: string;
+};
+
+/** One action a member of the back office took. */
+export type AdminAction = {
+  id: number;
+  return_id: string | null;
+  action: string;
+  actor_user_id: number | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  from_status: string | null;
+  to_status: string | null;
+  note: string | null;
+  metadata: string | null;
+  created_at: string;
+};
+
+/** A message the shop sent, or meant to send. */
+export type Notification = {
+  id: number;
+  audience: "customer" | "admin";
+  user_id: number | null;
+  email: string | null;
+  return_id: string | null;
+  channel: "in_app" | "email";
+  kind: string;
+  title: string;
+  body: string;
+  status: "unread" | "read" | "sent" | "not_configured" | "failed";
+  dedupe_key: string | null;
+  read_at: string | null;
+  sent_at: string | null;
   created_at: string;
 };
 
@@ -298,12 +577,24 @@ export type ReturnRequest = {
   accessories_courier: string | null;
   accessories_tracking: string | null;
   accessories_dispatched_at: string | null;
+  /** The day the parcel arrived, as the claim records it. */
+  delivery_date: string | null;
+  /** Who the claim was made by, as it was when it was made. */
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  /** Why any evidence could not be sent. */
+  evidence_excused: string | null;
+  /** When the case was closed out. */
+  resolved_at: string | null;
   created_at: string;
   updated_at: string;
   items: ReturnItem[];
   images: ReturnImage[];
   events: ReturnEvent[];
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
+  /** The refunds, replacements and inspections on this request. */
+  refunds: ReturnRefund[];
+  replacements: ReturnReplacement[];
+  inspections: ReturnInspection[];
+  customer_name_from_order?: string;
 };

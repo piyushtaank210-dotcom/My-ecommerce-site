@@ -6,6 +6,8 @@ import { can } from "./roles";
 import {
   approveReturnRequest,
   rejectReturnRequest,
+  startReview,
+  startInspection,
   schedulePickup,
   recordQcInspection,
   initiateRefund,
@@ -19,11 +21,18 @@ import {
   setReplacementDelivery,
   addInternalNote,
 } from "./returns";
+import {
+  recordAdminAction,
+  recordInspection,
+  notifyCustomerAbout,
+  updateRefundRecord,
+} from "./returns-records";
 import { InventoryError } from "./inventory";
 import {
   REPLACEMENT_DELIVERY_STATUSES,
   type ReplacementDeliveryStatus,
 } from "./return-status";
+import type { NotificationKind } from "./notifications";
 
 export type AdminReturnState = {
   ok: boolean;
@@ -38,7 +47,42 @@ const revalidateAll = (returnId: string) => {
   revalidatePath("/account/returns");
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
+  revalidatePath("/admin/refunds");
+  revalidatePath("/admin/replacements");
 };
+
+/**
+ * Writes down what a member of the back office did, and tells the
+ * customer.
+ *
+ * Every decision is written twice: once in the request's own history,
+ * where it belongs, and once in the audit log, which answers "who did
+ * what, and when". The customer is told when the change is one they
+ * would want to know about.
+ */
+async function note(input: {
+  returnId: string;
+  action: string;
+  staff: { id: number; name: string; role: string };
+  note?: string | null;
+  customer?: { kind: NotificationKind; title: string; body: string } | null;
+}): Promise<void> {
+  await recordAdminAction({
+    returnId: input.returnId,
+    action: input.action,
+    actor: {
+      type: "staff",
+      id: input.staff.id,
+      name: input.staff.name,
+      role: input.staff.role,
+    },
+    note: input.note ?? null,
+  });
+
+  if (input.customer) {
+    await notifyCustomerAbout(input.returnId, input.customer);
+  }
+}
 
 /**
  * Approve Return Request
@@ -63,12 +107,44 @@ export async function approveReturnAction(
     adminNotes || undefined
   ));
 
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "approve",
+      staff,
+      note: adminNotes || null,
+    });
+  }
+  return result;
+}
+
+/**
+ * Pick the request up and begin to look at it.
+ */
+export async function startReviewAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+
+  const result = (await startReview(returnId, { id: staff.id, name: staff.name }));
+
   if (result.ok) revalidateAll(returnId);
   return result;
 }
 
 /**
  * Reject Return Request
+ *
+ * A rejection always carries a reason, and the customer is told what it
+ * is.
  */
 export async function rejectReturnAction(
   _prev: AdminReturnState,
@@ -126,12 +202,49 @@ export async function schedulePickupAction(
     notes: notes || undefined,
   }));
 
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "schedule_pickup",
+      staff,
+      note: notes || null,
+      customer: {
+        kind: "pickup_scheduled",
+        title: `Pickup arranged for request ${returnId}`,
+        body: `We have arranged for ${courier} to collect your parcel. The tracking number is ${tracking}, and the pickup is scheduled for ${date}.`,
+      },
+    });
+  }
+  return result;
+}
+
+/**
+ * Put the unit into inspection.
+ */
+export async function startInspectionAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+
+  const result = (await startInspection(returnId, { id: staff.id, name: staff.name }));
+
   if (result.ok) revalidateAll(returnId);
   return result;
 }
 
 /**
  * Record QC Inspection
+ *
+ * The inspection is kept as a record of its own: when it happened, who
+ * did it and what they found.
  */
 export async function recordQcAction(
   _prev: AdminReturnState,
@@ -145,6 +258,7 @@ export async function recordQcAction(
   const returnId = String(formData.get("returnId") ?? "").trim();
   const qcStatus = String(formData.get("qcStatus") ?? "passed") as "passed" | "failed";
   const notes = String(formData.get("notes") ?? "").trim();
+  const serialSeen = String(formData.get("serialSeen") ?? "").trim();
   const rawDecisions = String(formData.get("decisions") ?? "").trim();
 
   if (!returnId) return { ok: false, message: "Return ID missing." };
@@ -167,15 +281,40 @@ export async function recordQcAction(
     itemDecisions,
   }));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    await recordInspection({
+      returnId,
+      result: qcStatus,
+      serialSeen: serialSeen || null,
+      conditionNotes: notes,
+      notes: null,
+      actor: { id: staff.id, name: staff.name, role: staff.role },
+    });
+
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "inspect",
+      staff,
+      note: notes,
+      customer: {
+        kind: "inspection_completed",
+        title: `Inspection finished for request ${returnId}`,
+        body:
+          qcStatus === "passed"
+            ? `We have finished checking the unit you sent back and it has passed our inspection. The next step is on its way.`
+            : `We have finished checking the unit you sent back. We will write to you about what happens next.`,
+      },
+    });
+  }
   return result;
 }
 
 /**
  * Approve a refund.
  *
- * The refund is raised here. It is not recorded as paid until somebody
- * confirms the payment separately.
+ * The refund is raised here as a record of its own. It is not recorded
+ * as paid until somebody confirms the payment separately.
  */
 export async function initiateRefundAction(
   _prev: AdminReturnState,
@@ -188,7 +327,7 @@ export async function initiateRefundAction(
 
   const returnId = String(formData.get("returnId") ?? "").trim();
   const amount = Math.round(Number(formData.get("amount") ?? 0));
-  const method = String(formData.get("method") ?? "Original Source").trim();
+  const method = String(formData.get("method") ?? "Original Payment Source").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
   if (!returnId || amount <= 0) {
@@ -200,6 +339,57 @@ export async function initiateRefundAction(
     method,
     notes: notes || undefined,
   }));
+
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "approve_refund",
+      staff,
+      note: notes || `Refund of ₹${amount} approved by ${method}.`,
+    });
+  }
+  return result;
+}
+
+/**
+ * Put the refund in front of the payment provider.
+ */
+export async function startRefundProcessingAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const returnId = String(formData.get("returnId") ?? "").trim();
+  const gatewayTransactionId = String(formData.get("gatewayTransactionId") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!returnId) return { ok: false, message: "Return ID missing." };
+
+  const { getDb } = await import("./db");
+  const row = (await getDb()
+    .prepare(
+      `SELECT id FROM return_refunds
+        WHERE return_id = ? AND status = 'approved'
+        ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(returnId)) as { id?: string } | undefined;
+
+  if (!row?.id) {
+    return { ok: false, message: "There is no approved refund waiting on this request." };
+  }
+
+  const result = await updateRefundRecord({
+    refundId: row.id,
+    status: "processing",
+    gatewayTransactionId: gatewayTransactionId || null,
+    notes: notes || null,
+    actor: { id: staff.id, name: staff.name, role: staff.role },
+  });
 
   if (result.ok) revalidateAll(returnId);
   return result;
@@ -237,7 +427,15 @@ export async function confirmRefundPaidAction(
     { reference, notes: notes || undefined }
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "complete_refund",
+      staff,
+      note: notes || `Refund confirmed as paid under reference ${reference}.`,
+    });
+  }
   return result;
 }
 
@@ -272,7 +470,7 @@ export async function rejectRefundAction(
 }
 
 /**
- * Mark the request as completed.
+ * Mark the request as resolved.
  */
 export async function markCompletedAction(
   _prev: AdminReturnState,
@@ -294,7 +492,20 @@ export async function markCompletedAction(
     notes || undefined
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "resolve",
+      staff,
+      note: notes || null,
+      customer: {
+        kind: "resolved",
+        title: `Request ${returnId} is resolved`,
+        body: `Your request ${returnId} is now closed. Thank you for your patience.`,
+      },
+    });
+  }
   return result;
 }
 
@@ -324,7 +535,20 @@ export async function requestMoreInfoAction(
     message
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "request_evidence",
+      staff,
+      note: message,
+      customer: {
+        kind: "evidence_required",
+        title: `We need a little more for request ${returnId}`,
+        body: `${message}\n\nYou can add the missing evidence on your request page.`,
+      },
+    });
+  }
   return result;
 }
 
@@ -351,7 +575,20 @@ export async function markReceivedAction(
     notes || undefined
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "mark_received",
+      staff,
+      note: notes || null,
+      customer: {
+        kind: "received",
+        title: `We have your parcel for request ${returnId}`,
+        body: `The unit you sent back has arrived with us. We are checking it now and will write to you with the outcome.`,
+      },
+    });
+  }
   return result;
 }
 
@@ -453,7 +690,15 @@ export async function dispatchMissingAccessoriesAction(
     { courier, tracking, notes: notes || undefined }
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "dispatch_accessories",
+      staff,
+      note: notes || null,
+    });
+  }
   return result;
 }
 
@@ -484,12 +729,22 @@ export async function setReplacementDeliveryAction(
     { status, notes: notes || undefined }
   ));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await note({
+      returnId,
+      action: "replacement_delivery",
+      staff,
+      note: notes || `The replacement is now ${status.replace(/_/g, " ")}.`,
+    });
+  }
   return result;
 }
 
 /**
  * Add Staff Note
+ *
+ * A note is for the back office. It is never shown to the customer.
  */
 export async function addStaffNoteAction(
   _prev: AdminReturnState,
@@ -501,15 +756,22 @@ export async function addStaffNoteAction(
   }
 
   const returnId = String(formData.get("returnId") ?? "").trim();
-  const note = String(formData.get("note") ?? "").trim();
+  const noteText = String(formData.get("note") ?? "").trim();
 
-  if (!returnId || !note) {
+  if (!returnId || !noteText) {
     return { ok: false, message: "Note cannot be empty." };
   }
 
-  const result = (await addInternalNote(returnId, { id: staff.id, name: staff.name }, note));
+  const result = (await addInternalNote(returnId, { id: staff.id, name: staff.name }, noteText));
 
-  if (result.ok) revalidateAll(returnId);
+  if (result.ok) {
+    revalidateAll(returnId);
+    await recordAdminAction({
+      returnId,
+      action: "add_note",
+      actor: { type: "staff", id: staff.id, name: staff.name, role: staff.role },
+      note: noteText,
+    });
+  }
   return result;
 }
-

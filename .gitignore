@@ -45,6 +45,14 @@ public/uploads/*
 !public/uploads/**/*.avif
 public/products/*.svg
 
+# The private evidence store.
+#
+# A customer's photographs and videos are evidence of their claim. They
+# are kept outside the public folder and are fetched through a route
+# that checks who is asking, so they are never served to anybody who
+# has not signed in and been let in. Nothing in here is ever committed.
+private/
+
 # Debug & Execution Logs
 npm-debug.log*
 yarn-debug.log*

@@ -9,7 +9,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
+import { db, closeDb } from "./lib/pg-db.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { launchChrome } from "./lib/browser.mjs";
 import { tokenForRole } from "./lib/session.mjs";
@@ -18,8 +18,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9261;
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-const token = tokenForRole(db, "admin");
+const token = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -66,9 +65,14 @@ try {
     returnsAt === nav.indexOf("Orders") + 1,
     `position ${returnsAt}`
   );
+  check("and the refunds are next to it", nav.indexOf("Refunds") === returnsAt + 1);
   check(
-    "and immediately above Inventory",
-    returnsAt + 1 === nav.indexOf("Inventory")
+    "and the replacements after that",
+    nav.indexOf("Replacements") === returnsAt + 2
+  );
+  check(
+    "and Inventory comes after those",
+    nav.indexOf("Inventory") === returnsAt + 3
   );
 
   console.log("\n— the request list —");
@@ -77,7 +81,7 @@ try {
 
   const page = await cdp.evaluate(`(() => {
     const h1 = document.querySelector('h1');
-    const cards = [...document.querySelectorAll('.rounded-xl.border')].slice(0, 5).map(c => {
+    const cards = [...document.querySelectorAll('.rounded-xl.border')].map(c => {
       const l = c.querySelector('p');
       return l ? l.textContent.trim() : '';
     });
@@ -108,10 +112,17 @@ try {
   check("the page is called Returns & Refunds", page.title === "Returns & Refunds");
   for (const card of [
     "Total requests",
+    "New requests",
     "Pending review",
-    "Approved",
-    "Refunds pending",
-    "Completed",
+    "Evidence required",
+    "Approved replacements",
+    "Replacement dispatched",
+    "Refund requests",
+    "Refund approved",
+    "Refund processing",
+    "Refund processed",
+    "Rejected requests",
+    "Closed requests",
   ]) {
     check(
       `a summary card for ${card}`,
@@ -135,14 +146,18 @@ try {
   }
   for (const tab of [
     "All Requests",
+    "New Requests",
     "Returns",
     "Replacements",
+    "Missing Accessories",
     "Pending Review",
+    "Evidence Required",
     "Approved",
     "Pickup Pending",
     "Product Received",
-    "Refunds",
-    "Completed",
+    "Replacement Dispatched",
+    "Refund Requests",
+    "Resolved",
     "Rejected",
   ]) {
     check(
@@ -224,9 +239,11 @@ try {
   check("the date range is kept in the URL", dated === 2, `${dated} date inputs`);
 
   console.log("\n— a request —");
-  const anyId = db
-    .prepare("SELECT id FROM return_requests ORDER BY created_at DESC LIMIT 1")
-    .get()?.id;
+  const anyId = (
+    await db
+      .prepare("SELECT id FROM return_requests ORDER BY created_at DESC LIMIT 1")
+      .get()
+  )?.id;
 
   // The dev server's render worker drops out now and then, so the request
   // is asked for until it comes back.
@@ -266,8 +283,8 @@ try {
   check("it links back to the list", detail.backLink);
 } finally {
   chrome.kill();
-  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
-  db.close();
+  await db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  await closeDb();
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\n✓ every check passed");

@@ -11,6 +11,9 @@ import {
   CalendarClock,
   Banknote,
   StickyNote,
+  ClipboardCheck,
+  History,
+  FileWarning,
 } from "lucide-react";
 import { requirePermission } from "@/lib/guard";
 import {
@@ -22,10 +25,17 @@ import {
   returnReasonLabel,
   replacementCandidates,
 } from "@/lib/returns";
+import { listAdminActions } from "@/lib/returns-records";
 import { getOrder } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
 import { evidenceSatisfied, policyForReason } from "@/lib/return-policy";
 import { ReturnAdminActions } from "@/components/admin/returns/ReturnAdminActions";
+import { EvidenceViewer } from "@/components/admin/returns/EvidenceViewer";
+import {
+  REFUND_STATUS_LABEL,
+  REFUND_STATUS_TONE,
+  REPLACEMENT_STATUS_LABEL,
+} from "@/lib/return-status";
 
 export const metadata: Metadata = { title: "Manage Return" };
 
@@ -49,6 +59,9 @@ export default async function AdminReturnDetailPage({
   // What could be sent in place of what came back, and what is on the shelf.
   const candidates =
     ret.type === "replacement" ? (await replacementCandidates(ret.id)) : [];
+
+  // What the back office did, in order.
+  const adminActions = await listAdminActions(ret.id);
 
   // The rules this claim is judged against, and what has arrived against
   // them. A claim is never turned away only because a photograph or an
@@ -117,6 +130,24 @@ export default async function AdminReturnDetailPage({
                 <span className="text-gray-700">{returnReasonLabel(ret.reason)}</span>
               </div>
               <div>
+                <span className="font-semibold text-ink">Request type: </span>
+                <span className="text-gray-700">{RETURN_TYPE_LABEL[ret.type]}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-ink">Date of delivery: </span>
+                <span className="text-gray-700">
+                  {ret.delivery_date
+                    ? formatDate(ret.delivery_date)
+                    : order?.delivered_at
+                      ? `${formatDate(order.delivered_at)} (from our records)`
+                      : "Not recorded"}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-ink">Request submitted: </span>
+                <span className="text-gray-700">{formatDate(ret.created_at)}</span>
+              </div>
+              <div>
                 <span className="font-semibold text-ink">What the rules say: </span>
                 <p className="mt-1 text-[13px] text-gray-600">{policy.summary}</p>
               </div>
@@ -174,47 +205,7 @@ export default async function AdminReturnDetailPage({
                   Evidence ({ret.images.length})
                 </h3>
 
-                {ret.images.length > 0 && (
-                  <div className="flex flex-wrap gap-3">
-                    {ret.images.map((img) =>
-                      img.kind === "video" ? (
-                        <a
-                          key={img.id}
-                          href={img.path}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <video
-                            src={img.path}
-                            className="h-full w-full object-cover"
-                            muted
-                            playsInline
-                          />
-                          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            VIDEO
-                          </span>
-                        </a>
-                      ) : (
-                        <a
-                          key={img.id}
-                          href={img.path}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group relative block h-24 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={img.path}
-                            alt="Evidence"
-                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          />
-                        </a>
-                      )
-                    )}
-                  </div>
-                )}
+                <EvidenceViewer returnId={ret.id} images={ret.images} />
 
                 {/* What the rules ask for, and what has arrived. */}
                 <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
@@ -260,6 +251,19 @@ export default async function AdminReturnDetailPage({
                     you have — a claim is never turned away only because a
                     photograph or an unboxing video is missing.
                   </p>
+                )}
+
+                {/* The customer's explanation for anything they could not
+                    send. It is not held against them: it is the reason the
+                    claim can still be looked at. */}
+                {ret.evidence_excused && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12.5px] text-amber-900">
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <FileWarning className="h-3.5 w-3.5" />
+                      Why the customer could not send some evidence
+                    </span>
+                    <p className="mt-1.5 whitespace-pre-line">{ret.evidence_excused}</p>
+                  </div>
                 )}
               </div>
             )}
@@ -340,7 +344,196 @@ export default async function AdminReturnDetailPage({
                 </li>
               ))}
             </ol>
+
+            {/* Every action a member of staff took, in one list. This is
+                the record that answers "who did what, and when". */}
+            {adminActions.length > 0 && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <h3 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                  <History className="h-3.5 w-3.5 text-brand" />
+                  Staff actions ({adminActions.length})
+                </h3>
+                <ul className="space-y-2">
+                  {adminActions.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2"
+                    >
+                      <span className="text-[12.5px] font-medium text-ink">
+                        {a.action.replace(/_/g, " ")}
+                        {a.note && (
+                          <span className="font-normal text-gray-600"> — {a.note}</span>
+                        )}
+                      </span>
+                      <span className="text-[11.5px] text-gray-500">
+                        {a.actor_name ?? "the shop"}
+                        {a.actor_role ? ` (${a.actor_role})` : ""} ·{" "}
+                        {formatDate(a.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
+
+          {/* The refunds, replacements and inspections — the records
+              behind what the customer is told. */}
+          {(ret.refunds.length > 0 ||
+            ret.replacements.length > 0 ||
+            ret.inspections.length > 0) && (
+            <section className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
+                Refunds, Replacements &amp; Inspections
+              </h2>
+
+              {ret.refunds.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                    <Banknote className="h-3.5 w-3.5 text-brand" />
+                    Refunds ({ret.refunds.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {ret.refunds.map((r) => (
+                      <li
+                        key={r.id}
+                        className="rounded-lg border border-gray-200 px-3 py-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="tnum text-[12.5px] font-semibold text-ink">
+                            {r.id} · {money(r.amount)}
+                          </span>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                              REFUND_STATUS_TONE[r.status] ??
+                              "bg-gray-100 text-gray-600 border-gray-200"
+                            }`}
+                          >
+                            {REFUND_STATUS_LABEL[r.status] ?? r.status}
+                          </span>
+                        </div>
+                        <dl className="mt-1.5 grid gap-x-4 gap-y-1 text-[11.5px] text-gray-600 sm:grid-cols-2">
+                          <div>
+                            Method: {r.payment_method ?? "—"}
+                          </div>
+                          <div>
+                            Transaction:{" "}
+                            <span className="tnum">
+                              {r.gateway_transaction_id ?? "not yet sent"}
+                            </span>
+                          </div>
+                          <div>Approved by: {r.approved_by_name ?? "—"}</div>
+                          <div>Approved on: {formatDate(r.approved_at)}</div>
+                          <div>
+                            Initiated:{" "}
+                            {r.initiated_at ? formatDate(r.initiated_at) : "—"}
+                          </div>
+                          <div>
+                            Completed:{" "}
+                            {r.completed_at ? formatDate(r.completed_at) : "—"}
+                          </div>
+                        </dl>
+                        {r.failed_reason && (
+                          <p className="mt-1.5 text-[11.5px] text-red-600">
+                            Failed: {r.failed_reason}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {ret.replacements.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                    <ClipboardCheck className="h-3.5 w-3.5 text-brand" />
+                    Replacements ({ret.replacements.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {ret.replacements.map((r) => (
+                      <li
+                        key={r.id}
+                        className="rounded-lg border border-gray-200 px-3 py-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="tnum text-[12.5px] font-semibold text-ink">
+                            {r.id} ·{" "}
+                            {r.kind === "accessories"
+                              ? "Missing accessories"
+                              : "Replacement"}
+                          </span>
+                          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                            {REPLACEMENT_STATUS_LABEL[r.delivery_status] ??
+                              r.delivery_status}
+                          </span>
+                        </div>
+                        <dl className="mt-1.5 grid gap-x-4 gap-y-1 text-[11.5px] text-gray-600 sm:grid-cols-2">
+                          <div>Courier: {r.courier_name ?? "—"}</div>
+                          <div className="tnum">
+                            Tracking: {r.tracking_number ?? "—"}
+                          </div>
+                          <div className="tnum">
+                            Unit that came in: {r.original_serial ?? "—"}
+                          </div>
+                          <div className="tnum">
+                            Unit going out: {r.replacement_serial ?? "—"}
+                          </div>
+                          <div>
+                            Dispatched:{" "}
+                            {r.dispatch_date ? formatDate(r.dispatch_date) : "—"}
+                          </div>
+                          <div>
+                            Delivered:{" "}
+                            {r.delivered_at ? formatDate(r.delivered_at) : "—"}
+                          </div>
+                        </dl>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {ret.inspections.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                    <StickyNote className="h-3.5 w-3.5 text-brand" />
+                    Inspections ({ret.inspections.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {ret.inspections.map((ins) => (
+                      <li
+                        key={ins.id}
+                        className="rounded-lg border border-gray-200 px-3 py-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[12.5px] font-semibold text-ink">
+                            {ins.result === "passed"
+                              ? "Passed the inspection"
+                              : "Failed the inspection"}
+                          </span>
+                          <span className="text-[11.5px] text-gray-500">
+                            {ins.inspected_by_name ?? "the shop"} ·{" "}
+                            {formatDate(ins.inspected_at)}
+                          </span>
+                        </div>
+                        {ins.serial_seen && (
+                          <p className="tnum mt-1 text-[11.5px] text-gray-600">
+                            Serial on the unit: {ins.serial_seen}
+                          </p>
+                        )}
+                        {ins.condition_notes && (
+                          <p className="mt-1 text-[12px] text-gray-700">
+                            {ins.condition_notes}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+          )}
         </div>
 
         {/* Right Column: Customer Info & Interactive Actions */}

@@ -15,7 +15,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
+import { db, closeDb } from "./lib/pg-db.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { launchChrome, setInput } from "./lib/browser.mjs";
 import { tokenForRole } from "./lib/session.mjs";
@@ -24,8 +24,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9262;
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-const token = tokenForRole(db, "admin");
+const token = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -35,38 +34,43 @@ function check(label, ok, extra = "") {
 
 // A request to work on: the order the other test requests use, with one
 // item on it.
-const order = db
+const order = await db
   .prepare("SELECT * FROM orders WHERE status = 'delivered' LIMIT 1")
-  .get() ?? db.prepare("SELECT * FROM orders LIMIT 1").get();
-const orderItem = db
+  .get() ?? await db.prepare("SELECT * FROM orders LIMIT 1").get();
+const orderItem = await db
   .prepare("SELECT * FROM order_items WHERE order_id = ? LIMIT 1")
   .get(order.id);
 
 /** Makes a fresh request, in the state a customer would have left it in. */
-function makeRequest(tag) {
+/** Makes a fresh request, in the state a customer would have left it in. */
+async function makeRequest(tag) {
   const id = `RET-${tag}${Date.now().toString().slice(-6)}`;
-  db.prepare(
-    `INSERT INTO return_requests
-      (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
-     VALUES (?, ?, ?, 'return', 'requested', 'defective', 'Device turns off on its own', ?, 'none')`
-  ).run(id, order.id, order.user_id, orderItem.price);
-  db.prepare(
-    `INSERT INTO return_items
-      (return_id, order_item_id, product_slug, variant_id, name, price, quantity, reason_detail)
-     VALUES (?, ?, ?, ?, ?, ?, 1, 'Auto shutdown')`
-  ).run(
-    id,
-    orderItem.id,
-    orderItem.product_slug,
-    orderItem.variant_id ?? null,
-    orderItem.name,
-    orderItem.price
-  );
+  await db
+    .prepare(
+      `INSERT INTO return_requests
+        (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
+       VALUES (?, ?, ?, 'return', 'requested', 'defective', 'Device turns off on its own', ?, 'none')`
+    )
+    .run(id, order.id, order.user_id, orderItem.price);
+  await db
+    .prepare(
+      `INSERT INTO return_items
+        (return_id, order_item_id, product_slug, variant_id, name, price, quantity, reason_detail)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 'Auto shutdown')`
+    )
+    .run(
+      id,
+      orderItem.id,
+      orderItem.product_slug,
+      orderItem.variant_id ?? null,
+      orderItem.name,
+      orderItem.price
+    );
   return id;
 }
 
-const requestId = makeRequest("ACT");
-const refusedId = makeRequest("REF");
+const requestId = await makeRequest("ACT");
+const refusedId = await makeRequest("REF");
 
 const { chrome, cdp } = await launchChrome({
   port: PORT,
@@ -77,7 +81,7 @@ const { chrome, cdp } = await launchChrome({
 /** The status shown on the request page. */
 const STATUS = `(() => {
   const badge = [...document.querySelectorAll('span')].find(s =>
-    /^(Requested|More Info Requested|Approved|Pickup Scheduled|Item Received|QC Passed|QC Failed|Refund Pending|Replacement Pending|Completed|Rejected|Cancelled)$/.test(s.textContent.trim())
+    /^(Request Submitted|Under Review|Evidence Required|Evidence Received|Approved|Rejected|Cancelled|Return Pickup Scheduled|Product Received by ConsoleSeller|Product Inspection in Progress|Inspection Completed|Inspection Failed|Replacement Approved|Replacement Dispatched|Refund Approved|Refund Processing|Refund Completed|Request Resolved)$/.test(s.textContent.trim())
   );
   return badge ? badge.textContent.trim() : null;
 })()`;
@@ -110,8 +114,8 @@ try {
     })()`);
 
     let status = null;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await sleep(500);
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await sleep(750);
       status = await cdp.evaluate(STATUS);
       if (status === expected) break;
     }
@@ -124,7 +128,7 @@ try {
     await sleep(1800);
     check(
       "the request opens in the back office",
-      (await cdp.evaluate(STATUS)) === "Requested"
+      (await cdp.evaluate(STATUS)) === "Request Submitted"
     );
 
     const buttons = await cdp.evaluate(
@@ -157,7 +161,7 @@ try {
     await act(
       { message: "Please send a photo of the serial number on the box." },
       "Ask the customer",
-      "More Info Requested",
+      "Evidence Required",
       "asking the customer for more information"
     );
 
@@ -176,21 +180,21 @@ try {
         notes: "Collect from the front desk.",
       },
       "Save & Dispatch Pickup",
-      "Pickup Scheduled",
+      "Return Pickup Scheduled",
       "scheduling the pickup"
     );
 
     await act(
       { notes: "One box, controller inside." },
       "Mark as Received",
-      "Item Received",
+      "Product Received by ConsoleSeller",
       "marking the product received"
     );
 
     await act(
       { notes: "Box opened, controller present, no physical damage." },
       "Submit QC & Update Stock",
-      "QC Passed",
+      "Inspection Completed",
       "marking the inspection completed"
     );
   }
@@ -201,14 +205,14 @@ try {
   await act(
     { amount: String(orderItem.price), method: "Bank IMPS/NEFT", notes: "To the original card." },
     "Approve Refund",
-    "Refund Pending",
+    "Refund Approved",
     "approving the refund"
   );
   await cdp.shot("admin-return-refund-pending");
 
   // The refund has been approved, not paid. Nothing so far may say it has
   // gone back to the customer.
-  const raised = db
+  const raised = await db
     .prepare("SELECT status, refund_status, refund_reference FROM return_requests WHERE id = ?")
     .get(requestId);
   check(
@@ -229,23 +233,23 @@ try {
     return true;
   })()`);
   await sleep(2500);
-  const stillOpen = db
+  const stillOpen = await db
     .prepare("SELECT status FROM return_requests WHERE id = ?")
     .get(requestId);
   check(
     "the request stays open while the refund is unpaid",
-    stillOpen?.status === "refund_pending",
+    stillOpen?.status === "refund_approved",
     `status is ${stillOpen?.status}`
   );
 
   await act(
     { reference: "UTR123456789", notes: "Sent by IMFS at 4pm." },
     "Confirm the Refund Has Been Paid",
-    "Refund Pending",
+    "Refund Completed",
     "confirming the refund has been paid"
   );
 
-  const paid = db
+  const paid = await db
     .prepare(
       "SELECT refund_status, refund_reference, refund_processed_at FROM return_requests WHERE id = ?"
     )
@@ -260,12 +264,12 @@ try {
   await act(
     { notes: "Money returned to the customer." },
     "Mark as Completed",
-    "Completed",
+    "Request Resolved",
     "closing the request"
   );
 
   // Everything that was done is in the history, with who did it and when.
-  const history = db
+  const history = await db
     .prepare(
       "SELECT status, actor_type, note, created_at FROM return_events WHERE return_id = ? ORDER BY id"
     )
@@ -277,8 +281,9 @@ try {
     "pickup_scheduled",
     "received",
     "qc_passed",
-    "refund_pending",
-    "completed",
+    "refund_approved",
+    "refund_completed",
+    "resolved",
   ]) {
     check(
       `the history records ${step}`,
@@ -302,7 +307,7 @@ try {
   await act(
     { amount: String(orderItem.price), method: "Bank IMPS/NEFT" },
     "Approve Refund",
-    "Refund Pending",
+    "Refund Approved",
     "approving the refund"
   );
 
@@ -322,7 +327,7 @@ try {
     "refusing the refund"
   );
 
-  const refused = db
+  const refused = await db
     .prepare(
       "SELECT status, refund_status, rejection_reason FROM return_requests WHERE id = ?"
     )
@@ -346,12 +351,12 @@ try {
   chrome.kill();
   // The requests were made for the test, so they go when the test is over.
   for (const id of [requestId, refusedId]) {
-    db.prepare("DELETE FROM return_events WHERE return_id = ?").run(id);
-    db.prepare("DELETE FROM return_items WHERE return_id = ?").run(id);
-    db.prepare("DELETE FROM return_requests WHERE id = ?").run(id);
+    await db.prepare("DELETE FROM return_events WHERE return_id = ?").run(id);
+    await db.prepare("DELETE FROM return_items WHERE return_id = ?").run(id);
+    await db.prepare("DELETE FROM return_requests WHERE id = ?").run(id);
   }
-  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
-  db.close();
+  await db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  await closeDb();
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\n✓ every check passed");

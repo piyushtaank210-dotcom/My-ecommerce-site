@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingBag, RotateCcw, MapPin, UserRound } from "lucide-react";
+import {
+  LayoutDashboard,
+  ShoppingBag,
+  RotateCcw,
+  MapPin,
+  UserRound,
+  Bell,
+} from "lucide-react";
 
 export type AccountNavItem = {
   href: string;
   label: string;
-  icon: "overview" | "orders" | "returns" | "addresses" | "profile";
+  icon: "overview" | "orders" | "returns" | "addresses" | "profile" | "notifications";
 };
 
 const ICONS = {
@@ -16,12 +23,14 @@ const ICONS = {
   returns: RotateCcw,
   addresses: MapPin,
   profile: UserRound,
+  notifications: Bell,
 };
 
 export const ACCOUNT_NAV: AccountNavItem[] = [
   { href: "/account", label: "Overview", icon: "overview" },
   { href: "/account/orders", label: "Orders", icon: "orders" },
   { href: "/account/returns", label: "Returns", icon: "returns" },
+  { href: "/account/notifications", label: "Notifications", icon: "notifications" },
   { href: "/account/addresses", label: "Addresses", icon: "addresses" },
   { href: "/account/profile", label: "Profile", icon: "profile" },
 ];
