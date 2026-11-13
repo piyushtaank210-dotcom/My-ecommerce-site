@@ -82,7 +82,7 @@ await pool.query(
       customer_email, customer_phone, delivery_date, serial_number, refund_amount, refund_status)
    VALUES ($1, $2, $3, 'replacement', 'requested', 'product_damaged',
            'The console arrived with a cracked corner and will not power on.',
-           'Customer Test', $4, '+91 90000 00000', $5, 'SN-CUST-1', $6, 'none')`,
+           'Customer Test', $4, '+91 90000 00000', $5, 'SN-CUST-1', $6, 'not_initiated')`,
   [
     returnId,
     orderId,

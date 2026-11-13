@@ -8,6 +8,7 @@ import { isStaff } from "@/lib/roles";
 import { getProduct } from "@/lib/queries";
 import { getOrderReturnEligibility } from "@/lib/returns";
 import { ReturnRequestForm } from "@/components/returns/ReturnRequestForm";
+import { getReturnPolicy } from "@/lib/settings";
 
 export async function generateMetadata({
   params,
@@ -42,6 +43,7 @@ export default async function OrderReturnRequestPage({
   }
 
   const eligibility = (await getOrderReturnEligibility(order));
+  const policy = await getReturnPolicy();
 
   // Augment items with product images and item-level eligibility
   const enrichedItems = await Promise.all(

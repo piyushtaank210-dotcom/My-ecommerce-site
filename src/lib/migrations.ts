@@ -243,6 +243,28 @@ export async function applyMigrations(db: Db): Promise<void> {
   add("return_requests", "evidence_excused", "evidence_excused TEXT");
   add("return_requests", "resolved_at", "resolved_at TEXT");
 
+  // The refund keeps what it is made of, so that the money can be
+  // worked out again from the order as it was bought rather than as it
+  // stands today.
+  add("return_refunds", "calculated_amount", "calculated_amount INTEGER");
+  add("return_refunds", "unit_price", "unit_price INTEGER");
+  add("return_refunds", "quantity", "quantity INTEGER");
+  add("return_refunds", "original_payment_method", "original_payment_method TEXT");
+  add("return_refunds", "gateway_payment_id", "gateway_payment_id TEXT");
+  add("return_refunds", "gateway_refund_id", "gateway_refund_id TEXT");
+  add("return_refunds", "settled_by", "settled_by TEXT");
+  add("return_refunds", "confirmed_by", "confirmed_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
+  add("return_refunds", "confirmed_by_name", "confirmed_by_name TEXT");
+
+  // The payment provider the order was paid through, and its reference
+  // for the payment. A refund goes back the same way the money came in.
+  add("orders", "payment_gateway", "payment_gateway TEXT");
+  add("orders", "payment_reference", "payment_reference TEXT");
+
+  // What became of the notification the shop was sent about an enquiry.
+  add("contact_messages", "email_status", "email_status TEXT");
+  add("contact_messages", "email_sent_at", "email_sent_at TEXT");
+
   // A status change says where the request came from and where it went.
   add("return_events", "from_status", "from_status TEXT");
   add("return_events", "to_status", "to_status TEXT");
@@ -266,6 +288,11 @@ export async function applyMigrations(db: Db): Promise<void> {
   }
 
   await applyReturnWindowPolicy(db);
+  // The refund summary on a request now uses the same words the back
+  // office uses, so there is one vocabulary across the shop. The rows
+  // that were written before it are moved over.
+  await alignRefundStatuses(db);
+
   await backfillAdminActions(db);
   await sweepReturnUploads(db);
   await backfillOrderVariantIds(db);
@@ -274,6 +301,41 @@ export async function applyMigrations(db: Db): Promise<void> {
   await backfillBrands(db);
   await backfillSubcategories(db);
   await seedProductImages(db);
+}
+
+/**
+ * Moves the refund summary on a request onto the words the back office
+ * uses.
+ *
+ * The shop used to say "none", "processed" and "approved". It now says
+ * "not initiated", "completed" and "pending", the same words the refund
+ * records carry. The rows that were written before it are moved over,
+ * and it runs on every database open, so it only ever does this once.
+ */
+async function alignRefundStatuses(db: Db): Promise<void> {
+  if (!(await tableExists(db, "return_requests"))) return;
+  if (!(await hasColumn(db, "return_requests", "refund_status"))) return;
+
+  // "none" — nothing has been refunded yet.
+  await db
+    .prepare(
+      "UPDATE return_requests SET refund_status = 'not_initiated' WHERE refund_status = 'none'"
+    )
+    .run();
+
+  // "processed" — the money went back.
+  await db
+    .prepare(
+      "UPDATE return_requests SET refund_status = 'completed' WHERE refund_status = 'processed'"
+    )
+    .run();
+
+  // "approved" — the refund was decided on but not raised.
+  await db
+    .prepare(
+      "UPDATE return_requests SET refund_status = 'pending' WHERE refund_status = 'approved'"
+    )
+    .run();
 }
 
 /**

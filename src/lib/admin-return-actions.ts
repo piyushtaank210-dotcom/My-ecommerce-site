@@ -26,7 +26,13 @@ import {
   recordInspection,
   notifyCustomerAbout,
   updateRefundRecord,
+  calculateRefund,
+  getRefund,
 } from "./returns-records";
+import {
+  refundThroughGateway,
+  gatewayStatusIsComplete,
+} from "./refund-gateway";
 import { InventoryError } from "./inventory";
 import {
   REPLACEMENT_DELIVERY_STATUSES,
@@ -326,12 +332,24 @@ export async function initiateRefundAction(
   }
 
   const returnId = String(formData.get("returnId") ?? "").trim();
+  // The form asks for rupees, which is what the shop keeps its money in
+  // and what an administrator reads and types.
   const amount = Math.round(Number(formData.get("amount") ?? 0));
   const method = String(formData.get("method") ?? "Original Payment Source").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
-  if (!returnId || amount <= 0) {
+  if (!returnId || !Number.isFinite(amount) || amount <= 0) {
     return { ok: false, message: "Please enter the amount to refund." };
+  }
+
+  // The amount is worked out from what the customer paid, and the
+  // administrator may not refund more than that.
+  const calculation = await calculateRefund(returnId);
+  if (calculation.amount && amount > calculation.amount) {
+    return {
+      ok: false,
+      message: `The refund cannot be more than ₹${calculation.amount} — what the customer paid for the items being returned.`,
+    };
   }
 
   const result = (await initiateRefund(returnId, { id: staff.id, name: staff.name }, {
@@ -350,6 +368,144 @@ export async function initiateRefundAction(
     });
   }
   return result;
+}
+
+/**
+ * Send the refund to the payment gateway.
+ *
+ * The gateway's own refund API is called, and what it says is what is
+ * recorded. The refund is only completed when the gateway says it has
+ * been processed — never because the shop believes it has.
+ */
+export async function sendRefundToGatewayAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const refundId = String(formData.get("refundId") ?? "").trim();
+  if (!refundId) return { ok: false, message: "Refund ID missing." };
+
+  const refund = await getRefund(refundId);
+  if (!refund) return { ok: false, message: "Refund not found." };
+
+  if (refund.status === "completed") {
+    return { ok: false, message: "This refund has already been paid." };
+  }
+
+  const result = await refundThroughGateway({
+    paymentId: refund.gateway_payment_id ?? "",
+    amount: refund.amount,
+    receipt: refund.id,
+    notes: {
+      return_request: refund.return_id,
+      order: refund.order_id,
+    },
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      message:
+        result.reason ??
+        "The gateway did not accept the refund. It can be paid by hand instead.",
+    };
+  }
+
+  // What the gateway said is what is written down.
+  const complete = gatewayStatusIsComplete(result.status);
+
+  const updated = await updateRefundRecord({
+    refundId,
+    status: complete ? "completed" : "processing",
+    gatewayTransactionId: result.refundId ?? null,
+    gatewayRefundId: result.refundId ?? null,
+    settledBy: "gateway",
+    notes: complete
+      ? `The gateway processed the refund (${result.refundId}).`
+      : `The gateway accepted the refund (${result.refundId}) and is processing it.`,
+    actor: { id: staff.id, name: staff.name, role: staff.role },
+  });
+
+  if (!updated.ok) return updated;
+
+  await recordAdminAction({
+    returnId: refund.return_id,
+    action: complete ? "complete_refund" : "process_refund",
+    actor: { type: "staff", id: staff.id, name: staff.name, role: staff.role },
+    note: `The gateway answered with ${result.refundId} (${result.status}).`,
+    metadata: { refundId, gatewayRefundId: result.refundId, status: result.status },
+  });
+
+  revalidateAll(refund.return_id);
+  revalidatePath("/admin/refunds");
+
+  return {
+    ok: true,
+    message: complete
+      ? `The gateway processed the refund (${result.refundId}).`
+      : `The gateway accepted the refund (${result.refundId}) and is processing it.`,
+  };
+}
+
+/**
+ * Record a refund the shop paid by hand.
+ *
+ * The administrator writes down the reference of the payment they
+ * actually made, and that is what is recorded. A refund is never
+ * completed without it.
+ */
+export async function recordManualRefundAction(
+  _prev: AdminReturnState,
+  formData: FormData
+): Promise<AdminReturnState> {
+  const staff = await requirePermission("returns.manage");
+  if (!can(staff.role, "returns.manage")) {
+    return { ok: false, message: "You do not have permission to manage returns." };
+  }
+
+  const refundId = String(formData.get("refundId") ?? "").trim();
+  const reference = String(formData.get("reference") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!refundId) return { ok: false, message: "Refund ID missing." };
+  if (!reference) {
+    return {
+      ok: false,
+      message:
+        "Enter the reference of the payment you made (the UTR, or the bank's reference).",
+    };
+  }
+
+  const refund = await getRefund(refundId);
+  if (!refund) return { ok: false, message: "Refund not found." };
+
+  const result = await updateRefundRecord({
+    refundId,
+    status: "completed",
+    gatewayTransactionId: reference,
+    settledBy: "manual",
+    notes: notes || `Paid by hand under reference ${reference}.`,
+    actor: { id: staff.id, name: staff.name, role: staff.role },
+  });
+
+  if (!result.ok) return result;
+
+  await recordAdminAction({
+    returnId: refund.return_id,
+    action: "complete_refund",
+    actor: { type: "staff", id: staff.id, name: staff.name, role: staff.role },
+    note: `Paid by hand under reference ${reference}.`,
+    metadata: { refundId, reference, settledBy: "manual" },
+  });
+
+  revalidateAll(refund.return_id);
+  revalidatePath("/admin/refunds");
+
+  return { ok: true, message: "The refund is recorded as paid." };
 }
 
 /**

@@ -147,15 +147,9 @@ export function isOpenStatus(status: string): boolean {
   return (OPEN_RETURN_STATUSES as string[]).includes(status);
 }
 
-/**
- * The lifecycle of a refund.
- *
- * A refund is approved, then it is processed, and only then is it
- * complete. Nothing shows a customer a completed refund before the
- * money has actually moved.
- */
 export const REFUND_STATUSES = [
-  "approved",
+  "not_initiated",
+  "pending",
   "processing",
   "completed",
   "failed",
@@ -164,23 +158,34 @@ export const REFUND_STATUSES = [
 export type RefundStatus = (typeof REFUND_STATUSES)[number];
 
 export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
-  approved: "Refund Approved",
-  processing: "Refund Processing",
-  completed: "Refund Completed",
-  failed: "Refund Failed",
+  not_initiated: "Not Initiated",
+  pending: "Pending",
+  processing: "Processing",
+  completed: "Completed",
+  failed: "Failed",
 };
 
 export const REFUND_STATUS_TONE: Record<RefundStatus, string> = {
-  approved: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  not_initiated: "bg-gray-100 text-gray-600 border-gray-200",
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
   processing: "bg-indigo-50 text-indigo-700 border-indigo-200",
   completed: "bg-green-50 text-green-700 border-green-200",
   failed: "bg-red-50 text-red-700 border-red-200",
 };
 
 /**
- * The lifecycle of a replacement, from the point it is decided on to the
- * point it arrives.
+ * The refund statuses the shop works through, in order.
+ *
+ * It is what the refund panel draws as a journey, so that it is always
+ * clear which stage a refund has reached and which one is next.
  */
+export const REFUND_FLOW: RefundStatus[] = [
+  "not_initiated",
+  "pending",
+  "processing",
+  "completed",
+];
+
 export const REPLACEMENT_STATUSES = [
   "approved",
   "dispatched",
@@ -545,7 +550,12 @@ export type ReturnRequest = {
   qc_status: "pending" | "passed" | "failed";
   qc_notes: string | null;
   refund_amount: number;
-  refund_status: "none" | "pending" | "processed" | "failed";
+  /**
+   * The refund the request carries, in the same words the back
+   * office uses: not initiated, pending, processing, completed or
+   * failed.
+   */
+  refund_status: "not_initiated" | "pending" | "processing" | "completed" | "failed";
   refund_method: string | null;
   refund_reference: string | null;
   refund_processed_at: string | null;

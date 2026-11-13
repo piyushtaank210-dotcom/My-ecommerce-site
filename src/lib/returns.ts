@@ -183,6 +183,11 @@ export async function getOrderReturnEligibility(order: Order): Promise<{
   const isDelivered = order.status === "delivered";
   const deadlineCalc = (await calculateReturnDeadline(order.delivered_at ?? null));
 
+  // The shop can turn returns and replacements off. Nothing changes for
+  // the claims that are already open — only the new ones are refused.
+  const { getReturnsEnabled } = await import("./settings");
+  const returnsEnabled = await getReturnsEnabled();
+
   const isWindowActive = isDelivered && !deadlineCalc.isExpired;
   const isWindowClosed = isDelivered && deadlineCalc.isExpired;
 
@@ -199,7 +204,9 @@ export async function getOrderReturnEligibility(order: Order): Promise<{
     let canReturn = false;
     let canReplace = false;
 
-    if (!isDelivered) {
+    if (!returnsEnabled) {
+      reason = "Returns are closed";
+    } else if (!isDelivered) {
       reason = "Available once delivered";
     } else if (isWindowClosed) {
       reason = "Return Window Closed";
@@ -234,7 +241,10 @@ export async function getOrderReturnEligibility(order: Order): Promise<{
   }
 
   let orderReason: string | undefined;
-  if (!isDelivered) {
+  if (!returnsEnabled) {
+    orderReason =
+      "The shop is not taking returns at the moment. Please contact us and we will look at your case.";
+  } else if (!isDelivered) {
     orderReason = "Returns can only be requested once your order has been delivered.";
   } else if (isWindowClosed) {
     orderReason = `The ${deadlineCalc.windowDays}-day return window closed on ${deadlineCalc.formattedDeadline}.`;
@@ -243,7 +253,7 @@ export async function getOrderReturnEligibility(order: Order): Promise<{
   }
 
   return {
-    eligible: isWindowActive && anyItemCanReturn,
+    eligible: returnsEnabled && isWindowActive && anyItemCanReturn,
     isDelivered,
     isWindowActive,
     isWindowClosed,
@@ -443,7 +453,9 @@ async function mapReturnRow(r: Row): Promise<ReturnRequest> {
     qc_status: (str(r.qc_status) as ReturnRequest["qc_status"]) || "pending",
     qc_notes: strOrNull(r.qc_notes),
     refund_amount: num(r.refund_amount),
-    refund_status: (str(r.refund_status) as ReturnRequest["refund_status"]) || "none",
+    refund_status:
+      (str(r.refund_status) as ReturnRequest["refund_status"]) ||
+      "not_initiated",
     refund_method: strOrNull(r.refund_method),
     refund_reference: strOrNull(r.refund_reference),
     refund_processed_at: strOrNull(r.refund_processed_at),
@@ -570,7 +582,7 @@ function returnFilter(q: ReturnQuery): { clause: string; params: SQLInputValue[]
   }
 
   if (q.refunds) {
-    where.push("r.refund_status IN ('pending', 'processed')");
+    where.push("r.refund_status IN ('pending', 'processing', 'completed')");
   }
 
   if (q.from) {
@@ -639,67 +651,6 @@ export async function countReturnRequests(q: ReturnQuery = {}): Promise<number> 
     .get(...params)) as { total?: number } | undefined;
 
   return num(row?.total);
-}
-
-export async function getReturnSummaryStats(): Promise<{
-  total: number;
-  requested: number;
-  approved: number;
-  pickupScheduled: number;
-  received: number;
-  completed: number;
-  totalRefunded: number;
-  /** Refunds that have been initiated but not yet settled. */
-  refundsPending: number;
-  /** Requests where the customer has been asked for more information. */
-  infoRequested: number;
-  /** Every request that has not been closed yet. */
-  open: number;
-}> {
-  const db = getDb();
-  const rows = (await db
-    .prepare("SELECT status, refund_amount, refund_status FROM return_requests")
-    .all()) as Row[];
-
-  let requested = 0;
-  let approved = 0;
-  let pickupScheduled = 0;
-  let received = 0;
-  let completed = 0;
-  let totalRefunded = 0;
-  let refundsPending = 0;
-  let infoRequested = 0;
-
-  for (const r of rows) {
-    const s = str(r.status);
-    if (s === "requested") requested++;
-    else if (s === "info_requested") infoRequested++;
-    else if (s === "approved") approved++;
-    else if (s === "pickup_scheduled") pickupScheduled++;
-    else if (s === "received" || s === "qc_passed" || s === "qc_failed") received++;
-    else if (s === "completed") completed++;
-
-    if (str(r.refund_status) === "processed") {
-      totalRefunded += num(r.refund_amount);
-    } else if (str(r.refund_status) === "pending") {
-      refundsPending++;
-    }
-  }
-
-  const open = rows.length - completed - rows.filter((r) => str(r.status) === "rejected").length - rows.filter((r) => str(r.status) === "cancelled").length;
-
-  return {
-    total: rows.length,
-    requested,
-    approved,
-    pickupScheduled,
-    received,
-    completed,
-    totalRefunded,
-    refundsPending,
-    infoRequested,
-    open,
-  };
 }
 
 export type CreateReturnInput = {

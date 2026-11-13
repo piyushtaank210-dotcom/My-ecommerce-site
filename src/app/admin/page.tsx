@@ -13,7 +13,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { getAdminStats } from "@/lib/admin";
-import { getReturnSummaryStats } from "@/lib/returns";
+import { getReturnsOverview } from "@/lib/returns-records";
 import { requirePermission } from "@/lib/guard";
 import { money, formatDate } from "@/lib/format";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
@@ -28,7 +28,7 @@ export const metadata = { title: "Overview" };
 export default async function AdminDashboardPage() {
   await requirePermission("dashboard.view");
   const stats = (await getAdminStats());
-  const returnStats = (await getReturnSummaryStats());
+  const returnStats = (await getReturnsOverview());
 
   return (
     <div className="mx-auto max-w-[1600px]">
@@ -54,11 +54,18 @@ export default async function AdminDashboardPage() {
           icon={ShoppingBag}
         />
         <StatCard
-          label="Returns & claims"
-          value={String(returnStats.requested + returnStats.approved + returnStats.received)}
-          hint={`${returnStats.requested} pending review`}
+          label="Pending returns"
+          value={String(
+            returnStats.newRequests + returnStats.pendingReview
+          )}
+          hint={`${returnStats.newRequests} new, ${returnStats.pendingReview} under review`}
           icon={RotateCcw}
-          tone={returnStats.requested > 0 ? "warn" : "good"}
+          tone={
+            returnStats.newRequests + returnStats.pendingReview > 0
+              ? "warn"
+              : "good"
+          }
+          href="/admin/returns?status=requested"
         />
         <StatCard
           label="Customers"

@@ -42,6 +42,8 @@ type Props = {
   daysRemaining?: number;
   initialItemId?: number;
   initialType?: "return" | "replacement";
+  /** The shop's own words about its return policy. */
+  policyDescription?: string;
 };
 
 const initial: ReturnActionState = { ok: false };
@@ -107,6 +109,7 @@ export function ReturnRequestForm({
   daysRemaining,
   initialItemId,
   initialType = "return",
+  policyDescription,
 }: Props) {
   const [state, formAction, isPending] = useActionState(
     createReturnRequestAction,
@@ -470,6 +473,19 @@ export function ReturnRequestForm({
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             <p>{state.message}</p>
           </div>
+        </div>
+      )}
+
+      {/* The shop's own words about its return policy. It is what the
+          shop has written, and it is shown before anything is filled in. */}
+      {policyDescription && (
+        <div className="rounded-xl border border-brand/20 bg-brand-tint/10 p-4">
+          <p className="text-[12px] font-bold uppercase tracking-wider text-brand">
+            Our return policy
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-gray-700">
+            {policyDescription}
+          </p>
         </div>
       )}
 

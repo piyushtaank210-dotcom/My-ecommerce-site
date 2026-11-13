@@ -49,7 +49,7 @@ async function makeRequest(tag) {
     .prepare(
       `INSERT INTO return_requests
         (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
-       VALUES (?, ?, ?, 'return', 'requested', 'defective', 'Device turns off on its own', ?, 'none')`
+       VALUES (?, ?, ?, 'return', 'requested', 'defective', 'Device turns off on its own', ?, 'not_initiated')`
     )
     .run(id, order.id, order.user_id, orderItem.price);
   await db
@@ -203,7 +203,11 @@ try {
   await toInspection(requestId);
 
   await act(
-    { amount: String(orderItem.price), method: "Bank IMPS/NEFT", notes: "To the original card." },
+    {
+      amount: String(orderItem.price),
+      method: "Bank IMPS/NEFT",
+      notes: "To the original card.",
+    },
     "Approve Refund",
     "Refund Approved",
     "approving the refund"
@@ -244,7 +248,7 @@ try {
 
   await act(
     { reference: "UTR123456789", notes: "Sent by IMFS at 4pm." },
-    "Confirm the Refund Has Been Paid",
+    "Record the refund as paid",
     "Refund Completed",
     "confirming the refund has been paid"
   );
@@ -254,7 +258,7 @@ try {
       "SELECT refund_status, refund_reference, refund_processed_at FROM return_requests WHERE id = ?"
     )
     .get(requestId);
-  check("the refund is now paid", paid?.refund_status === "processed");
+  check("the refund is now paid", paid?.refund_status === "completed");
   check(
     "the payment reference is on the record",
     paid?.refund_reference === "UTR123456789"

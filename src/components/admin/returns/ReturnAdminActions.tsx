@@ -10,6 +10,8 @@ import {
   recordQcAction,
   initiateRefundAction,
   startRefundProcessingAction,
+  sendRefundToGatewayAction,
+  recordManualRefundAction,
   confirmRefundPaidAction,
   rejectRefundAction,
   markCompletedAction,
@@ -50,9 +52,36 @@ const initial: AdminReturnState = { ok: false };
 export function ReturnAdminActions({
   ret,
   candidates = [],
+  refund,
+  gatewayAvailable = false,
 }: {
   ret: ReturnRequest;
   candidates?: ReplacementCandidate[];
+  /**
+   * Whether the shop has been given the keys it needs to reach the
+   * payment gateway. Until it has, a refund is paid by hand.
+   */
+  gatewayAvailable?: boolean;
+  /**
+   * What the request is worth, worked out from the order as it was
+   * bought. It is shown to the administrator so that the amount is
+   * never guessed.
+   */
+  refund?: {
+    /** The refund record's own id. */
+    id: string;
+    amount: number;
+    quantity: number;
+    originalPaymentMethod: string | null;
+    gatewayPaymentId: string | null;
+    gateway: string | null;
+    lines: {
+      name: string;
+      unitPrice: number;
+      quantity: number;
+      lineAmount: number;
+    }[];
+  };
 }) {
   // 1. Approve / Reject States
   const [approveState, approveAction, isApprovePending] = useActionState(
@@ -103,6 +132,17 @@ export function ReturnAdminActions({
   // 4b. Putting the refund in front of the payment provider.
   const [processingState, processingAction, isProcessingPending] = useActionState(
     startRefundProcessingAction,
+    initial
+  );
+
+  // 4b. Sending the refund to the gateway, and recording one the shop
+  // pays by hand.
+  const [gatewayState, gatewayAction, isGatewayPending] = useActionState(
+    sendRefundToGatewayAction,
+    initial
+  );
+  const [manualState, manualAction, isManualPending] = useActionState(
+    recordManualRefundAction,
     initial
   );
 
@@ -626,231 +666,356 @@ export function ReturnAdminActions({
       )}
 
       {/* 5. REFUND PANEL (When QC is passed and type === 'return') */}
-      {ret.type === "return" && (ret.status === "qc_passed" || (ret.status === "received" && ret.qc_status === "passed")) && (
-        <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
-            <CreditCard className="h-4 w-4 text-green-700" />
-            Approve the Refund
-          </h2>
-          <p className="mt-1 text-[12.5px] text-gray-600">
-            Approving the refund says the money will go back. It does not say it
-            has. The payment is confirmed separately, once it has actually gone
-            out.
-          </p>
-
-          {refundState.message && (
-            <p className={`mt-3 text-[13px] ${refundState.ok ? "text-green-700" : "text-red-600"}`}>
-              {refundState.message}
+      {ret.type === "return" &&
+        (ret.status === "qc_passed" ||
+          (ret.status === "received" && ret.qc_status === "passed")) && (
+          <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+              <CreditCard className="h-4 w-4 text-green-700" />
+              Approve the Refund
+            </h2>
+            <p className="mt-1 text-[12.5px] text-gray-600">
+              Approving the refund says the money will go back. It does not
+              say it has. The payment is confirmed separately, once it has
+              actually gone out.
             </p>
-          )}
 
-          <form action={refundAction} className="mt-4 space-y-4">
-            <input type="hidden" name="returnId" value={ret.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
+            {/* What the refund is worked out from. The amount is never
+                guessed — it is the price the customer paid, times the
+                quantity that is coming back. */}
+            {refund && refund.amount > 0 && (
+              <div className="mt-4 rounded-lg border border-green-200 bg-white p-3">
+                <p className="text-[12px] font-bold text-ink">
+                  Worked out from the order
+                </p>
+                <ul className="mt-1.5 space-y-1">
+                  {refund.lines.map((line, n) => (
+                    <li
+                      key={n}
+                      className="flex items-baseline justify-between gap-3 text-[12.5px]"
+                    >
+                      <span className="text-gray-700">
+                        {line.name}
+                        <span className="text-gray-400">
+                          {" · "}
+                          {line.quantity} × {money(line.unitPrice)}
+                        </span>
+                      </span>
+                      <span className="tnum shrink-0 font-medium text-ink">
+                        {money(line.lineAmount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 border-t border-gray-100 pt-2 text-[12px] text-gray-600">
+                  The price each unit was bought at — never the price on the
+                  shelf today.
+                  {refund.originalPaymentMethod && (
+                    <>
+                      {" "}
+                      Paid by {refund.originalPaymentMethod}.
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {refundState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  refundState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {refundState.message}
+              </p>
+            )}
+
+            <form action={refundAction} className="mt-4 space-y-4">
+              <input type="hidden" name="returnId" value={ret.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600">
+                    Refund Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    name="amount"
+                    required
+                    min={1}
+                    max={refund ? refund.amount : undefined}
+                    defaultValue={
+                      refund
+                        ? refund.amount
+                        : ret.refund_amount ||
+                          ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0)
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] font-bold text-ink"
+                  />
+                  {refund && (
+                    <p className="mt-1 text-[11.5px] text-gray-500">
+                      At most {money(refund.amount)} — what the customer
+                      paid for {refund.quantity} unit
+                      {refund.quantity === 1 ? "" : "s"}.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600">
+                    Payment Method *
+                  </label>
+                  <select
+                    name="method"
+                    defaultValue={
+                      refund?.originalPaymentMethod ?? "Original Payment Source"
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-ink"
+                  >
+                    <option value="Original Payment Source">
+                      Original Payment Source (UPI/Card)
+                    </option>
+                    <option value="Bank IMPS/NEFT">Bank IMPS / NEFT Transfer</option>
+                    <option value="UPI Direct">UPI Direct Transfer</option>
+                    <option value="Store Credit">Store Credit / Wallet</option>
+                    <option value="Cash Refund">Cash Refund</option>
+                  </select>
+                  {refund?.originalPaymentMethod && (
+                    <p className="mt-1 text-[11.5px] text-gray-500">
+                      The customer paid by {refund.originalPaymentMethod}.
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[12px] font-semibold text-gray-600">
-                  Refund Amount (₹) *
+                  Notes
                 </label>
                 <input
-                  type="number"
-                  name="amount"
-                  required
-                  min={1}
-                  defaultValue={ret.refund_amount || ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] font-bold text-ink"
+                  type="text"
+                  name="notes"
+                  placeholder="Optional — anything the customer should know about the refund..."
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
                 />
               </div>
 
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600">
-                  Payment Method *
-                </label>
-                <select
-                  name="method"
-                  defaultValue="Original Payment Source"
-                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-ink"
-                >
-                  <option value="Original Payment Source">Original Payment Source (UPI/Card)</option>
-                  <option value="Bank IMPS/NEFT">Bank IMPS / NEFT Transfer</option>
-                  <option value="UPI Direct">UPI Direct Transfer</option>
-                  <option value="Store Credit">Store Credit / Wallet</option>
-                  <option value="Cash Refund">Cash Refund</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-semibold text-gray-600">
-                Notes
-              </label>
-              <input
-                type="text"
-                name="notes"
-                placeholder="Optional — anything the customer should know about the refund..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isRefundPending}
-              className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
-            >
-              {isRefundPending ? "Approving..." : "Approve Refund"}
-            </button>
-          </form>
-        </section>
-      )}
+              <button
+                type="submit"
+                disabled={isRefundPending}
+                className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
+              >
+                {isRefundPending ? "Approving..." : "Approve Refund"}
+              </button>
+            </form>
+          </section>
+        )}
 
       {/* 5b. THE REFUND IS RAISED — IS THE MONEY OUT? */}
       {ret.type === "return" &&
         (ret.status === "refund_approved" || ret.status === "refund_pending") && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
-            <Banknote className="h-4 w-4 text-amber-700" />
-            The Refund
-          </h2>
-          <p className="mt-1 text-[12.5px] text-gray-600">
-            {ret.refund_status === "processed"
-              ? `Paid — ${money(ret.refund_amount)} went back on ${
-                  ret.refund_processed_at ? formatDate(ret.refund_processed_at) : ""
-                }${ret.refund_reference ? ` under reference ${ret.refund_reference}` : ""}.`
-              : `Raised — ${money(ret.refund_amount)} is owed to the customer by ${
-                  ret.refund_method ?? "the original payment source"
-                }. It is not paid until it is confirmed below.`}
-          </p>
-
-          {paidState.message && (
-            <p className={`mt-3 text-[13px] ${paidState.ok ? "text-green-700" : "text-red-600"}`}>
-              {paidState.message}
+          <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+              <Banknote className="h-4 w-4 text-amber-700" />
+              The Refund
+            </h2>
+            <p className="mt-1 text-[12.5px] text-gray-600">
+              {ret.refund_status === "completed"
+                ? `Paid — ${money(ret.refund_amount)} went back on ${
+                    ret.refund_processed_at
+                      ? formatDate(ret.refund_processed_at)
+                      : ""
+                  }${ret.refund_reference ? ` under reference ${ret.refund_reference}` : ""}.`
+                : `Raised — ${money(ret.refund_amount)} is owed to the customer by ${
+                    ret.refund_method ?? "the original payment source"
+                  }. It is not paid until it is confirmed below.`}
             </p>
-          )}
-          {refuseState.message && (
-            <p className={`mt-3 text-[13px] ${refuseState.ok ? "text-green-700" : "text-red-600"}`}>
-              {refuseState.message}
-            </p>
-          )}
 
-          {processingState.message && (
-            <p className={`mt-3 text-[13px] ${processingState.ok ? "text-green-700" : "text-red-600"}`}>
-              {processingState.message}
-            </p>
-          )}
+            {paidState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  paidState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {paidState.message}
+              </p>
+            )}
+            {refuseState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  refuseState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {refuseState.message}
+              </p>
+            )}
 
-          {ret.refund_status !== "processed" && (
-            <>
-              {/* The refund is approved but the money has not been sent
-                  yet. This is the step that hands it to the payment
-                  provider. */}
-              {ret.refund_status === "pending" && !ret.refund_processed_at && (
-                <form action={processingAction} className="mt-4 space-y-3 border-b border-amber-200 pb-5">
-                  <input type="hidden" name="returnId" value={ret.id} />
+            {processingState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  processingState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {processingState.message}
+              </p>
+            )}
+
+            {gatewayState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  gatewayState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {gatewayState.message}
+              </p>
+            )}
+
+            {manualState.message && (
+              <p
+                className={`mt-3 text-[13px] ${
+                  manualState.ok ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                {manualState.message}
+              </p>
+            )}
+
+            {ret.refund_status !== "completed" && (
+              <>
+                {/* The refund the shop pays by hand. The reference of the
+                    payment that was actually made is written down, and
+                    that is what completes it. This is the path the shop
+                    uses until the payment gateway is live. */}
+                <form action={manualAction} className="mt-4 space-y-3">
+                  <input type="hidden" name="refundId" value={refund?.id ?? ""} />
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-600">
-                      Send it to the payment provider
+                      Pay it by hand and record the reference
                     </label>
                     <p className="mt-1 text-[12px] text-gray-500">
-                      Record this once the refund has been handed to the
-                      payment provider. The customer is told it is on its
-                      way.
+                      For a refund paid outside the gateway — a bank
+                      transfer, a UPI refund, cash. Write down the
+                      reference of the payment you made. The refund is not
+                      completed without it.
                     </p>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-600">
-                      Gateway reference (if you have one)
+                      Transaction reference *
                     </label>
                     <input
                       type="text"
-                      name="gatewayTransactionId"
-                      placeholder="e.g. pay_9fJ2Kd"
+                      name="reference"
+                      required
+                      placeholder="e.g. UTR492819482910"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-600">
+                      Notes
+                    </label>
+                    <input
+                      type="text"
+                      name="notes"
+                      placeholder="Optional — when it went out, and how..."
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
                     />
                   </div>
                   <button
                     type="submit"
-                    disabled={isProcessingPending}
-                    className="btn btn-outline btn-sm"
+                    disabled={isManualPending}
+                    className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
                   >
-                    {isProcessingPending ? (
+                    {isManualPending ? (
                       <>
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Sending...
+                        Recording...
                       </>
                     ) : (
-                      "Mark the refund as sent"
+                      "Record the refund as paid"
                     )}
                   </button>
                 </form>
-              )}
 
-              <form action={paidAction} className="mt-4 space-y-4">
-                <input type="hidden" name="returnId" value={ret.id} />
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600">
-                    Reference the refund was paid under *
-                  </label>
-                  <input
-                    type="text"
-                    name="reference"
-                    required
-                    placeholder="e.g. UTR492819482910"
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600">
-                    Notes
-                  </label>
-                  <input
-                    type="text"
-                    name="notes"
-                    placeholder="Optional — when it went out, and how..."
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isPaidPending}
-                  className="btn btn-primary btn-sm bg-green-700 hover:bg-green-800 border-green-700"
-                >
-                  {isPaidPending ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Confirming...
-                    </>
-                  ) : (
-                    "Confirm the Refund Has Been Paid"
+                {/* The gateway path is offered only where it can
+                    actually work: the shop has to have been given the
+                    credentials, and the order has to carry the gateway's
+                    own reference for the payment. Until the gateway is
+                    live, the refund is paid by hand above. */}
+                {ret.refund_status === "pending" &&
+                  !ret.refund_processed_at &&
+                  gatewayAvailable &&
+                  refund?.gatewayPaymentId && (
+                    <form
+                      action={gatewayAction}
+                      className="mt-5 space-y-3 border-t border-amber-200 pt-5"
+                    >
+                      <input
+                        type="hidden"
+                        name="refundId"
+                        value={refund?.id ?? ""}
+                      />
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-600">
+                          Or send it to the payment gateway
+                        </label>
+                        <p className="mt-1 text-[12px] text-gray-500">
+                          The gateway will refund the payment{" "}
+                          <span className="tnum">{refund.gatewayPaymentId}</span>.
+                          The refund is only marked as paid when the gateway
+                          says it has been processed.
+                        </p>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isGatewayPending}
+                        className="btn btn-outline btn-sm"
+                      >
+                        {isGatewayPending ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Asking the gateway...
+                          </>
+                        ) : (
+                          "Send the refund to the gateway"
+                        )}
+                      </button>
+                    </form>
                   )}
-                </button>
-              </form>
 
-              <form action={refuseAction} className="mt-5 border-t border-amber-200 pt-5">
-                <input type="hidden" name="returnId" value={ret.id} />
-                <label className="block text-[12px] font-semibold text-gray-600">
-                  Refuse the refund instead
-                </label>
-                <p className="mt-1 text-[12px] text-gray-500">
-                  The customer is told why. A reason is required.
-                </p>
-                <textarea
-                  name="reason"
-                  required
-                  rows={2}
-                  placeholder="e.g. The unit was not returned in the condition claimed..."
-                  className="mt-2 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
-                />
-                <button
-                  type="submit"
-                  disabled={isRefusePending}
-                  className="btn btn-outline btn-sm mt-3 text-red-700 hover:border-red-300 hover:bg-red-50"
+                {/* The refund can also be refused, with the reason on
+                    the record. The customer is told what it was. */}
+                <form
+                  action={refuseAction}
+                  className="mt-5 border-t border-amber-200 pt-5"
                 >
-                  {isRefusePending ? "Refusing..." : "Refuse the Refund"}
-                </button>
-              </form>
-            </>
-          )}
-        </section>
-      )}
+                  <input type="hidden" name="returnId" value={ret.id} />
+                  <label className="block text-[12px] font-semibold text-gray-600">
+                    Refuse the refund instead
+                  </label>
+                  <p className="mt-1 text-[12px] text-gray-500">
+                    The customer is told why. A reason is required.
+                  </p>
+                  <textarea
+                    name="reason"
+                    required
+                    rows={2}
+                    placeholder="e.g. The unit was not returned in the condition claimed..."
+                    className="mt-2 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isRefusePending}
+                    className="btn btn-outline btn-sm mt-3 text-red-700 hover:border-red-300 hover:bg-red-50"
+                  >
+                    {isRefusePending ? "Refusing..." : "Refuse the Refund"}
+                  </button>
+                </form>
+              </>
+            )}
+          </section>
+
+        )}
 
       {/* 6. REPLACEMENT DISPATCH PANEL (When QC is passed and type === 'replacement') */}
       {ret.type === "replacement" &&
@@ -1244,7 +1409,7 @@ export function ReturnAdminActions({
           <p className="mt-1 text-[12.5px] text-gray-500">
             {ret.type === "replacement"
               ? "The replacement has gone out. Close the request once the customer has it."
-              : ret.refund_status === "processed"
+              : ret.refund_status === "completed"
                 ? "The refund has been confirmed as paid. The request can be closed."
                 : "The refund has been raised but not confirmed as paid. Confirm the refund first — the request stays open until the money has actually gone back."}
           </p>

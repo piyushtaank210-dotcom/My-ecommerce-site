@@ -59,13 +59,15 @@ export async function POST(request: Request) {
   }
 
   if (!body.returnId) return fail("The request is required.", 400);
+  // The amount is in rupees, the same as the form and the same as the
+  // shop keeps its money.
   const amount = Math.round(Number(body.amount ?? 0));
   if (!amount || amount <= 0) return fail("Enter the amount to refund.", 400);
 
   const result = await createRefundRecord({
     returnId: body.returnId,
     amount,
-    paymentMethod: body.paymentMethod ?? "Original Payment Source",
+    paymentMethod: body.paymentMethod ?? null,
     notes: body.notes ?? null,
     approvedBy: { id: guard.user.id, name: guard.user.name, role: guard.user.role },
   });

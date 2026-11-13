@@ -75,6 +75,17 @@ export async function submitReturnRequest(
 
   if (!orderId) return { ok: false, message: "Order ID is missing." };
 
+  // The shop can turn returns and replacements off. The claim is
+  // refused here, on the server, whatever the form says.
+  const { getReturnsEnabled } = await import("./settings");
+  if (!(await getReturnsEnabled())) {
+    return {
+      ok: false,
+      message:
+        "The shop is not taking returns at the moment. Please contact us and we will look at your case.",
+    };
+  }
+
   const order = (await getOrder(orderId));
   if (!order) return { ok: false, message: "Order not found." };
 

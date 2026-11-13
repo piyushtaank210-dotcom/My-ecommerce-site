@@ -40,14 +40,32 @@ CREATE TABLE IF NOT EXISTS return_refunds (
   return_id             TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
   order_id              TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  -- How much is going back, in paise.
+  -- How much is going back, in rupees.
   amount                INTEGER NOT NULL,
+  -- How much was calculated to be refundable, from the price the item
+  -- was bought at and the quantity that is being returned. The amount
+  -- above can never be more than this, and the difference is a
+  -- deliberate deduction the shop has written down.
+  calculated_amount     INTEGER,
+  -- The price each unit was bought at, and how many units are going
+  -- back. They are kept so that the refund can be worked out again
+  -- later without having to trust the order as it stands now.
+  unit_price            INTEGER,
+  quantity              INTEGER,
   -- The method the money went back by.
   payment_method        TEXT,
+  -- The method the customer actually paid with, as it is written on
+  -- the order. A refund goes back the way the money came in.
+  original_payment_method TEXT,
   -- The gateway's own reference for the payment.
   gateway_transaction_id TEXT,
-  -- 'approved', 'processing', 'completed' or 'failed'.
-  status                TEXT NOT NULL DEFAULT 'approved',
+  -- The payment the refund is against — the gateway's reference for
+  -- the original charge.
+  gateway_payment_id    TEXT,
+  -- The refund the gateway issued, when it was issued by the gateway.
+  gateway_refund_id     TEXT,
+  -- 'not_initiated', 'pending', 'processing', 'completed' or 'failed'.
+  status                TEXT NOT NULL DEFAULT 'pending',
   -- Who decided to refund it.
   approved_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
   approved_by_name      TEXT,
@@ -58,9 +76,59 @@ CREATE TABLE IF NOT EXISTS return_refunds (
   completed_at          TEXT,
   -- Why a refund failed, when it did.
   failed_reason         TEXT,
+  -- Whether the shop sent it to the gateway or paid it by hand. A
+  -- refund the shop paid by hand carries the reference of the payment
+  -- that was actually made.
+  settled_by            TEXT,
+  -- The administrator who confirmed the refund was paid, when it was
+  -- confirmed by hand.
+  confirmed_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  confirmed_by_name     TEXT,
   notes                 TEXT,
   created_at            TEXT NOT NULL ${now},
   updated_at            TEXT NOT NULL ${now}
+);
+
+-- The lines a refund is made of.
+--
+-- A refund is worked out from what the customer actually paid for each
+-- thing that is coming back — the price on the order line, not the
+-- price on the shelf today — and how many of them are coming back.
+CREATE TABLE IF NOT EXISTS return_refund_lines (
+  id                ${identity},
+  refund_id         TEXT NOT NULL REFERENCES return_refunds(id) ON DELETE CASCADE,
+  order_item_id     INTEGER REFERENCES order_items(id) ON DELETE SET NULL,
+  product_slug      TEXT,
+  name              TEXT NOT NULL,
+  -- The price the customer paid for one of these.
+  unit_price        INTEGER NOT NULL,
+  quantity          INTEGER NOT NULL,
+  -- What this line comes to.
+  line_amount       INTEGER NOT NULL,
+  created_at        TEXT NOT NULL ${now}
+);
+
+-- The history of a refund.
+--
+-- Every step a refund takes is written down: who raised it, who sent it
+-- to the gateway, what the gateway said, and who confirmed the money
+-- had gone back. It is the record that answers "what happened to this
+-- refund".
+CREATE TABLE IF NOT EXISTS return_refund_events (
+  id                ${identity},
+  refund_id         TEXT NOT NULL REFERENCES return_refunds(id) ON DELETE CASCADE,
+  status            TEXT NOT NULL,
+  from_status       TEXT,
+  to_status         TEXT,
+  actor_type        TEXT NOT NULL,
+  actor_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  actor_name        TEXT,
+  -- The reference the gateway or the bank gave.
+  reference         TEXT,
+  -- The amount this step was about.
+  amount            INTEGER,
+  note              TEXT,
+  created_at        TEXT NOT NULL ${now}
 );
 
 -- A replacement, on its own row.
@@ -197,6 +265,19 @@ CREATE TABLE IF NOT EXISTS return_uploads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_return_uploads_user ON return_uploads(user_id);
+
+-- One live refund per request.
+--
+-- A request may have a refund that failed and then another one, but it
+-- may never have two refunds running at once — that is how the same
+-- money goes back twice. The index is partial, so only the refunds
+-- that are still in flight are counted.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_one_live
+  ON return_refunds(return_id)
+  WHERE status IN ('pending', 'processing', 'completed');
+
+CREATE INDEX IF NOT EXISTS idx_refund_lines_refund  ON return_refund_lines(refund_id);
+CREATE INDEX IF NOT EXISTS idx_refund_events_refund ON return_refund_events(refund_id);
 `;
 }
 
@@ -407,6 +488,11 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping       INTEGER NOT NULL,
   total          INTEGER NOT NULL,
   payment_method TEXT NOT NULL,
+  -- The payment provider the order was paid through, and the provider's
+  -- own reference for the payment. A refund goes back through the same
+  -- provider, and it needs the provider's reference to do it.
+  payment_gateway TEXT,
+  payment_reference TEXT,
   status         TEXT NOT NULL DEFAULT 'confirmed',
   delivered_at   TEXT
 );
@@ -466,6 +552,12 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   status     TEXT NOT NULL DEFAULT 'new',
   handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   handled_at TEXT,
+  -- What became of the notification the shop was sent about this
+  -- enquiry: 'sent', 'not_configured' or 'failed'. The enquiry is
+  -- saved whatever happens to the email, so a message that could not
+  -- be sent can be sent again later.
+  email_status TEXT,
+  email_sent_at TEXT,
   created_at TEXT NOT NULL ${now}
 );
 

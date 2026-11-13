@@ -47,7 +47,7 @@ await db
   .prepare(
     `INSERT INTO return_requests
       (id, order_id, user_id, type, status, reason, customer_notes, refund_amount, refund_status)
-     VALUES (?, ?, ?, 'replacement', 'requested', 'defective', 'Console will not turn on', 0, 'none')`
+     VALUES (?, ?, ?, 'replacement', 'requested', 'defective', 'Console will not turn on', 0, 'not_initiated')`
   )
   .run(requestId, order.id, order.user_id);
 await db

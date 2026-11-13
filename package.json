@@ -54,8 +54,11 @@
     "check:returns:api": "node scripts/check-returns-api.mjs",
     "check:returns:pages": "node scripts/check-returns-pages.mjs",
     "check:returns:customer": "node scripts/check-returns-customer.mjs",
-    "check:returns:all": "npm run check:returns && npm run check:returns:api && npm run check:returns:pages && npm run check:returns:customer",
-    "db:schema": "node scripts/apply-schema.mjs"
+    "check:returns:all": "npm run check:returns && npm run check:refunds && npm run check:return-policy && npm run check:return-settings && npm run check:enquiries && npm run check:returns:api && npm run check:returns:pages && npm run check:returns:customer",
+    "db:schema": "node scripts/apply-schema.mjs",
+    "check:refunds": "node scripts/check-refunds.mjs",
+    "check:return-settings": "node scripts/check-return-settings.mjs",
+    "check:enquiries": "node scripts/check-enquiries.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

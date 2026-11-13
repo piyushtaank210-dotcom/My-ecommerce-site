@@ -21,6 +21,9 @@ export async function PATCH(
   let body: {
     status?: string;
     gatewayTransactionId?: string;
+    gatewayRefundId?: string;
+    /** Whether the shop sent it to the gateway or paid it by hand. */
+    settledBy?: "gateway" | "manual";
     notes?: string;
     failedReason?: string;
   };
@@ -39,6 +42,8 @@ export async function PATCH(
     refundId: id,
     status,
     gatewayTransactionId: body.gatewayTransactionId ?? null,
+    gatewayRefundId: body.gatewayRefundId ?? null,
+    settledBy: body.settledBy ?? null,
     notes: body.notes ?? null,
     failedReason: body.failedReason ?? null,
     actor: { id: guard.user.id, name: guard.user.name, role: guard.user.role },

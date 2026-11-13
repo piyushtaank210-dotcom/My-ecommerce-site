@@ -32,6 +32,8 @@ function section(title) {
 
 const stamp = Date.now().toString(36).toUpperCase();
 const pool = shopDb();
+/** The refunds this run raised, so they can be removed afterwards. */
+const refundsRaised = [];
 const adminToken = await tokenForRole("admin");
 
 // A claim with evidence on it, for the pages to show.
@@ -77,7 +79,7 @@ await pool.query(
       customer_email, customer_phone, delivery_date, serial_number, refund_amount, refund_status)
    VALUES ($1, $2, $3, 'replacement', 'requested', 'product_damaged',
            'The console arrived with a cracked corner and will not power on.',
-           $4, $5, '+91 90000 00000', $6, 'SN-TEST-1', $7, 'none')`,
+           $4, $5, '+91 90000 00000', $6, 'SN-TEST-1', $7, 'not_initiated')`,
   [
     returnId,
     orderId,
@@ -151,25 +153,107 @@ try {
     "[...document.querySelectorAll('aside nav a')].map(a => a.textContent.trim()).join(' | ')"
   );
   check("the sidebar has the returns entry", navText.includes("Returns & Refunds"));
-  check("the sidebar has the refunds entry", navText.includes("Refunds"));
-  check("the sidebar has the replacements entry", navText.includes("Replacements"));
+  // The entries are read apart, so that "Returns & Refunds" is not
+  // mistaken for a separate "Refunds" entry.
+  const navEntries = navText.split("|").map((e) => e.trim());
+  check(
+    "and there is only one entry for it",
+    !navEntries.includes("Refunds") && !navEntries.includes("Replacements"),
+    navEntries.join(" · ")
+  );
 
   section("2. The refund and replacement records");
-  await cdp.goto(`${BASE}/admin/refunds`);
+  await cdp.goto(`${BASE}/admin/returns?view=refunds`);
   await sleep(2500);
   const refundsText = await cdp.evaluate(
     "document.body.innerText.slice(0, 3000)"
   );
-  check("the refunds page has a heading", /Refund records/.test(refundsText));
+  check("the refunds view has a heading", /Refunds/.test(refundsText));
   check("it counts the refunds", /Refunds on file/.test(refundsText));
 
-  await cdp.goto(`${BASE}/admin/replacements`);
+  await cdp.goto(`${BASE}/admin/returns?view=replacements`);
   await sleep(2500);
   const replacementsText = await cdp.evaluate(
     "document.body.innerText.slice(0, 3000)"
   );
-  check("the replacements page has a heading", /Replacement records/.test(replacementsText));
+  check("the replacements view has a heading", /Replacement/.test(replacementsText));
   check("it counts the shipments", /Shipments on file/.test(replacementsText));
+
+  // The old URLs still work — they go to the section.
+  await cdp.goto(`${BASE}/admin/refunds`);
+  await sleep(2000);
+  check(
+    "the old refunds URL goes to the section",
+    (await cdp.evaluate("location.pathname")).includes("/admin/returns")
+  );
+  await cdp.goto(`${BASE}/admin/replacements`);
+  await sleep(2000);
+  check(
+    "and so does the old replacements URL",
+    (await cdp.evaluate("location.pathname")).includes("/admin/returns")
+  );
+
+  section("2b. The Refunds section");
+  // The refunds section has columns only when there is a refund to show,
+  // so one is raised first.
+  const refundId = `RFD${randomBytes(4).toString("hex").toUpperCase()}`;
+  refundsRaised.push(refundId);
+  await pool.query(
+    `INSERT INTO return_refunds
+       (id, return_id, order_id, user_id, amount, calculated_amount, unit_price,
+        quantity, payment_method, original_payment_method, gateway_payment_id,
+        status, approved_by_name, approved_at, initiated_at, completed_at,
+        settled_by, gateway_transaction_id, confirmed_by_name)
+     VALUES ($1, $2, $3, NULL, $4, $4, $5, 1, 'UPI', 'UPI', 'pay_PAGES1',
+             'completed', 'Pages Test', $6, $6, $6, 'manual', 'UTR-PAGES-1', 'Pages Test')`,
+    [refundId, returnId, orderId, product.price, product.price, new Date().toISOString()]
+  );
+  await pool.query(
+    `INSERT INTO return_refund_lines
+       (refund_id, order_item_id, product_slug, name, unit_price, quantity, line_amount)
+     VALUES ($1, (SELECT id FROM order_items WHERE order_id = $2), $3, $4, $5, 1, $5)`,
+    [refundId, orderId, product.slug, product.name, product.price]
+  );
+  await pool.query(
+    `INSERT INTO return_refund_events
+       (refund_id, status, from_status, to_status, actor_type, actor_name, reference, amount, note)
+     VALUES ($1, 'pending', NULL, 'pending', 'staff', 'Pages Test', NULL, $2, 'Refund raised.'),
+            ($1, 'completed', 'pending', 'completed', 'staff', 'Pages Test', 'UTR-PAGES-1', $2, 'Paid by hand.')`,
+    [refundId, product.price]
+  );
+  await cdp.goto(`${BASE}/admin/refunds`);
+  await sleep(2500);
+  const refundPage = await cdp.evaluate(
+    "document.body.innerText.slice(0, 4000)"
+  );
+  check("the refunds page has a heading", /Refunds/.test(refundPage));
+  check("it counts the refunds", /Refunds on file/.test(refundPage));
+  check("it counts the pending ones", /Pending/.test(refundPage));
+  check("it counts the processing ones", /Processing/.test(refundPage));
+  check("it counts the completed ones", /Completed/.test(refundPage));
+  check("it counts the failed ones", /Failed/.test(refundPage));
+  check("it counts the ones not yet initiated", /Not Initiated/.test(refundPage));
+
+  const refundColumns = await cdp.evaluate(
+    "[...document.querySelectorAll('thead th')].map(t => t.textContent.trim()).join(' | ')"
+  );
+  console.log(`   refund columns: ${refundColumns}`);
+  for (const head of [
+    "Refund ID",
+    "Order ID",
+    "Request ID",
+    "Customer",
+    "Original Payment Method",
+    "Refund Amount",
+    "Refund Status",
+    "Refund Date",
+    "Transaction / Gateway Reference",
+  ]) {
+    check(
+      `a column for ${head}`,
+      refundColumns.toLowerCase().includes(head.toLowerCase())
+    );
+  }
 
   section("3. The back office's request page");
   await cdp.goto(`${BASE}/admin/returns/${returnId}`);
@@ -244,6 +328,11 @@ try {
   chrome?.kill();
   await sleep(300);
 
+  for (const r of refundsRaised) {
+    await pool.query("DELETE FROM return_refund_events WHERE refund_id = $1", [r]);
+    await pool.query("DELETE FROM return_refund_lines WHERE refund_id = $1", [r]);
+    await pool.query("DELETE FROM return_refunds WHERE id = $1", [r]);
+  }
   await pool.query("DELETE FROM return_events WHERE return_id = $1", [returnId]);
   await pool.query("DELETE FROM return_images WHERE return_id = $1", [returnId]);
   await pool.query("DELETE FROM notifications WHERE return_id = $1", [returnId]);

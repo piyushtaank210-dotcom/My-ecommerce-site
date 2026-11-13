@@ -378,6 +378,9 @@ export type ContactMessage = {
   handled_by: number | null;
   handled_by_name: string | null;
   handled_at: string | null;
+  /** What became of the notification the shop was sent about it. */
+  email_status: string | null;
+  email_sent_at: string | null;
   created_at: string;
 };
 

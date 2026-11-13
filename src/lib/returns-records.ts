@@ -204,6 +204,135 @@ export async function transitionReturnStatus(input: {
 
 /**
  * A refund, on its own row.
+/**
+ * A refund, worked out from what the customer actually paid.
+ *
+ * The price is the one on the order line — what the item was bought
+ * for — and never the price on the shelf today. A console that has gone
+ * up in price since it was bought is still refunded at what it was
+ * bought for.
+ */
+export type RefundCalculation = {
+  /** What is going back, in rupees. */
+  amount: number;
+  /** What the return request covers, line by line. */
+  lines: {
+    orderItemId: number | null;
+    productSlug: string | null;
+    name: string;
+    unitPrice: number;
+    quantity: number;
+    lineAmount: number;
+  }[];
+  /** The units going back. */
+  quantity: number;
+  /** The method the customer paid with. */
+  originalPaymentMethod: string | null;
+  /** The gateway's reference for the payment, when there is one. */
+  gatewayPaymentId: string | null;
+  /** The gateway the order was paid through. */
+  gateway: string | null;
+};
+
+/**
+ * Works out what a request is worth, from the order as it was bought.
+ *
+ * The price comes from the order line rather than from the catalogue,
+ * and the quantity is what is actually being returned. Nothing here
+ * looks at what the product costs now.
+ */
+export async function calculateRefund(
+  returnId: string
+): Promise<RefundCalculation> {
+  const db = getDb();
+
+  const request = (await db
+    .prepare(
+      `SELECT r.order_id, r.user_id,
+              o.payment_method, o.payment_gateway, o.payment_reference
+         FROM return_requests r
+         JOIN orders o ON o.id = r.order_id
+        WHERE r.id = ?`
+    )
+    .get(returnId)) as
+    | {
+        order_id: string;
+        user_id: number | null;
+        payment_method: string;
+        payment_gateway: string | null;
+        payment_reference: string | null;
+      }
+    | undefined;
+
+  if (!request) {
+    return {
+      amount: 0,
+      lines: [],
+      quantity: 0,
+      originalPaymentMethod: null,
+      gatewayPaymentId: null,
+      gateway: null,
+    };
+  }
+
+  const items = (await db
+    .prepare(
+      `SELECT ri.order_item_id, ri.product_slug, ri.name, ri.quantity,
+              ri.price AS recorded_price,
+              oi.price AS order_price
+         FROM return_items ri
+         LEFT JOIN order_items oi ON oi.id = ri.order_item_id
+        WHERE ri.return_id = ?
+        ORDER BY ri.id`
+    )
+    .all(returnId)) as {
+    order_item_id: number | null;
+    product_slug: string | null;
+    name: string;
+    quantity: number;
+    recorded_price: number;
+    order_price: number | null;
+  }[];
+
+  const lines: RefundCalculation["lines"] = [];
+  let amount = 0;
+  let quantity = 0;
+
+  for (const item of items) {
+    // The price the customer paid wins. The price recorded on the
+    // request is the fallback for an order line that has since gone.
+    const unitPrice =
+      item.order_price !== null && item.order_price !== undefined
+        ? num(item.order_price)
+        : num(item.recorded_price);
+    const qty = num(item.quantity);
+    const lineAmount = unitPrice * qty;
+
+    amount += lineAmount;
+    quantity += qty;
+
+    lines.push({
+      orderItemId: item.order_item_id,
+      productSlug: item.product_slug,
+      name: str(item.name),
+      unitPrice,
+      quantity: qty,
+      lineAmount,
+    });
+  }
+
+  return {
+    amount,
+    lines,
+    quantity,
+    originalPaymentMethod: strOrNull(request.payment_method),
+    gatewayPaymentId: strOrNull(request.payment_reference),
+    gateway: strOrNull(request.payment_gateway),
+  };
+}
+
+/**
+ * A refund, on its own row.
  */
 export async function createRefundRecord(input: {
   returnId: string;
@@ -225,7 +354,50 @@ export async function createRefundRecord(input: {
     .get(input.returnId)) as Row | undefined;
 
   if (!row) return { ok: false, message: "Request not found." };
-  if (input.amount <= 0) return { ok: false, message: "Enter the amount to refund." };
+  if (
+    row.status === "resolved" ||
+    row.status === "completed" ||
+    row.status === "rejected"
+  ) {
+    return { ok: false, message: `Request is already '${row.status}'.` };
+  }
+
+  // A refund is worked out from the order as it was bought.
+  const calculation = await calculateRefund(input.returnId);
+
+  if (!calculation.amount) {
+    return {
+      ok: false,
+      message: "There is nothing to refund on this request.",
+    };
+  }
+
+  if (input.amount <= 0) {
+    return { ok: false, message: "Enter the amount to refund." };
+  }
+  if (input.amount > calculation.amount) {
+    return {
+      ok: false,
+      message: `The refund cannot be more than ${calculation.amount} — what the customer paid for the items being returned.`,
+    };
+  }
+
+  // One live refund per request. A refund that failed may be tried
+  // again, but two refunds may never be in flight at once.
+  const live = (await db
+    .prepare(
+      `SELECT id FROM return_refunds
+        WHERE return_id = ? AND status IN ('pending', 'processing', 'completed')
+        LIMIT 1`
+    )
+    .get(input.returnId)) as { id?: string } | undefined;
+
+  if (live?.id) {
+    return {
+      ok: false,
+      message: `This request already has a refund in progress (${live.id}).`,
+    };
+  }
 
   const refundId = `RFD-${randomBytes(5).toString("hex").toUpperCase()}`;
 
@@ -233,9 +405,10 @@ export async function createRefundRecord(input: {
     await tx
       .prepare(
         `INSERT INTO return_refunds
-           (id, return_id, order_id, user_id, amount, payment_method, status,
-            approved_by, approved_by_name, approved_at, notes)
-         VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, datetime('now'), ?)`
+           (id, return_id, order_id, user_id, amount, calculated_amount, unit_price,
+            quantity, payment_method, original_payment_method, gateway_payment_id,
+            status, approved_by, approved_by_name, approved_at, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, datetime('now'), ?)`
       )
       .run(
         refundId,
@@ -243,10 +416,49 @@ export async function createRefundRecord(input: {
         str(row.order_id),
         row.user_id === null ? null : num(row.user_id),
         input.amount,
-        input.paymentMethod ?? null,
+        calculation.amount,
+        calculation.lines[0]?.unitPrice ?? null,
+        calculation.quantity,
+        input.paymentMethod ?? calculation.originalPaymentMethod ?? null,
+        calculation.originalPaymentMethod ?? null,
+        calculation.gatewayPaymentId ?? null,
         input.approvedBy.id,
         input.approvedBy.name,
         input.notes ?? null
+      );
+
+    // The lines the refund is made of, so that the money can be worked
+    // out again later.
+    const insLine = tx.prepare(
+      `INSERT INTO return_refund_lines
+         (refund_id, order_item_id, product_slug, name, unit_price, quantity, line_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const line of calculation.lines) {
+      await insLine.run(
+        refundId,
+        line.orderItemId,
+        line.productSlug,
+        line.name,
+        line.unitPrice,
+        line.quantity,
+        line.lineAmount
+      );
+    }
+
+    await tx
+      .prepare(
+        `INSERT INTO return_refund_events
+           (refund_id, status, from_status, to_status, actor_type, actor_id, actor_name, amount, note)
+         VALUES (?, 'pending', NULL, 'pending', 'staff', ?, ?, ?, ?)`
+      )
+      .run(
+        refundId,
+        input.approvedBy.id,
+        input.approvedBy.name,
+        input.amount,
+        input.notes ??
+          `Refund raised for ${input.amount}.`
       );
   });
 
@@ -262,177 +474,24 @@ export async function createRefundRecord(input: {
     action: "approve_refund",
     note:
       input.notes ??
-      `Refund of ${input.amount} approved for ${input.paymentMethod ?? "the original payment method"}.`,
+      `Refund of ${input.amount} approved for ${input.paymentMethod ?? calculation.originalPaymentMethod ?? "the original payment method"}.`,
     extra: {
       refund_amount: input.amount,
-      refund_method: input.paymentMethod ?? null,
+      refund_method:
+        input.paymentMethod ?? calculation.originalPaymentMethod ?? null,
       refund_status: "pending",
     },
-    metadata: { refundId, amount: input.amount },
+    metadata: { refundId, amount: input.amount, calculated: calculation.amount },
     tellCustomer: {
       kind: "refund_approved",
       title: `Refund approved for request ${input.returnId}`,
-      body: `We have approved a refund of ₹${(input.amount / 100).toFixed(2)} for order ${str(row.order_id)}. The money is sent back by ${input.paymentMethod ?? "your original payment method"} once the returned product has been checked.`,
+      body: `We have approved a refund of ₹${input.amount} for order ${str(row.order_id)}. The money is sent back by ${input.paymentMethod ?? calculation.originalPaymentMethod ?? "your original payment method"} once the returned product has been checked.`,
     },
   });
 
   return { ok: true, id: refundId };
 }
 
-/**
- * Moves a refund along: it is sent to the payment provider, then it is
- * complete, or it failed.
- *
- * A refund is not a refund until the money has actually moved, so the
- * record says "approved" until somebody confirms the payment, and the
- * customer is told it is complete only then.
- */
-export async function updateRefundRecord(input: {
-  refundId: string;
-  status: RefundStatus;
-  gatewayTransactionId?: string | null;
-  notes?: string | null;
-  failedReason?: string | null;
-  actor: { id: number; name: string; role?: string };
-}): Promise<{ ok: boolean; message?: string }> {
-  const db = getDb();
-
-  const row = (await db
-    .prepare(
-      `SELECT f.id, f.return_id, f.order_id, f.amount, f.status,
-              COALESCE(r.customer_email, o.email) AS customer_email,
-              r.user_id
-         FROM return_refunds f
-         JOIN return_requests r ON r.id = f.return_id
-         JOIN orders o ON o.id = f.order_id
-        WHERE f.id = ?`
-    )
-    .get(input.refundId)) as Row | undefined;
-
-  if (!row) return { ok: false, message: "Refund not found." };
-  if (str(row.status) === input.status) {
-    return { ok: false, message: "The refund is already in that state." };
-  }
-  if (str(row.status) === "completed") {
-    return { ok: false, message: "This refund has already been paid." };
-  }
-
-  const sets: string[] = ["status = ?", "updated_at = datetime('now')"];
-  const values: unknown[] = [input.status];
-
-  if (input.status === "processing") {
-    sets.push("initiated_at = datetime('now')");
-    if (input.gatewayTransactionId) {
-      sets.push("gateway_transaction_id = ?");
-      values.push(input.gatewayTransactionId);
-    }
-  } else if (input.status === "completed") {
-    if (!input.gatewayTransactionId) {
-      return {
-        ok: false,
-        message:
-          "Enter the transaction reference the refund was paid under (UTR, gateway reference).",
-      };
-    }
-    sets.push("completed_at = datetime('now')", "gateway_transaction_id = ?");
-    values.push(input.gatewayTransactionId);
-  } else if (input.status === "failed") {
-    if (!input.failedReason) {
-      return { ok: false, message: "Give a reason for the refund failing." };
-    }
-    sets.push("failed_reason = ?");
-    values.push(input.failedReason);
-  }
-
-  if (input.notes) {
-    sets.push("notes = ?");
-    values.push(input.notes);
-  }
-
-  await db
-    .prepare(`UPDATE return_refunds SET ${sets.join(", ")} WHERE id = ?`)
-    .run(...values, input.refundId);
-
-  // The request keeps a summary of the refund so a list can be drawn
-  // without a join. It is kept in step with the record itself.
-  const requestUpdates: Record<string, string | number | null> = {};
-  if (input.status === "processing") {
-    requestUpdates.refund_status = "pending";
-  } else if (input.status === "completed") {
-    requestUpdates.refund_status = "processed";
-    requestUpdates.refund_reference = input.gatewayTransactionId ?? null;
-  } else if (input.status === "failed") {
-    requestUpdates.refund_status = "failed";
-  }
-
-  const statusForRequest: Record<RefundStatus, ReturnStatus> = {
-    approved: "refund_approved",
-    processing: "refund_processing",
-    completed: "refund_completed",
-    failed: "refund_approved",
-  };
-
-  const isComplete = input.status === "completed";
-
-  await transitionReturnStatus({
-    returnId: str(row.return_id),
-    to: statusForRequest[input.status],
-    actor: {
-      type: "staff",
-      id: input.actor.id,
-      name: input.actor.name,
-      role: input.actor.role ?? "admin",
-    },
-    action:
-      input.status === "processing"
-        ? "process_refund"
-        : input.status === "completed"
-          ? "complete_refund"
-          : "refund_failed",
-    note:
-      input.notes ??
-      (input.status === "completed"
-        ? `Refund of ₹${(num(row.amount) / 100).toFixed(2)} paid under reference ${input.gatewayTransactionId}.`
-        : input.status === "processing"
-          ? "The refund has been sent to the payment provider."
-          : input.failedReason ?? null),
-    extra: requestUpdates,
-    metadata: { refundId: input.refundId, status: input.status },
-    tellCustomer: isComplete
-      ? {
-          kind: "refund_completed",
-          title: `Refund completed for request ${str(row.return_id)}`,
-          body: `The refund of ₹${(num(row.amount) / 100).toFixed(2)} for order ${str(row.order_id)} has been paid under reference ${input.gatewayTransactionId}. It reaches your account in 2–5 working days.`,
-        }
-      : input.status === "processing"
-        ? {
-            kind: "refund_processing",
-            title: `Refund on its way for request ${str(row.return_id)}`,
-            body: `The refund of ₹${(num(row.amount) / 100).toFixed(2)} for order ${str(row.order_id)} has been sent to your payment method.`,
-          }
-        : null,
-  });
-
-  // The request carries the day the money actually went back. It is
-  // written after the status change, because it is the refund's own
-  // completion date and not the moment the button was pressed.
-  if (isComplete) {
-    await db
-      .prepare(
-        `UPDATE return_requests
-            SET refund_processed_at = (SELECT completed_at FROM return_refunds WHERE id = ?),
-                updated_at = datetime('now')
-          WHERE id = ?`
-      )
-      .run(input.refundId, str(row.return_id));
-  }
-
-  return { ok: true };
-}
-
-/**
- * A replacement, on its own row.
- */
 export async function createReplacementRecord(input: {
   returnId: string;
   kind?: "replacement" | "accessories";
@@ -532,9 +591,216 @@ export async function createReplacementRecord(input: {
   return { ok: true, id: replacementId };
 }
 
-/**
- * Records where a replacement has got to.
- */
+export async function updateRefundRecord(input: {
+  refundId: string;
+  status: RefundStatus;
+  /** The gateway's reference for the payment, when it has one. */
+  gatewayTransactionId?: string | null;
+  /** The gateway's own reference for the refund. */
+  gatewayRefundId?: string | null;
+  /** Whether the shop sent it to the gateway or paid it by hand. */
+  settledBy?: "gateway" | "manual" | null;
+  notes?: string | null;
+  failedReason?: string | null;
+  actor: { id: number; name: string; role?: string };
+}): Promise<{ ok: boolean; message?: string }> {
+  const db = getDb();
+
+  const row = (await db
+    .prepare(
+      `SELECT f.id, f.return_id, f.order_id, f.amount, f.status,
+              f.gateway_payment_id, f.gateway_refund_id, f.settled_by,
+              COALESCE(r.customer_email, o.email) AS customer_email,
+              r.user_id
+         FROM return_refunds f
+         JOIN return_requests r ON r.id = f.return_id
+         JOIN orders o ON o.id = f.order_id
+        WHERE f.id = ?`
+    )
+    .get(input.refundId)) as Row | undefined;
+
+  if (!row) return { ok: false, message: "Refund not found." };
+  // A refund that has been paid is the more specific answer, so it is
+  // checked first — trying to pay it twice is the mistake worth naming.
+  if (str(row.status) === "completed") {
+    return { ok: false, message: "This refund has already been paid." };
+  }
+  if (str(row.status) === input.status) {
+    return { ok: false, message: "The refund is already in that state." };
+  }
+
+  const fromStatus = str(row.status);
+  const sets: string[] = ["status = ?", "updated_at = datetime('now')"];
+  const values: unknown[] = [input.status];
+
+  if (input.status === "processing") {
+    sets.push("initiated_at = datetime('now')");
+    if (input.gatewayTransactionId) {
+      sets.push("gateway_transaction_id = ?");
+      values.push(input.gatewayTransactionId);
+    }
+    if (input.gatewayRefundId) {
+      sets.push("gateway_refund_id = ?");
+      values.push(input.gatewayRefundId);
+    }
+    if (input.settledBy) {
+      sets.push("settled_by = ?");
+      values.push(input.settledBy);
+    }
+  } else if (input.status === "completed") {
+    // A refund is not a refund until the money has moved. It either
+    // moved because the gateway said so, or because an administrator
+    // paid it and wrote down the reference of the payment they made.
+    // Either way there has to be a reference.
+    if (!input.gatewayTransactionId) {
+      return {
+        ok: false,
+        message:
+          "Enter the reference the refund was paid under (the gateway's refund id, or the UTR of the payment).",
+      };
+    }
+    sets.push("completed_at = datetime('now')", "gateway_transaction_id = ?");
+    values.push(input.gatewayTransactionId);
+    if (input.gatewayRefundId) {
+      sets.push("gateway_refund_id = ?");
+      values.push(input.gatewayRefundId);
+    }
+    // A refund settled by hand carries the name of the person who paid
+    // it, so that it is always known who confirmed it.
+    sets.push(
+      "settled_by = ?",
+      "confirmed_by = ?",
+      "confirmed_by_name = ?"
+    );
+    values.push(
+      input.settledBy ?? "manual",
+      input.actor.id,
+      input.actor.name
+    );
+  } else if (input.status === "failed") {
+    if (!input.failedReason) {
+      return { ok: false, message: "Give a reason for the refund failing." };
+    }
+    sets.push("failed_reason = ?");
+    values.push(input.failedReason);
+  }
+
+  if (input.notes) {
+    sets.push("notes = ?");
+    values.push(input.notes);
+  }
+
+  await withTransaction(async (tx) => {
+    await tx
+      .prepare(`UPDATE return_refunds SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...values, input.refundId);
+
+    // The history of the refund: every step, with who took it and the
+    // reference it carried.
+    await tx
+      .prepare(
+        `INSERT INTO return_refund_events
+           (refund_id, status, from_status, to_status, actor_type, actor_id, actor_name,
+            reference, amount, note)
+         VALUES (?, ?, ?, ?, 'staff', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        input.refundId,
+        input.status,
+        fromStatus,
+        input.status,
+        input.actor.id,
+        input.actor.name,
+        input.gatewayTransactionId ?? input.gatewayRefundId ?? null,
+        num(row.amount),
+        input.notes ??
+          input.failedReason ??
+          (input.status === "completed"
+            ? `Refund of ₹${num(row.amount)} paid under reference ${input.gatewayTransactionId}.`
+            : input.status === "processing"
+              ? "The refund has been sent to the payment provider."
+              : null)
+      );
+  });
+
+  // The request keeps a summary of the refund so a list can be drawn
+  // without a join. It is kept in step with the record itself.
+  const requestUpdates: Record<string, string | number | null> = {};
+  if (input.status === "processing") {
+    requestUpdates.refund_status = "pending";
+  } else if (input.status === "completed") {
+    requestUpdates.refund_status = "completed";
+    requestUpdates.refund_reference = input.gatewayTransactionId ?? null;
+  } else if (input.status === "failed") {
+    requestUpdates.refund_status = "failed";
+  }
+
+  const statusForRequest: Record<RefundStatus, ReturnStatus> = {
+    not_initiated: "refund_approved",
+    pending: "refund_approved",
+    processing: "refund_processing",
+    completed: "refund_completed",
+    failed: "refund_approved",
+  };
+
+  const isComplete = input.status === "completed";
+
+  await transitionReturnStatus({
+    returnId: str(row.return_id),
+    to: statusForRequest[input.status],
+    actor: {
+      type: "staff",
+      id: input.actor.id,
+      name: input.actor.name,
+      role: input.actor.role ?? "admin",
+    },
+    action:
+      input.status === "processing"
+        ? "process_refund"
+        : input.status === "completed"
+          ? "complete_refund"
+          : "refund_failed",
+    note:
+      input.notes ??
+      (input.status === "completed"
+        ? `Refund of ₹${num(row.amount)} paid under reference ${input.gatewayTransactionId}.`
+        : input.status === "processing"
+          ? "The refund has been sent to the payment provider."
+          : input.failedReason ?? null),
+    extra: requestUpdates,
+    metadata: { refundId: input.refundId, status: input.status },
+    tellCustomer: isComplete
+      ? {
+          kind: "refund_completed",
+          title: `Refund completed for request ${str(row.return_id)}`,
+          body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been paid under reference ${input.gatewayTransactionId}. It reaches your account in 2–5 working days.`,
+        }
+      : input.status === "processing"
+        ? {
+            kind: "refund_processing",
+            title: `Refund on its way for request ${str(row.return_id)}`,
+            body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been sent to your payment method.`,
+          }
+        : null,
+  });
+
+  // The request carries the day the money actually went back. It is
+  // written after the status change, because it is the refund's own
+  // completion date and not the moment the button was pressed.
+  if (isComplete) {
+    await db
+      .prepare(
+        `UPDATE return_requests
+            SET refund_processed_at = (SELECT completed_at FROM return_refunds WHERE id = ?),
+                updated_at = datetime('now')
+          WHERE id = ?`
+      )
+      .run(input.refundId, str(row.return_id));
+  }
+
+  return { ok: true };
+}
+
 export async function updateReplacementDelivery(input: {
   replacementId: string;
   status: ReplacementStatus;
@@ -918,9 +1184,9 @@ export async function listRefunds(q: RefundQuery = {}): Promise<
   if (q.q) {
     const term = `%${q.q.trim()}%`;
     where.push(
-      "(f.id LIKE ? OR f.return_id LIKE ? OR f.order_id LIKE ? OR o.name LIKE ? OR o.email LIKE ? OR f.gateway_transaction_id LIKE ?)"
+      "(f.id LIKE ? OR f.return_id LIKE ? OR f.order_id LIKE ? OR o.name LIKE ? OR o.email LIKE ? OR f.gateway_transaction_id LIKE ? OR f.gateway_refund_id LIKE ? OR f.original_payment_method LIKE ?)"
     );
-    params.push(term, term, term, term, term, term);
+    params.push(term, term, term, term, term, term, term, term);
   }
   if (q.status && q.status !== "all") {
     where.push("f.status = ?");
@@ -956,8 +1222,17 @@ export async function listRefunds(q: RefundQuery = {}): Promise<
     order_id: str(r.order_id),
     user_id: r.user_id === null ? null : num(r.user_id),
     amount: num(r.amount),
+    calculated_amount: r.calculated_amount === null ? null : num(r.calculated_amount),
+    unit_price: r.unit_price === null ? null : num(r.unit_price),
+    quantity: r.quantity === null ? null : num(r.quantity),
     payment_method: strOrNull(r.payment_method),
+    original_payment_method: strOrNull(r.original_payment_method),
     gateway_transaction_id: strOrNull(r.gateway_transaction_id),
+    gateway_payment_id: strOrNull(r.gateway_payment_id),
+    gateway_refund_id: strOrNull(r.gateway_refund_id),
+    settled_by: strOrNull(r.settled_by),
+    confirmed_by: r.confirmed_by === null ? null : num(r.confirmed_by),
+    confirmed_by_name: strOrNull(r.confirmed_by_name),
     status: str(r.status) as RefundStatus,
     approved_by: r.approved_by === null ? null : num(r.approved_by),
     approved_by_name: strOrNull(r.approved_by_name),
@@ -980,8 +1255,17 @@ export type ReturnRefundRow = {
   order_id: string;
   user_id: number | null;
   amount: number;
+  calculated_amount: number | null;
+  unit_price: number | null;
+  quantity: number | null;
   payment_method: string | null;
+  original_payment_method: string | null;
   gateway_transaction_id: string | null;
+  gateway_payment_id: string | null;
+  gateway_refund_id: string | null;
+  settled_by: string | null;
+  confirmed_by: number | null;
+  confirmed_by_name: string | null;
   status: RefundStatus;
   approved_by: number | null;
   approved_by_name: string | null;
@@ -1002,9 +1286,9 @@ export async function countRefunds(q: RefundQuery = {}): Promise<number> {
   if (q.q) {
     const term = `%${q.q.trim()}%`;
     where.push(
-      "(f.id LIKE ? OR f.return_id LIKE ? OR f.order_id LIKE ? OR o.name LIKE ? OR o.email LIKE ? OR f.gateway_transaction_id LIKE ?)"
+      "(f.id LIKE ? OR f.return_id LIKE ? OR f.order_id LIKE ? OR o.name LIKE ? OR o.email LIKE ? OR f.gateway_transaction_id LIKE ? OR f.gateway_refund_id LIKE ? OR f.original_payment_method LIKE ?)"
     );
-    params.push(term, term, term, term, term, term);
+    params.push(term, term, term, term, term, term, term, term);
   }
   if (q.status && q.status !== "all") {
     where.push("f.status = ?");
@@ -1163,6 +1447,76 @@ export async function countReplacements(q: RefundQuery = {}): Promise<number> {
     .get(...params)) as { total?: number } | undefined;
 
   return num(row?.total);
+}
+
+/**
+ * The history of one refund.
+ *
+ * Every step a refund takes is written down — who raised it, who sent
+ * it to the gateway, what the gateway said, and who confirmed the money
+ * had gone back. It is the record that answers "what happened to this
+ * refund".
+ */
+export async function listRefundEvents(refundId: string): Promise<
+  {
+    id: number;
+    refund_id: string;
+    status: string;
+    from_status: string | null;
+    to_status: string | null;
+    actor_type: string;
+    actor_name: string | null;
+    reference: string | null;
+    amount: number | null;
+    note: string | null;
+    created_at: string;
+  }[]
+> {
+  return (await getDb()
+    .prepare(
+      `SELECT id, refund_id, status, from_status, to_status, actor_type, actor_name,
+              reference, amount, note, created_at
+         FROM return_refund_events
+        WHERE refund_id = ?
+        ORDER BY created_at ASC, id ASC`
+    )
+    .all(refundId)) as never;
+}
+
+/**
+ * The lines a refund is made of.
+ */
+export async function listRefundLines(refundId: string): Promise<
+  {
+    id: number;
+    order_item_id: number | null;
+    product_slug: string | null;
+    name: string;
+    unit_price: number;
+    quantity: number;
+    line_amount: number;
+  }[]
+> {
+  return (await getDb()
+    .prepare(
+      `SELECT id, order_item_id, product_slug, name, unit_price, quantity, line_amount
+         FROM return_refund_lines
+        WHERE refund_id = ?
+        ORDER BY id ASC`
+    )
+    .all(refundId)) as never;
+}
+
+/**
+ * The refund, with its lines and its history.
+ */
+export async function getRefund(
+  refundId: string
+): Promise<(ReturnRefundRow & { customer_name: string | null; customer_email: string | null }) | null> {
+  const refunds = await listRefunds({ limit: 100 });
+  const found = refunds.find((r) => r.id === refundId);
+  if (!found) return null;
+  return found;
 }
 
 /**

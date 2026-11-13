@@ -9,6 +9,7 @@ import { Pagination } from "@/components/Pagination";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { MessageStatusSelect } from "@/components/admin/MessageStatusSelect";
+import { EnquiryEmailStatus } from "@/components/admin/EnquiryEmailStatus";
 
 export const metadata = { title: "Enquiries" };
 
@@ -144,9 +145,16 @@ export default async function AdminMessagesPage({
                   </p>
                 </div>
 
-                {canHandle && (
-                  <MessageStatusSelect messageId={m.id} status={m.status} />
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <EnquiryEmailStatus
+                    messageId={m.id}
+                    status={m.email_status}
+                    sentAt={m.email_sent_at}
+                  />
+                  {canHandle && (
+                    <MessageStatusSelect messageId={m.id} status={m.status} />
+                  )}
+                </div>
               </header>
 
               <p className="mt-3 whitespace-pre-line text-[13.5px] leading-relaxed text-gray-600">

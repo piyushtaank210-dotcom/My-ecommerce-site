@@ -559,7 +559,7 @@ try {
   check("it says how much", refundRows[0]?.amount === price);
   check("it says who approved it", refundRows[0]?.approved_by_name === staff.name);
   check("it says when it was approved", Boolean(refundRows[0]?.approved_at));
-  check("it is not shown as paid yet", refundRows[0]?.status === "approved");
+  check("it is not shown as paid yet", refundRows[0]?.status === "pending");
   check(
     "the customer sees it as approved, not paid",
     (await getReturnRequest(claim.returnId))?.refund_status === "pending"
@@ -601,8 +601,8 @@ try {
   check("the transaction reference is kept", paidRow?.gateway_transaction_id === "UTR-TEST-4242");
   check("the completion date is kept", Boolean(paidRow?.completed_at));
   check(
-    "the request says the refund is processed",
-    (await getReturnRequest(claim.returnId))?.refund_status === "processed"
+    "the request says the refund is completed",
+    (await getReturnRequest(claim.returnId))?.refund_status === "completed"
   );
 
   // ─────────────────────────────────────────────────────────────
@@ -930,6 +930,14 @@ try {
       await tx.prepare("DELETE FROM return_images WHERE return_id = ?").run(returnId);
       await tx.prepare("DELETE FROM admin_actions WHERE return_id = ?").run(returnId);
       await tx.prepare("DELETE FROM notifications WHERE return_id = ?").run(returnId);
+      // The refund records, their lines and their history.
+      const refunds = (await tx
+        .prepare("SELECT id FROM return_refunds WHERE return_id = ?")
+        .all(returnId)) as { id: string }[];
+      for (const r of refunds) {
+        await tx.prepare("DELETE FROM return_refund_events WHERE refund_id = ?").run(r.id);
+        await tx.prepare("DELETE FROM return_refund_lines WHERE refund_id = ?").run(r.id);
+      }
       await tx.prepare("DELETE FROM return_refunds WHERE return_id = ?").run(returnId);
       await tx.prepare("DELETE FROM return_replacements WHERE return_id = ?").run(returnId);
       await tx.prepare("DELETE FROM return_inspections WHERE return_id = ?").run(returnId);

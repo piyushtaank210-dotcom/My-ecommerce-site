@@ -28,6 +28,8 @@ import {
   returnReasonLabel,
 } from "@/lib/returns";
 import { getReturnsOverview } from "@/lib/returns-records";
+import { getReturnPolicy } from "@/lib/settings";
+import { can } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
 import { StatCard } from "@/components/admin/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";
@@ -35,6 +37,9 @@ import { PanelFilter } from "@/components/admin/PanelFilter";
 import { PanelDateRange } from "@/components/admin/PanelDateRange";
 import { ReturnTabs } from "@/components/admin/ReturnTabs";
 import { Pagination } from "@/components/Pagination";
+import { RefundRecordsView } from "@/components/admin/returns/RefundRecordsView";
+import { ReplacementRecordsView } from "@/components/admin/returns/ReplacementRecordsView";
+import { ReturnPolicySettings } from "@/components/admin/returns/ReturnPolicySettings";
 
 export const metadata = { title: "Returns & Refunds" };
 
@@ -57,7 +62,7 @@ const TABS: {
   { key: "all", label: "All Requests", params: {} },
   { key: "new", label: "New Requests", params: { status: "requested" } },
   { key: "returns", label: "Returns", params: { type: "return" } },
-  { key: "replacements", label: "Replacements", params: { type: "replacement" } },
+  { key: "replacements", label: "Replacement Requests", params: { type: "replacement" } },
   { key: "accessories", label: "Missing Accessories", params: { type: "accessories" } },
   { key: "pending_review", label: "Pending Review", params: { status: "under_review" } },
   {
@@ -74,6 +79,12 @@ const TABS: {
     params: { status: "replacement_dispatched" },
   },
   { key: "refunds", label: "Refund Requests", params: { refunds: "1" } },
+  { key: "refund_records", label: "Refund Records", params: { view: "refunds" } },
+  {
+    key: "replacement_records",
+    label: "Replacement Records",
+    params: { view: "replacements" },
+  },
   { key: "completed", label: "Resolved", params: { status: "resolved" } },
   { key: "rejected", label: "Rejected", params: { status: "rejected" } },
 ];
@@ -83,13 +94,14 @@ export default async function AdminReturnsPage({
 }: {
   searchParams: Promise<SP>;
 }) {
-  await requirePermission("returns.view");
+  const user = await requirePermission("returns.view");
   const sp = await searchParams;
 
   const q = one(sp.q).trim() || undefined;
   const status = one(sp.status) || "all";
   const type = one(sp.type) || "all";
   const refunds = one(sp.refunds) === "1";
+  const view = one(sp.view) || "requests";
   const from = one(sp.from).trim() || undefined;
   const to = one(sp.to).trim() || undefined;
   const sort = one(sp.sort) || "newest";
@@ -111,6 +123,8 @@ export default async function AdminReturnsPage({
   const total = (await countReturnRequests(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   const stats = (await getReturnsOverview());
+  const policy = await getReturnPolicy();
+  const canManage = can(user.role, "returns.manage");
 
   /**
    * A link that keeps the search, the dates and the order, and changes
@@ -123,6 +137,7 @@ export default async function AdminReturnsPage({
     if (status !== "all") p.set("status", status);
     if (type !== "all") p.set("type", type);
     if (refunds) p.set("refunds", "1");
+    if (view !== "requests") p.set("view", view);
     if (from) p.set("from", from);
     if (to) p.set("to", to);
     if (sort !== "newest") p.set("sort", sort);
@@ -169,15 +184,19 @@ export default async function AdminReturnsPage({
       if (wanted.status && wanted.status !== status) return false;
       if (wanted.type && wanted.type !== type) return false;
       if (wanted.refunds && !refunds) return false;
+      if (wanted.view && wanted.view !== view) return false;
       // A tab that names nothing only matches when nothing is set.
       if (!Object.keys(wanted).length) {
-        return status === "all" && type === "all" && !refunds;
+        return status === "all" && type === "all" && !refunds && view === "requests";
       }
       // A status tab does not claim the screen when a type has been added
       // on top of it, and the other way round.
       if (wanted.status && type !== "all") return false;
       if (wanted.type && status !== "all") return false;
       if (wanted.refunds && (status !== "all" || type !== "all")) return false;
+      // A view of the records is on its own, and does not claim the
+      // screen from a status or a type.
+      if (wanted.view && (status !== "all" || type !== "all")) return false;
       return true;
     });
     return match?.key ?? "all";
@@ -189,6 +208,7 @@ export default async function AdminReturnsPage({
     change.status = t.params.status;
     change.type = t.params.type;
     change.refunds = t.params.refunds;
+    change.view = t.params.view;
     return {
       key: t.key,
       label: t.label,
@@ -207,8 +227,20 @@ export default async function AdminReturnsPage({
         </p>
       </header>
 
+      {/* The shop's return policy — the switches that decide whether
+          the shop takes returns at all, and what a customer has to
+          send with a claim. */}
+      <ReturnPolicySettings
+        enabled={policy.enabled}
+        windowDays={policy.windowDays}
+        description={policy.description}
+        photoRequired={policy.photoRequired}
+        pickupRequired={policy.pickupRequired}
+        canManage={canManage}
+      />
+
       {/* Summary cards — the whole of the returns desk, at a glance. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard
           label="Total requests"
           value={String(stats.total)}
@@ -288,21 +320,17 @@ export default async function AdminReturnsPage({
         />
       </div>
 
-      {/* The records that are kept about refunds and replacements. */}
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Link href="/admin/refunds" className="btn btn-outline btn-sm">
-          Refund records
-        </Link>
-        <Link href="/admin/replacements" className="btn btn-outline btn-sm">
-          Replacement records
-        </Link>
-      </div>
-
       {/* The views */}
       <div className="mt-6">
         <ReturnTabs tabs={tabs} />
       </div>
 
+      {view === "refunds" ? (
+        <RefundRecordsView searchParams={searchParams} />
+      ) : view === "replacements" ? (
+        <ReplacementRecordsView searchParams={searchParams} />
+      ) : (
+        <>
       {/* Search, filters and dates */}
       <div className="mt-4 mb-5 flex flex-wrap items-center gap-3">
         <PanelSearch placeholder="Search request, order, customer name or email" />
@@ -490,6 +518,8 @@ export default async function AdminReturnsPage({
         <div className="mt-5 flex justify-end">
           <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
         </div>
+      )}
+        </>
       )}
     </div>
   );

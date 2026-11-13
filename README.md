@@ -156,10 +156,10 @@ account.
 | `/admin` | Revenue, orders, customers, open enquiries, low stock, best sellers, orders by status |
 | `/admin/orders` | Every order, searchable, with the status changed in place |
 | `/admin/orders/[id]` | One order in full, with a link to the customer's view |
-| `/admin/returns` | Every return, replacement and refund request — the whole request list with its counters, filters, and a link to each case |
+| `/admin/returns` | Every return, replacement and refund request — the whole request list with its counters, filters, and a link to each case. The refund and replacement records are views of this page, and the shop's return policy is set here |
 | `/admin/returns/[id]` | One request in full: the claim, the evidence, the customer, the audit log, and every action the back office can take |
-| `/admin/refunds` | Every refund raised — the amount, the method, the transaction reference, who approved it, and what became of it |
-| `/admin/replacements` | Every replacement and accessory shipment — the serials, the courier, the tracking number, and where the parcel has got to |
+| `/admin/returns?view=refunds` | The refund records — every refund with its id, order, request, customer, original payment method, amount, status, date and transaction reference, and the lines it was worked out from |
+| `/admin/returns?view=replacements` | The replacement records — every replacement and accessory shipment, with the serials, the courier, the tracking number, and where the parcel has got to |
 | `/admin/inventory` | Every stock line, its threshold and its level; manual adjustments; returns waiting to be checked |
 | `/admin/inventory/history` | Every change to a stock level, and why it was made |
 | `/admin/categories` | The categories, their subcategories and specification fields, and the brands |
@@ -500,16 +500,76 @@ audit log are one case. Beside them:
 
 | Record | What it keeps |
 |---|---|
-| `return_refunds` | The amount, the method, the gateway reference, who approved it, when it was initiated and when the money actually went back |
+| `return_refunds` | The amount, what it was calculated from, the original payment method, the gateway reference, who approved it, who confirmed it, and when the money actually went back |
+| `return_refund_lines` | What each refund is made of — the price the customer paid for each thing, and how many of them |
+| `return_refund_events` | Every step a refund took: who raised it, who sent it, what the gateway said, and who confirmed the money had gone back |
 | `return_replacements` | The serial that came in, the serial going out, the courier, the tracking number, the dispatch date and where the parcel has got to |
 | `return_inspections` | Who inspected the unit, when, what they found, and the serial they read off it |
 | `admin_actions` | Every button a member of staff pressed on a request, with who, when, and the status it moved from and to |
 | `notifications` | Every message the shop sent about a request, and what became of it |
 
-**A refund is not a refund until the money has moved.** It is *approved*,
-then *processing*, and only then *completed* — and completing it needs
-the transaction reference. The customer is told the same way, and the
-customer never sees the shop's internal notes.
+**The shop's return policy is set in the same section.** The window,
+whether returns are on at all, the wording the customer is shown, and
+whether photographs and a pickup are required are all switches in the
+Returns & Refunds panel — they are settings in the database, not
+constants in the code, and they can be changed without a deployment.
+
+**A refund is not a refund until the money has moved.** It is *not
+initiated*, then *pending*, then *processing*, and only then *completed* —
+and completing it needs the transaction reference. The customer is told
+the same way, and the customer never sees the shop's internal notes.
+
+### Refunds
+
+The Refunds section of Returns & Refunds is where every refund the shop
+has raised is kept.
+
+| Shown | |
+|---|---|
+| **Refund ID** | The shop's own reference, `RFD-…` |
+| **Original Order ID** | The order the money goes back against |
+| **Return Request ID** | The claim the refund is for |
+| **Customer** | The name, email and phone on the order |
+| **Original Payment Method** | How the customer actually paid |
+| **Refund Amount** | What is going back, and what it was calculated from |
+| **Refund Status** | Not initiated, pending, processing, completed or failed |
+| **Refund Date** | When it was raised, and when it was paid |
+| **Transaction / Gateway Reference ID** | The gateway's refund id, or the UTR of the payment the shop made by hand |
+
+**The amount is worked out from the order as it was bought** — the price
+on the order line, times the quantity that is coming back. It is never
+the price on the shelf today, and it may never be more than what the
+customer paid. Each refund keeps its lines, so the money can be worked
+out again later without having to trust the order as it stands now.
+
+**The money goes back through the gateway it came in by.** The shop
+calls Razorpay's documented refund API —
+`POST /v1/payments/{payment_id}/refund` — and records what the gateway
+answers with. The gateway's own status is what decides whether the
+refund is complete: a refund the gateway has not processed is
+*processing*, never *completed*.
+
+
+**Razorpay is not live on this shop yet.** Until it is approved and the
+checkout is wired to it, the gateway button is not shown at all and every
+refund is paid by hand — a bank transfer, a UPI refund, cash — with the
+reference of the payment written down against it. The panel on the refunds
+page says which path is in use, so nobody has to guess.
+
+**Where the shop cannot use the gateway** — it has not been given the
+credentials, or the order carries no gateway payment reference — the
+refund is paid by hand. An administrator records the reference of the
+payment they actually made, and their name is kept against it. A refund
+is never completed without either the gateway's confirmation or that
+reference.
+
+**The order has to carry the gateway's own reference for the
+payment** — `orders.payment_reference` — or there is nothing for the
+gateway to refund against. The checkout writes it down when a payment
+provider takes the money.
+
+**A request may only have one refund running at once.** The database
+itself refuses a second, so the same money cannot go back twice.
 
 ### The dashboard
 
@@ -548,7 +608,7 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `GET` `PATCH` `DELETE` | `/api/admin/products/[slug]/variants/[variantId]` | One option — read it, change it, or remove it |
 | `POST` | `/api/admin/products/[slug]/variants/[variantId]/image` | Upload an option's own photograph (a form, under `files`) |
 | `PATCH` | `/api/admin/products/[slug]/attributes` | What the product varies by: `{"attributes":{"Colour":["White","Midnight Blue"]}}` |
-| `GET` `PATCH` | `/api/admin/settings` | The store's settings — the backorder policy |
+| `GET` `PATCH` | `/api/admin/settings` | The store's settings — the backorder policy, and the return policy: the window, whether returns are on, the wording the customer is shown, and whether photographs and a pickup are required |
 | `GET` `POST` | `/api/admin/categories` | The categories, with their subcategories and specification fields; `POST` adds one |
 | `GET` `PATCH` `DELETE` | `/api/admin/categories/[slug]` | One category — read it, rename it, change the fields it asks about, or remove it |
 | `GET` `POST` | `/api/admin/categories/[slug]/subcategories` | The categories inside this category; `POST` adds one |
@@ -578,8 +638,8 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `GET` | `/api/admin/returns` | Every request; `?q=`, `?status=`, `?type=`, `?refunds=1`, `?from=`, `?to=`, `?sort=`, `?page=`, `?limit=` |
 | `GET` `PATCH` | `/api/admin/returns/[id]` | One request with its evidence, its history, its refunds, its replacements and its inspections; `PATCH` moves it to another status |
 | `POST` | `/api/admin/returns/[id]/decision` | Pick a claim up, approve it, reject it (a reason is required), or ask the customer for more evidence |
-| `GET` `POST` | `/api/admin/refunds` | Every refund raised; `POST` raises one (`{"returnId":"RET-…","amount":49999,"paymentMethod":"Original Payment Source"}`) |
-| `PATCH` | `/api/admin/refunds/[id]` | Move a refund along — `"processing"`, `"completed"` (the transaction reference is required) or `"failed"` |
+| `GET` `POST` | `/api/admin/refunds` | Every refund raised; `POST` raises one (`{"returnId":"RET-…","amount":49999,"paymentMethod":"Original Payment Source"}`) — the amount is in rupees, and it may not be more than what the customer paid |
+| `PATCH` | `/api/admin/refunds/[id]` | Move a refund along — `"processing"`, `"completed"` (the transaction reference is required), `"failed"`, or `"not_initiated"` |
 | `GET` | `/api/admin/replacements` | Every replacement and accessory shipment; `?q=`, `?status=`, `?from=`, `?to=` |
 | `PATCH` | `/api/admin/replacements/[id]` | Record where a shipment has got to |
 
@@ -1114,8 +1174,14 @@ This is a **demonstration store**. The commerce flows are complete, but:
 - **Email is optional.** Every message the shop sends about a return is
   written to the database and shown on the customer's dashboard, whether
   or not the shop is set up to send mail. Set `RESEND_API_KEY` (or
-  `MAIL_WEBHOOK_URL`) and the same messages go out by email as well. Order
-  confirmation is still on-screen only.
+  `MAIL_WEBHOOK_URL`) and the same messages go out by email as well.
+- **An enquiry is saved whether or not the email goes out.** The enquiry is
+  in the back office's Enquiries section first, and the notification is
+  sent after it. What became of the notification is recorded against the
+  enquiry — `sent`, `not_configured` or `failed` — and one that did not
+  go out can be sent again from the Enquiries section. The shop's
+  address for them is `ENQUIRY_NOTIFICATION_EMAIL`, and it defaults to
+  `NEXT_PUBLIC_STORE_EMAIL`.
 - **"Forgot password?" is a placeholder** — there is no password-reset flow.
 - **No saved payment methods.** Addresses are saved on the account; cards are
   not.

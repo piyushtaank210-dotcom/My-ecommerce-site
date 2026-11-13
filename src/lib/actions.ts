@@ -256,7 +256,10 @@ export async function sendContactMessageAction(
     return { ok: false, errors, message: "Check the highlighted fields." };
   }
 
-  await createContactMessage({
+  // The enquiry is saved first and always, and the notification is
+  // sent after it. If the mail service is not set up, or it refuses the
+  // message, the enquiry is still in the shop's queue.
+  const saved = await createContactMessage({
     name: parsed.data.name,
     email: parsed.data.email,
     subject: parsed.data.subject,
@@ -287,6 +290,11 @@ const checkoutSchema = z.object({
   pincode: z.string().trim().regex(/^[0-9]{6}$/, "PIN code must be 6 digits."),
   notes: z.string().trim().optional(),
   paymentMethod: z.enum(["upi", "card", "cod", "emi"]),
+  // The payment provider that took the money, and its own reference
+  // for the payment. They are what a refund is sent against, so a
+  // checkout that talks to a gateway writes them down.
+  paymentGateway: z.string().trim().optional(),
+  paymentReference: z.string().trim().optional(),
   saveAddress: z.string().trim().optional(),
 });
 
@@ -311,6 +319,8 @@ export async function placeOrderAction(
     pincode: formData.get("pincode"),
     notes: formData.get("notes") ?? undefined,
     paymentMethod: formData.get("paymentMethod"),
+    paymentGateway: formData.get("paymentGateway") ?? undefined,
+    paymentReference: formData.get("paymentReference") ?? undefined,
     saveAddress: formData.get("saveAddress") ?? undefined,
   });
 

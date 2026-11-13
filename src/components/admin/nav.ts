@@ -13,8 +13,6 @@ export type AdminNavItem = {
     | "dashboard"
     | "orders"
     | "returns"
-    | "refunds"
-    | "replacements"
     | "messages"
     | "users"
     | "products"
@@ -44,20 +42,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Returns & Refunds",
     description: "Return requests, replacements and refunds",
     icon: "returns",
-    permission: "returns.view",
-  },
-  {
-    href: "/admin/refunds",
-    label: "Refunds",
-    description: "Every refund raised and settled",
-    icon: "refunds",
-    permission: "returns.view",
-  },
-  {
-    href: "/admin/replacements",
-    label: "Replacements",
-    description: "Replacement and accessory shipments",
-    icon: "replacements",
     permission: "returns.view",
   },
   {

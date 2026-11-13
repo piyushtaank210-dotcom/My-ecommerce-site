@@ -25,7 +25,12 @@ import {
   returnReasonLabel,
   replacementCandidates,
 } from "@/lib/returns";
-import { listAdminActions } from "@/lib/returns-records";
+import {
+  listAdminActions,
+  calculateRefund,
+  listRefunds,
+} from "@/lib/returns-records";
+import { gatewayIsConfigured } from "@/lib/refund-gateway";
 import { getOrder } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
 import { evidenceSatisfied, policyForReason } from "@/lib/return-policy";
@@ -62,6 +67,12 @@ export default async function AdminReturnDetailPage({
 
   // What the back office did, in order.
   const adminActions = await listAdminActions(ret.id);
+
+  // What the request is worth, worked out from the order as it was
+  // bought, and the refund record it is about.
+  const calculation = await calculateRefund(ret.id);
+  const refundsForRequest = await listRefunds({ q: ret.id, limit: 10 });
+  const refundRecord = refundsForRequest.find((r) => r.return_id === ret.id) ?? null;
 
   // The rules this claim is judged against, and what has arrived against
   // them. A claim is never turned away only because a photograph or an
@@ -616,7 +627,20 @@ export default async function AdminReturnDetailPage({
           </section>
 
           {/* Interactive Management Actions */}
-          <ReturnAdminActions ret={ret} candidates={candidates} />
+          <ReturnAdminActions
+            ret={ret}
+            candidates={candidates}
+            gatewayAvailable={gatewayIsConfigured()}
+            refund={{
+              id: refundRecord?.id ?? "",
+              amount: calculation.amount,
+              quantity: calculation.quantity,
+              originalPaymentMethod: calculation.originalPaymentMethod,
+              gatewayPaymentId: calculation.gatewayPaymentId,
+              gateway: calculation.gateway,
+              lines: calculation.lines,
+            }}
+          />
         </div>
       </div>
     </div>

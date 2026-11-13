@@ -390,6 +390,8 @@ export async function listMessages(query: MessageQuery = {}): Promise<ContactMes
     status: str(r.status),
     handled_by: r.handled_by === null ? null : num(r.handled_by),
     handled_by_name: strOrNull(r.handled_by_name),
+    email_status: strOrNull(r.email_status),
+    email_sent_at: strOrNull(r.email_sent_at),
     handled_at: strOrNull(r.handled_at),
     created_at: str(r.created_at),
   }));

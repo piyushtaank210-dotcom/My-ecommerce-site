@@ -25,6 +25,16 @@ export type CheckoutInput = {
   pincode: string;
   notes?: string;
   paymentMethod: string;
+  /**
+   * The payment provider that took the money, and its own reference
+   * for the payment.
+   *
+   * They are what a refund is sent against. A checkout that does not
+   * talk to a provider leaves them empty, and the refund is paid by
+   * hand.
+   */
+  paymentGateway?: string | null;
+  paymentReference?: string | null;
 };
 
 /** Where an order sits in its journey — see src/lib/order-status.ts. */
@@ -76,8 +86,8 @@ export async function createOrder(
     (await db.prepare(
       `INSERT INTO orders
         (id, user_id, name, email, phone, address1, address2, city, state, pincode, notes,
-         subtotal, shipping, total, payment_method, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'confirmed')`
+         subtotal, shipping, total, payment_method, payment_gateway, payment_reference, status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'confirmed')`
     ).run(
       id,
       user?.id ?? null,
@@ -93,7 +103,9 @@ export async function createOrder(
       totals.subtotal,
       totals.shipping,
       totals.total,
-      input.paymentMethod
+      input.paymentMethod,
+      input.paymentGateway || null,
+      input.paymentReference || null,
     ));
 
     const insItem = db.prepare(

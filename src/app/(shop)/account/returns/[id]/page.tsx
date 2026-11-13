@@ -450,7 +450,7 @@ export default async function CustomerReturnDetailPage({
 
       {/* Refund Settlement Details Card — shown once the money has actually
           gone back, never on the strength of an approval alone. */}
-      {ret.type === "return" && ret.refund_status === "processed" && (
+      {ret.type === "return" && ret.refund_status === "completed" && (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-xs">
           <div className="flex items-center justify-between border-b border-emerald-200/70 pb-2.5">
             <h2 className="flex items-center gap-2 text-[14.5px] font-bold text-emerald-950">
