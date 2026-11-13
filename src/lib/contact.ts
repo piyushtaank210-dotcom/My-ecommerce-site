@@ -32,7 +32,7 @@ export type ContactMessage = {
 export const CONTACT_SUBJECT_LABEL: Record<ContactSubject, string> = {
   product: "A question about a product",
   order: "A question about an order",
-  support: "Something else",
+  support: "Setting something up",
   returns: "A return, replacement or refund",
   other: "Something else",
 };
@@ -69,6 +69,13 @@ export async function createContactMessage(
   };
 
   const id = Number(inserted.lastInsertRowid ?? inserted.id ?? 0);
+
+  // The enquiry has to be in the queue before anything else happens. A
+  // write that did not produce a row is a write that did not happen, and
+  // nobody is to be told that it did.
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("The enquiry could not be recorded.");
+  }
 
   // The email is sent after the enquiry is saved, and it never stops
   // the enquiry being recorded.

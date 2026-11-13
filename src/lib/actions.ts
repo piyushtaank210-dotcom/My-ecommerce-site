@@ -13,6 +13,7 @@ import { getBackorderPolicy } from "./settings";
 import { backordersAllowed } from "./variations";
 import { getProduct } from "./queries";
 import { createAddress } from "./addresses";
+import { STORE } from "./store-info";
 import {
   createUser,
   endSession,
@@ -263,19 +264,30 @@ export async function sendContactMessageAction(
   // The enquiry is saved first and always, and the notification is
   // sent after it. If the mail service is not set up, or it refuses the
   // message, the enquiry is still in the shop's queue.
-  const saved = await createContactMessage({
-    name: parsed.data.name,
-    email: parsed.data.email,
-    phone: parsed.data.phone || null,
-    subject: parsed.data.subject,
-    orderId: parsed.data.orderId || null,
-    message: parsed.data.message,
-  });
+  let saved: { id: number; emailStatus: string };
+  try {
+    saved = await createContactMessage({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      phone: parsed.data.phone || null,
+      subject: parsed.data.subject,
+      orderId: parsed.data.orderId || null,
+      message: parsed.data.message,
+    });
+  } catch (err) {
+    // A write that failed is not a message that arrived. Saying so, and
+    // giving the customer a way through, is better than letting the
+    // form fall over and losing what they wrote.
+    console.error("[contact] the enquiry could not be recorded:", err);
+    return {
+      ok: false,
+      message: `We could not record your message just now. Please email us at ${STORE.email} and we will pick it up.`,
+    };
+  }
 
   return {
     ok: true,
-    message:
-      "Thanks — your message is with our team. We reply to every enquiry within one working day.",
+    message: `Thanks — your message is with our team, reference ${saved.id}. We reply to every enquiry within one working day.`,
   };
 }
 

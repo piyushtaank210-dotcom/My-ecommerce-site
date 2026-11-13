@@ -13,7 +13,7 @@ import {
   Truck,
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { ContactForm } from "@/components/ContactForm";
+import { ContactForm, SupportStatus } from "@/components/ContactForm";
 import { STORE } from "@/lib/store-info";
 
 export const metadata: Metadata = {
@@ -251,19 +251,37 @@ export default function ContactPage() {
 
           {/* Right — the form. */}
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-6">
-              <h2 className="text-[17px] font-bold text-ink">Send us a message</h2>
-              <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
-                Tell us what you need and we will reply by email. The more
-                detail you give, the less we have to ask you back.
-              </p>
-              <div className="mt-5">
+            <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-card sm:p-7">
+              {/* A thin brand line across the top, so the card reads as
+                  part of the shop rather than a box that was dropped in,
+                  and a soft glow behind it so it sits on the page. */}
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-brand via-brand/55 to-transparent"
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-brand/[0.07] blur-3xl"
+              />
+
+              <div className="relative">
+                <SupportStatus />
+                <h2 className="mt-3 text-[21px] font-bold tracking-[-0.02em] text-ink">
+                  Send us a message
+                </h2>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-gray-500">
+                  Tell us what you need and we will reply by email. The more
+                  detail you give, the less we have to ask you back.
+                </p>
+              </div>
+
+              <div className="relative mt-6">
                 <ContactForm />
               </div>
             </div>
 
             {/* What a reply looks like, so the wait is not a mystery. */}
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+            <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-5">
               <h3 className="text-[14px] font-semibold text-ink">
                 What a reply looks like
               </h3>

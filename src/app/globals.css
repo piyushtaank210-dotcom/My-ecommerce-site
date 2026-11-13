@@ -162,6 +162,38 @@
     font-size: 0.9375rem;
   }
 
+  /* The one button on the page that matters — sending the message.
+     It is the only gradient in the shop, so it reads as the way
+     through. */
+  .btn-brand {
+    background-color: var(--color-brand);
+    background-image: linear-gradient(
+      100deg,
+      var(--color-brand) 0%,
+      #0a86dd 46%,
+      var(--color-brand-dark) 100%
+    );
+    color: #fff;
+    box-shadow: 0 10px 26px -12px rgb(0 113 197 / 0.7);
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      filter 0.15s ease;
+  }
+
+  .btn-brand:not(:disabled):hover {
+    transform: translateY(-1px);
+    filter: saturate(1.08);
+    box-shadow: 0 14px 32px -12px rgb(0 113 197 / 0.75);
+  }
+
+  /* The caret on the question that writes itself into the contact
+     form. It is the only blinking thing on the site, and it only
+     blinks while the question is being written. */
+  .caret-blink {
+    animation: caret-blink 1.05s linear infinite;
+  }
+
   .btn-sm {
     padding: 0.45rem 0.75rem;
     font-size: 0.8125rem;
@@ -546,6 +578,17 @@
   }
   to {
     transform: scaleX(1);
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
   }
 }
 

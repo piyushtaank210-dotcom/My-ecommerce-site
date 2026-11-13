@@ -27,6 +27,15 @@ export const STORE = {
   /** When a real person is at the other end of the email. */
   hours: "Monday to Saturday, 9am – 7pm IST",
 
+  /** The same hours, short enough to sit on one line. */
+  hoursShort: "Mon–Sat, 9am–7pm IST",
+
+  /** The same hours as numbers, so the live status on the contact form
+      can work them out without parsing the sentence above. IST, on the
+      24-hour clock. */
+  openHour: 9,
+  closeHour: 19,
+
   /**
    * The legal identity of the business. These are optional — the homepage
    * leaves out whatever is still blank.
