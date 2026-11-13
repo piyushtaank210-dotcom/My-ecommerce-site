@@ -254,7 +254,8 @@ export default function ContactPage() {
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-6">
               <h2 className="text-[17px] font-bold text-ink">Send us a message</h2>
               <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
-                Fill in the form and we will reply by email.
+                Tell us what you need and we will reply by email. The more
+                detail you give, the less we have to ask you back.
               </p>
               <div className="mt-5">
                 <ContactForm />

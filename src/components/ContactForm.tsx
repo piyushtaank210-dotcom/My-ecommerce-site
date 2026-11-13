@@ -2,14 +2,21 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Send, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import {
+  Loader2,
+  Send,
+  CheckCircle2,
+  Clock,
+  ShieldCheck,
+} from "lucide-react";
 import { sendContactMessageAction, type ContactState } from "@/lib/actions";
 
 const SUBJECTS = [
-  { value: "product", label: "Product inquiry" },
-  { value: "order", label: "Order or delivery" },
-  { value: "support", label: "Setup and support" },
-  { value: "returns", label: "Returns and warranty" },
+  { value: "product", label: "A product I am considering" },
+  { value: "order", label: "An order I have placed" },
+  { value: "support", label: "Setting something up" },
+  { value: "returns", label: "A return, replacement or warranty" },
   { value: "other", label: "Something else" },
 ];
 
@@ -28,14 +35,26 @@ export function ContactForm() {
 
   if (sent) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
-        <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-tint text-brand">
+      <div className="rounded-xl border border-green-200 bg-green-50/60 p-5 sm:p-6">
+        <span className="grid h-11 w-11 place-items-center rounded-full bg-green-100 text-green-700">
           <CheckCircle2 className="h-6 w-6" />
         </span>
-        <h2 className="mt-4 text-[17px] font-bold text-ink">Message received</h2>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-gray-500">
+        <h3 className="mt-4 text-[17px] font-bold text-ink">Message received</h3>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-gray-600">
           {state.message}
         </p>
+
+        <dl className="mt-4 space-y-1.5 border-t border-green-200/70 pt-4 text-[12.5px] text-gray-600">
+          <div className="flex gap-2">
+            <dt className="font-semibold text-ink">Next</dt>
+            <dd>A person reads it, usually within one working day.</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-ink">Where</dt>
+            <dd>Your message is in our enquiry queue, in the order it arrived.</dd>
+          </div>
+        </dl>
+
         <button
           type="button"
           onClick={() => setSent(false)}
@@ -62,7 +81,7 @@ export function ContactForm() {
         <Field
           label="Your name"
           name="name"
-          placeholder="Arjun Mehta"
+          placeholder="Write your name"
           error={errors.name}
           autoComplete="name"
         />
@@ -70,7 +89,7 @@ export function ContactForm() {
           label="Email address"
           name="email"
           type="email"
-          placeholder="you@example.com"
+          placeholder="you@email.com"
           error={errors.email}
           autoComplete="email"
         />
@@ -81,40 +100,39 @@ export function ContactForm() {
           label="Phone number"
           name="phone"
           type="tel"
-          placeholder="+91 98760 22697"
+          placeholder="+91 98765 43210"
           error={errors.phone}
           autoComplete="tel"
+          hint="Optional — it is the quickest way to reach you."
         />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="subject" className="label">
-            What is this about?
-          </label>
-          <select
-            id="subject"
-            name="subject"
-            defaultValue="product"
-            className={`input h-[42px] cursor-pointer ${errors.subject ? "input-error" : ""}`}
-          >
-            {SUBJECTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          {errors.subject && (
-            <p className="mt-1 text-[12.5px] text-red-600">{errors.subject}</p>
-          )}
-        </div>
-
         <Field
-          label="Order ID (optional)"
+          label="Order ID"
           name="orderId"
           placeholder="PFJTTPT7"
           error={errors.orderId}
+          hint="Optional — it is in your order confirmation."
         />
+      </div>
+
+      <div>
+        <label htmlFor="subject" className="label">
+          What is this about?
+        </label>
+        <select
+          id="subject"
+          name="subject"
+          defaultValue="product"
+          className={`input h-[42px] cursor-pointer ${errors.subject ? "input-error" : ""}`}
+        >
+          {SUBJECTS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        {errors.subject && (
+          <p className="mt-1 text-[12.5px] text-red-600">{errors.subject}</p>
+        )}
       </div>
 
       <div>
@@ -124,13 +142,17 @@ export function ContactForm() {
         <textarea
           id="message"
           name="message"
-          rows={6}
+          rows={5}
           placeholder="Tell us what you need — the product, the order, or the problem."
           aria-invalid={Boolean(errors.message)}
           className={`input resize-none ${errors.message ? "input-error" : ""}`}
         />
-        {errors.message && (
+        {errors.message ? (
           <p className="mt-1 text-[12.5px] text-red-600">{errors.message}</p>
+        ) : (
+          <p className="mt-1.5 text-[12px] leading-relaxed text-gray-500">
+            The more you tell us, the less we have to ask you back.
+          </p>
         )}
       </div>
 
@@ -138,9 +160,22 @@ export function ContactForm() {
         <SubmitLabel />
       </button>
 
-      <p className="text-center text-[12.5px] text-gray-500">
-        Demo store — your message is recorded here, and no email is sent.
-      </p>
+      {/* What actually happens to the message — which is what a person
+          buying a console is really asking when they see this form. */}
+      <div className="space-y-2 border-t border-gray-200 pt-4">
+        <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-gray-600">
+          <Clock className="mt-[2px] h-3.5 w-3.5 shrink-0 text-gray-400" />
+          A person reads every message, usually within one working day.
+        </p>
+        <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-gray-600">
+          <ShieldCheck className="mt-[2px] h-3.5 w-3.5 shrink-0 text-gray-400" />
+          Your details stay with us. We do not pass them on — read the{" "}
+          <Link href="/privacy-policy" className="font-medium text-brand hover:underline">
+            privacy policy
+          </Link>
+          .
+        </p>
+      </div>
     </form>
   );
 }
@@ -170,6 +205,7 @@ function Field({
   type = "text",
   placeholder,
   autoComplete,
+  hint,
 }: {
   label: string;
   name: string;
@@ -177,6 +213,8 @@ function Field({
   type?: string;
   placeholder?: string;
   autoComplete?: string;
+  /** A line under the field that says what it is for. */
+  hint?: string;
 }) {
   return (
     <div>
@@ -192,7 +230,11 @@ function Field({
         aria-invalid={Boolean(error)}
         className={`input h-[42px] ${error ? "input-error" : ""}`}
       />
-      {error && <p className="mt-1 text-[12.5px] text-red-600">{error}</p>}
+      {error ? (
+        <p className="mt-1 text-[12.5px] text-red-600">{error}</p>
+      ) : hint ? (
+        <p className="mt-1 text-[11.5px] leading-relaxed text-gray-500">{hint}</p>
+      ) : null}
     </div>
   );
 }

@@ -80,7 +80,7 @@ export function CheckoutForm({
           <Field
             label="Full name"
             name="name"
-            placeholder="Arjun Mehta"
+            placeholder="Write your name"
             error={errors.name}
             autoComplete="name"
             defaultValue={account?.name ?? preferred?.name ?? ""}

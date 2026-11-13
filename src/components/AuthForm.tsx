@@ -47,7 +47,7 @@ export function AuthForm({
         <Field
           label="Full name"
           name="name"
-          placeholder="Arjun Mehta"
+          placeholder="Write your name"
           autoComplete="name"
           error={errors.name}
         />
