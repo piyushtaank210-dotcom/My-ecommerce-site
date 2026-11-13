@@ -221,6 +221,9 @@ export async function removeFromCartAction(lineId: number): Promise<void> {
 const contactSchema = z.object({
   name: z.string().trim().min(2, "Enter your name."),
   email: z.string().trim().email("Enter a valid email address."),
+  // The phone number is optional, but when the customer gives one it
+  // goes in the notification the shop gets.
+  phone: z.string().trim().max(20, "That phone number is too long.").optional(),
   subject: z.enum(["product", "order", "support", "returns", "other"]),
   orderId: z.string().trim().optional(),
   message: z
@@ -242,6 +245,7 @@ export async function sendContactMessageAction(
   const parsed = contactSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    phone: formData.get("phone"),
     subject: formData.get("subject"),
     orderId: formData.get("orderId") ?? undefined,
     message: formData.get("message"),
@@ -262,6 +266,7 @@ export async function sendContactMessageAction(
   const saved = await createContactMessage({
     name: parsed.data.name,
     email: parsed.data.email,
+    phone: parsed.data.phone || null,
     subject: parsed.data.subject,
     orderId: parsed.data.orderId || null,
     message: parsed.data.message,

@@ -77,6 +77,17 @@ export function ContactForm() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Phone number"
+          name="phone"
+          type="tel"
+          placeholder="+91 98760 22697"
+          error={errors.phone}
+          autoComplete="tel"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="subject" className="label">
             What is this about?

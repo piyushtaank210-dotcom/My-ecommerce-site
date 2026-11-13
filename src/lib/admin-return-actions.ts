@@ -24,7 +24,6 @@ import {
 import {
   recordAdminAction,
   recordInspection,
-  notifyCustomerAbout,
   updateRefundRecord,
   calculateRefund,
   getRefund,
@@ -38,7 +37,6 @@ import {
   REPLACEMENT_DELIVERY_STATUSES,
   type ReplacementDeliveryStatus,
 } from "./return-status";
-import type { NotificationKind } from "./notifications";
 
 export type AdminReturnState = {
   ok: boolean;
@@ -58,20 +56,21 @@ const revalidateAll = (returnId: string) => {
 };
 
 /**
- * Writes down what a member of the back office did, and tells the
- * customer.
+ * Writes down what a member of the back office did.
  *
  * Every decision is written twice: once in the request's own history,
  * where it belongs, and once in the audit log, which answers "who did
- * what, and when". The customer is told when the change is one they
- * would want to know about.
+ * what, and when".
+ *
+ * The customer is told by the data layer, where the request actually
+ * changes — so that every route into the request tells them, and only
+ * once.
  */
 async function note(input: {
   returnId: string;
   action: string;
   staff: { id: number; name: string; role: string };
   note?: string | null;
-  customer?: { kind: NotificationKind; title: string; body: string } | null;
 }): Promise<void> {
   await recordAdminAction({
     returnId: input.returnId,
@@ -84,10 +83,6 @@ async function note(input: {
     },
     note: input.note ?? null,
   });
-
-  if (input.customer) {
-    await notifyCustomerAbout(input.returnId, input.customer);
-  }
 }
 
 /**
@@ -215,11 +210,6 @@ export async function schedulePickupAction(
       action: "schedule_pickup",
       staff,
       note: notes || null,
-      customer: {
-        kind: "pickup_scheduled",
-        title: `Pickup arranged for request ${returnId}`,
-        body: `We have arranged for ${courier} to collect your parcel. The tracking number is ${tracking}, and the pickup is scheduled for ${date}.`,
-      },
     });
   }
   return result;
@@ -303,14 +293,6 @@ export async function recordQcAction(
       action: "inspect",
       staff,
       note: notes,
-      customer: {
-        kind: "inspection_completed",
-        title: `Inspection finished for request ${returnId}`,
-        body:
-          qcStatus === "passed"
-            ? `We have finished checking the unit you sent back and it has passed our inspection. The next step is on its way.`
-            : `We have finished checking the unit you sent back. We will write to you about what happens next.`,
-      },
     });
   }
   return result;
@@ -655,11 +637,6 @@ export async function markCompletedAction(
       action: "resolve",
       staff,
       note: notes || null,
-      customer: {
-        kind: "resolved",
-        title: `Request ${returnId} is resolved`,
-        body: `Your request ${returnId} is now closed. Thank you for your patience.`,
-      },
     });
   }
   return result;
@@ -698,11 +675,6 @@ export async function requestMoreInfoAction(
       action: "request_evidence",
       staff,
       note: message,
-      customer: {
-        kind: "evidence_required",
-        title: `We need a little more for request ${returnId}`,
-        body: `${message}\n\nYou can add the missing evidence on your request page.`,
-      },
     });
   }
   return result;
@@ -738,11 +710,6 @@ export async function markReceivedAction(
       action: "mark_received",
       staff,
       note: notes || null,
-      customer: {
-        kind: "received",
-        title: `We have your parcel for request ${returnId}`,
-        body: `The unit you sent back has arrived with us. We are checking it now and will write to you with the outcome.`,
-      },
     });
   }
   return result;

@@ -224,6 +224,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   -- The customer's address, for a guest order or an email.
   email       TEXT,
   return_id   TEXT REFERENCES return_requests(id) ON DELETE CASCADE,
+  -- The order the message is about, when it is about an order.
+  order_id    TEXT REFERENCES orders(id) ON DELETE CASCADE,
   -- 'in_app' or 'email'.
   channel     TEXT NOT NULL DEFAULT 'in_app',
   -- What the message is about: 'submitted', 'under_review',
@@ -233,13 +235,24 @@ CREATE TABLE IF NOT EXISTS notifications (
   kind        TEXT NOT NULL,
   title       TEXT NOT NULL,
   body        TEXT NOT NULL,
-  -- 'unread', 'read', 'sent', 'not_configured' or 'failed'.
+  -- Whether the customer has read it on their dashboard: 'unread' or
+  -- 'read'. This is the dashboard's own business and nothing else
+  -- touches it.
   status      TEXT NOT NULL DEFAULT 'unread',
+  -- What became of the email: 'sent', 'not_configured' or 'failed'. It
+  -- is kept apart from the read state, because a message can be
+  -- unread and its email can still have gone out.
+  email_status TEXT,
+  -- Why the email failed, when it did.
+  email_error TEXT,
   -- What makes this message unique. The same change never sends the
   -- same message twice.
   dedupe_key  TEXT UNIQUE,
   read_at     TEXT,
+  -- When the email went out.
   sent_at     TEXT,
+  -- When the email was recorded as sent, failed, or not configured.
+  email_sent_at TEXT,
   created_at  TEXT NOT NULL ${now}
 );
 
@@ -546,6 +559,8 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   id         ${identity},
   name       TEXT NOT NULL,
   email      TEXT NOT NULL,
+  -- The customer's phone number, when they gave one.
+  phone      TEXT,
   subject    TEXT NOT NULL,
   order_id   TEXT,
   message    TEXT NOT NULL,

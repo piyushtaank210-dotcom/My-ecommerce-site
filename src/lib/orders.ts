@@ -7,6 +7,7 @@ import {
   takeStockForOrder,
 } from "./inventory";
 import type { Order, OrderItem } from "./types";
+import { money } from "./format";
 
 type Row = Record<string, unknown>;
 const str = (v: unknown) => String(v ?? "");
@@ -45,7 +46,14 @@ export {
   type OrderStatus,
 } from "./order-status";
 
-import { type OrderStatus } from "./order-status";
+import {
+  type OrderStatus,
+  ORDER_STATUS_LABEL,
+} from "./order-status";
+import {
+  notifyCustomerAboutOrder,
+  type NotificationKind,
+} from "./notifications";
 
 export type CheckoutLine = {
   productSlug: string;
@@ -137,7 +145,60 @@ export async function createOrder(
     }
   }));
 
+  // The customer is told their order is in. It is sent after the order
+  // is written, so that a mail that cannot go out never stops the order
+  // from being placed.
+  await notifyOrderPlaced(id, input, lines, totals);
+
   return id;
+}
+
+/**
+ * Tells the customer their order has been placed.
+ *
+ * The message lists what they ordered and what they paid, so that the
+ * order in their inbox is the order they can check against their card.
+ */
+async function notifyOrderPlaced(
+  orderId: string,
+  input: CheckoutInput,
+  lines: CheckoutLine[],
+  totals: { subtotal: number; shipping: number; total: number }
+): Promise<void> {
+  const email = input.email.trim();
+  if (!email) return;
+
+  const items = lines
+    .map(
+      (l) =>
+        `  ${l.name}${l.variantName ? ` (${l.variantName})` : ""} — ${l.quantity} × ${money(l.price)}`
+    )
+    .join("\n");
+
+  await notifyCustomerAboutOrder({
+    userId: null,
+    email,
+    orderId,
+    kind: "order_confirmed",
+    title: `Order ${orderId} confirmed`,
+    body: [
+      `Thank you for your order, ${input.name.trim() || "there"}.`,
+      "",
+      `Order: ${orderId}`,
+      "",
+      "What you ordered:",
+      items,
+      "",
+      `Subtotal: ${money(totals.subtotal)}`,
+      `Delivery: ${money(totals.shipping)}`,
+      `Total: ${money(totals.total)}`,
+      "",
+      `Paid by: ${input.paymentMethod}`,
+      `Delivering to: ${input.address1}${input.address2 ? `, ${input.address2}` : ""}, ${input.city}, ${input.state} — ${input.pincode}`,
+      "",
+      "We will write to you again when your order is on its way.",
+    ].join("\n"),
+  });
 }
 
 /**
@@ -243,12 +304,93 @@ export async function applyOrderStatus(
       }
     }));
 
+    // The customer is told where their order has got to. It is sent
+    // after the change is recorded, so that a mail that cannot go out
+    // never stops the order from moving.
+    await notifyOrderStatus(orderId, status);
+
     return { ok: true };
   } catch (err) {
     if (err instanceof InventoryError) return { ok: false, message: err.message };
     throw err;
   }
 }
+
+/**
+ * Tells the customer where their order has got to.
+ *
+ * Every step of the order has a message: packed, shipped, delivered,
+ * cancelled. The message is recorded on their dashboard and, when the
+ * shop has a mail service, sent to them.
+ */
+async function notifyOrderStatus(
+  orderId: string,
+  status: OrderStatus
+): Promise<void> {
+  const db = getDb();
+
+  const order = (await db
+    .prepare(
+      "SELECT id, user_id, name, email, status FROM orders WHERE id = ?"
+    )
+    .get(orderId)) as
+    | { id?: string; user_id?: number | null; name?: string; email?: string }
+    | undefined;
+
+  if (!order) return;
+
+  // The customer has to be able to be reached.
+  const email = str(order.email);
+  if (!email) return;
+
+  const kind = ORDER_STATUS_NOTIFICATION[status];
+  if (!kind) return;
+
+  const message = ORDER_STATUS_MESSAGE[status];
+  if (!message) return;
+
+  const body = message({
+    name: str(order.name),
+    orderId: str(order.id),
+  });
+
+  await notifyCustomerAboutOrder({
+    userId: order.user_id ?? null,
+    email,
+    orderId: str(order.id),
+    kind,
+    title: `Order ${str(order.id)} — ${ORDER_STATUS_LABEL[status]}`,
+    body,
+  });
+}
+
+/**
+ * Which message each step of an order carries.
+ */
+const ORDER_STATUS_NOTIFICATION: Partial<
+  Record<OrderStatus, NotificationKind>
+> = {
+  packed: "order_packed",
+  shipped: "order_shipped",
+  delivered: "order_delivered",
+  cancelled: "order_cancelled",
+};
+
+/**
+ * What each step of an order says to the customer.
+ */
+const ORDER_STATUS_MESSAGE: Partial<
+  Record<OrderStatus, (order: { name: string; orderId: string }) => string>
+> = {
+  packed: ({ name, orderId }) =>
+    `Good news, ${name || "there"} — order ${orderId} has been packed and is getting ready to go out. You will hear from us again when it leaves us.`,
+  shipped: ({ name, orderId }) =>
+    `Order ${orderId} is on its way to you. You will get the delivery updates on this order, and you can see where it has got to on your account.`,
+  delivered: ({ name, orderId }) =>
+    `Order ${orderId} has been delivered. Thank you for buying from ConsoleSeller, ${name || "there"}. If anything is not right with it, tell us within seven days and we will put it right.`,
+  cancelled: ({ name, orderId }) =>
+    `Order ${orderId} has been cancelled. If you paid for it, the money goes back to you by the same method you paid with — you will hear from us when it has been sent.`,
+};
 
 export async function getOrder(id: string): Promise<Order | null> {
   const db = getDb();

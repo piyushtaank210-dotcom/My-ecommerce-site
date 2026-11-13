@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, BellOff, CheckCheck, ArrowRight } from "lucide-react";
+import { Bell, BellOff, CheckCheck, ArrowRight, MailCheck } from "lucide-react";
 import { requireUser } from "@/lib/guard";
 import {
   getNotificationsForUser,
@@ -104,10 +104,31 @@ export default async function AccountNotificationsPage() {
                         <ArrowRight className="h-3 w-3" />
                       </Link>
                     )}
-                    {n.status === "not_configured" && (
+                    {!n.return_id && n.order_id && (
+                      <Link
+                        href={`/order/${n.order_id}`}
+                        className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                      >
+                        See order {n.order_id}
+                        <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    )}
+                    {n.email_status === "sent" && (
+                      <span className="inline-flex items-center gap-1 text-[11.5px] text-gray-400">
+                        <MailCheck className="h-3 w-3" />
+                        Also sent to your email
+                      </span>
+                    )}
+                    {n.email_status === "not_configured" && (
                       <span className="text-[11.5px] text-gray-400">
                         We have recorded this. Email is not set up on the
                         shop yet.
+                      </span>
+                    )}
+                    {n.email_status === "failed" && (
+                      <span className="text-[11.5px] text-amber-600">
+                        We could not send this by email. It is here, and
+                        the shop has been told.
                       </span>
                     )}
                   </div>

@@ -36,7 +36,7 @@ import {
   REPLACEMENT_DELIVERY_LABEL,
 } from "./return-status";
 import { getReturnWindowDays } from "./settings";
-import { notifyAdmins, notifyCustomer } from "./notifications";
+import { notifyAdmins, notifyCustomer, type NotificationKind } from "./notifications";
 import {
   createRefundRecord,
   createReplacementRecord,
@@ -1116,6 +1116,50 @@ export async function startReview(
 }
 
 /**
+ * Tells the customer about their request.
+ *
+ * It looks up who the customer is and who the order is, and sends the
+ * message. Every step of the journey goes through here, so that no step
+ * can be forgotten — and so that a message always carries the request it
+ * is about and the order it is about.
+ *
+ * It never throws: a notification that cannot be sent must not stop
+ * the decision that caused it from being recorded.
+ */
+async function tellCustomer(
+  returnId: string,
+  message: { kind: NotificationKind; title: string; body: string }
+): Promise<void> {
+  try {
+    const db = getDb();
+    const row = (await db
+      .prepare(
+        `SELECT r.order_id, r.user_id, COALESCE(r.customer_email, o.email) AS customer_email
+           FROM return_requests r JOIN orders o ON o.id = r.order_id
+          WHERE r.id = ?`
+      )
+      .get(returnId)) as Row | undefined;
+
+    if (!row) return;
+
+    await notifyCustomer({
+      userId: row.user_id === null ? null : num(row.user_id),
+      email: strOrNull(row.customer_email),
+      returnId,
+      orderId: str(row.order_id),
+      kind: message.kind,
+      title: message.title,
+      body: message.body,
+    });
+  } catch (err) {
+    console.warn(
+      `[returns] the customer could not be told about ${returnId}:`,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/**
  * Admin schedules pickup with courier partner.
  */
 export async function schedulePickup(
@@ -1130,7 +1174,7 @@ export async function schedulePickup(
 ): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
       .get(id)) as { status?: string } | undefined;
@@ -1178,7 +1222,17 @@ export async function schedulePickup(
     ));
 
     return { ok: true, message: "Pickup scheduled successfully." };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "pickup_scheduled",
+      title: `Pickup arranged for request ${id}`,
+      body: `We have arranged for ${pickup.courier.trim()} to collect your parcel. The tracking number is ${pickup.tracking.trim()}, and the pickup is scheduled for ${pickup.date.trim()}.`,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1246,7 +1300,7 @@ export async function recordQcInspection(
 ): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
       .get(id)) as Row | undefined;
@@ -1321,7 +1375,20 @@ export async function recordQcInspection(
     ));
 
     return { ok: true, message: `QC inspection recorded (${inspection.qcStatus}).` };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "inspection_completed",
+      title: `Inspection finished for request ${id}`,
+      body:
+        inspection.qcStatus === "passed"
+          ? "We have finished checking the unit you sent back and it has passed our inspection. The next step is on its way."
+          : "We have finished checking the unit you sent back. We will write to you about what happens next.",
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1487,7 +1554,7 @@ export async function rejectRefund(
   const text = reason.trim();
   if (!text) return { ok: false, message: "Say why the refund is being refused." };
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
       .get(id)) as Row | undefined;
@@ -1515,7 +1582,21 @@ export async function rejectRefund(
     ).run(id, staffUser.id, staffUser.name, `Refund refused: ${text}`));
 
     return { ok: true, message: "The refund has been refused." };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "refund_failed",
+      title: `The refund for request ${id} could not be paid`,
+      body: `We were not able to go ahead with the refund for your request. The reason is below.
+
+${text}
+
+If you think this is wrong, please write to us and we will look at it again.`,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1532,7 +1613,7 @@ export async function markCompleted(
 ): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT * FROM return_requests WHERE id = ?")
       .get(id)) as Row | undefined;
@@ -1590,7 +1671,17 @@ export async function markCompleted(
     ));
 
     return { ok: true, message: "Request completed." };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "resolved",
+      title: `Request ${id} is resolved`,
+      body: `Your request ${id} is now closed. Thank you for your patience.`,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1613,7 +1704,7 @@ export async function dispatchMissingAccessories(
   if (!courier) return { ok: false, message: "Say which courier the parts went with." };
   if (!tracking) return { ok: false, message: "Give the tracking number for the parts." };
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT status, type FROM return_requests WHERE id = ?")
       .get(id)) as { status?: string; type?: string } | undefined;
@@ -1657,7 +1748,17 @@ export async function dispatchMissingAccessories(
       ok: true,
       message: "The missing accessories have been sent to the customer.",
     };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "accessories_dispatched",
+      title: `Your missing accessories are on their way`,
+      body: `The parts that were missing from your box have been sent with ${courier}. The tracking number is ${tracking}. We hope you have the rest of the console working properly.`,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1675,7 +1776,7 @@ export async function requestMoreInformation(
   const text = message.trim();
   if (!text) return { ok: false, message: "Say what you need from the customer." };
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
       .get(id)) as { status?: string } | undefined;
@@ -1697,7 +1798,19 @@ export async function requestMoreInformation(
     ).run(id, staffUser.id, staffUser.name, `More information requested: ${text}`));
 
     return { ok: true, message: "The customer has been asked for more information." };
-  }));
+  });
+
+  if (result.ok) {
+    // The customer is told what is needed, so that they know what to
+    // send and they can send it without finding the thread again.
+    await tellCustomer(id, {
+      kind: "evidence_required",
+      title: `We need a little more for request ${id}`,
+      body: `${text}\n\nYou can add what is missing on your request page — the photographs and the video you send are kept with it.`,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -1712,7 +1825,7 @@ export async function markProductReceived(
 ): Promise<{ ok: boolean; message: string }> {
   const db = getDb();
 
-  return (await withTransaction(async (db) => {
+  const result = await withTransaction(async (db) => {
     const req = (await db
       .prepare("SELECT status FROM return_requests WHERE id = ?")
       .get(id)) as { status?: string } | undefined;
@@ -1745,7 +1858,17 @@ export async function markProductReceived(
     ));
 
     return { ok: true, message: "Product marked as received." };
-  }));
+  });
+
+  if (result.ok) {
+    await tellCustomer(id, {
+      kind: "received",
+      title: `We have your parcel for request ${id}`,
+      body: "The unit you sent back has arrived with us. We are checking it now and will write to you with the outcome.",
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -2165,9 +2288,9 @@ export async function setReplacementDelivery(
         action: "resolve",
         note: "The replacement has been delivered and the request is closed.",
         tellCustomer: {
-          kind: "resolved",
-          title: `Request ${id} is resolved`,
-          body: "Your replacement has been delivered. Thank you for your patience.",
+          kind: "replacement_delivered",
+          title: `Your replacement has arrived`,
+          body: "The replacement for your request has been delivered. Thank you for your patience.",
         },
       });
     }

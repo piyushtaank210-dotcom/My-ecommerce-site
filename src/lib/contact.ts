@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { sendEmail } from "./notifications";
+import { sendEmail, enquiryNotificationAddress } from "./mail";
 
 export const CONTACT_SUBJECTS = [
   "product",
@@ -21,6 +21,8 @@ export {
 export type ContactMessage = {
   name: string;
   email: string;
+  /** The phone number, when the customer gave one. */
+  phone?: string | null;
   subject: ContactSubject;
   orderId: string | null;
   message: string;
@@ -34,20 +36,6 @@ export const CONTACT_SUBJECT_LABEL: Record<ContactSubject, string> = {
   returns: "A return, replacement or refund",
   other: "Something else",
 };
-
-/**
- * Where the shop's own enquiries are sent.
- *
- * It is the shop's address, and it can be changed with one environment
- * variable — `ENQUIRY_NOTIFICATION_EMAIL`.
- */
-export function enquiryNotificationAddress(): string {
-  return (
-    process.env.ENQUIRY_NOTIFICATION_EMAIL ||
-    process.env.NEXT_PUBLIC_STORE_EMAIL ||
-    "consoleseller.in@gmail.com"
-  );
-}
 
 /**
  * Records an enquiry from the contact page.
@@ -64,11 +52,18 @@ export async function createContactMessage(
 
   const inserted = (await db
     .prepare(
-      `INSERT INTO contact_messages (name, email, subject, order_id, message)
-       VALUES (?,?,?,?,?)
+      `INSERT INTO contact_messages (name, email, phone, subject, order_id, message)
+       VALUES (?,?,?,?,?,?)
        RETURNING id`
     )
-    .run(input.name, input.email, input.subject, input.orderId, input.message)) as {
+    .run(
+      input.name,
+      input.email,
+      input.phone || null,
+      input.subject,
+      input.orderId,
+      input.message
+    )) as {
     lastInsertRowid?: number;
     id?: number;
   };
@@ -96,15 +91,27 @@ export async function notifyEnquiryByEmail(
   const db = getDb();
   const to = enquiryNotificationAddress();
 
+  // When the enquiry arrived, as it was recorded. The message says the
+  // time the enquiry was made, not the time this attempt was made — so
+  // that sending it again is the same message to Resend, and the
+  // idempotency key means what it is meant to.
+  const received = await db
+    .prepare("SELECT created_at FROM contact_messages WHERE id = ?")
+    .get(id);
+  const receivedAt =
+    (received?.created_at ? String(received.created_at) : "") ||
+    new Date().toISOString();
+
   const subject = `New enquiry: ${CONTACT_SUBJECT_LABEL[enquiry.subject] ?? enquiry.subject}`;
   const body = [
     "A customer has sent the shop an enquiry.",
     "",
     `Name: ${enquiry.name}`,
     `Email: ${enquiry.email}`,
+    enquiry.phone ? `Phone: ${enquiry.phone}` : null,
     enquiry.orderId ? `Order: ${enquiry.orderId}` : null,
     `Subject: ${CONTACT_SUBJECT_LABEL[enquiry.subject] ?? enquiry.subject}`,
-    `Received: ${new Date().toISOString()}`,
+    `Received: ${receivedAt}`,
     "",
     "Message:",
     enquiry.message,
@@ -114,12 +121,20 @@ export async function notifyEnquiryByEmail(
     .filter((line) => line !== null)
     .join("\n");
 
-  const result = await sendEmail({ to, subject, body });
+  const result = await sendEmail({
+    to,
+    subject,
+    body,
+    // The enquiry's own number is the key, so that sending it again is
+    // the same message to Resend and not a second one.
+    idempotencyKey: `enquiry:${id}`,
+  });
 
   await db
     .prepare(
       `UPDATE contact_messages
-          SET email_status = ?, email_sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE email_sent_at END
+          SET email_status = ?,
+              email_sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE email_sent_at END
         WHERE id = ?`
     )
     .run(result.status, result.status, id);
@@ -152,13 +167,14 @@ export async function resendEnquiryEmail(id: number): Promise<{
 
   const row = (await db
     .prepare(
-      "SELECT id, name, email, subject, order_id, message FROM contact_messages WHERE id = ?"
+      "SELECT id, name, email, phone, subject, order_id, message FROM contact_messages WHERE id = ?"
     )
     .get(id)) as
     | {
         id: number;
         name: string;
         email: string;
+        phone: string | null;
         subject: ContactSubject;
         order_id: string | null;
         message: string;
@@ -167,9 +183,13 @@ export async function resendEnquiryEmail(id: number): Promise<{
 
   if (!row) return { ok: false, message: "No such enquiry." };
 
+  // The same enquiry, with the same details — so that sending it again
+  // is the same message to Resend, and the idempotency key means what
+  // it is meant to.
   const status = await notifyEnquiryByEmail(id, {
     name: row.name,
     email: row.email,
+    phone: row.phone,
     subject: row.subject,
     orderId: row.order_id,
     message: row.message,

@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { sendEmail, type MailResult } from "./mail";
 
 /**
  * What the shop tells people, and how it tells them.
@@ -7,14 +8,19 @@ import { getDb } from "./db";
  * when there is nowhere to send it to. The customer sees their messages
  * on their dashboard; the back office sees the ones for staff.
  *
- * An email is sent only when the shop has been told how to send one.
- * When it has not, the message is still recorded — marked as not sent —
- * so the shop knows what it owes the customer rather than quietly
+ * An email is sent only when the shop has been given the keys it
+ * needs. When it has not, the message is still recorded — marked as not
+ * sent — so the shop knows what it owes the customer rather than quietly
  * forgetting.
  */
 
 /**
  * The kinds of message the shop sends about a request.
+ *
+ * Every step of the journey has one: the request being made, the shop
+ * looking at it, evidence being asked for, the decision, the pickup, the
+ * product coming back, the inspection, and then whichever remedy the
+ * customer is getting — a replacement or a refund.
  */
 export const NOTIFICATION_KINDS = [
   "submitted",
@@ -28,34 +34,28 @@ export const NOTIFICATION_KINDS = [
   "inspection_completed",
   "replacement_approved",
   "replacement_dispatched",
+  "replacement_delivered",
+  "accessories_dispatched",
   "refund_approved",
   "refund_processing",
   "refund_completed",
+  "refund_failed",
   "resolved",
   "cancelled",
+  // The messages about an order itself.
+  "order_confirmed",
+  "order_packed",
+  "order_shipped",
+  "order_delivered",
+  "order_cancelled",
+  "cancellation_requested",
+  "cancellation_approved",
+  "cancellation_rejected",
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
-/**
- * Whether the shop has been told how to send an email.
- *
- * There are two ways it can be set up: a Resend key, or a webhook of
- * the shop's own. With neither, the shop records its messages and does
- * not pretend to have sent anything.
- */
-export function emailIsConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY || process.env.MAIL_WEBHOOK_URL);
-}
-
-/** The address the shop sends from. */
-function fromAddress(): string {
-  return (
-    process.env.MAIL_FROM ||
-    process.env.NEXT_PUBLIC_STORE_EMAIL ||
-    "consoleseller.in@gmail.com"
-  );
-}
+export { emailIsConfigured } from "./mail";
 
 /**
  * A message to be sent.
@@ -69,6 +69,8 @@ export type NotificationInput = {
   email?: string | null;
   /** The request it is about. */
   returnId?: string | null;
+  /** The order it is about, when it is about an order. */
+  orderId?: string | null;
   /** What it is about. */
   kind: NotificationKind;
   /** The headline. */
@@ -85,6 +87,10 @@ export type NotificationInput = {
 /**
  * Records a message, and sends it if the shop can.
  *
+ * The message is written down first, and the email is sent after it.
+ * That order matters: if the email fails, the message is still on the
+ * customer's dashboard, and the shop knows the email did not go out.
+ *
  * It never throws: a message that cannot be sent must not stop the
  * decision that caused it from being recorded.
  */
@@ -95,8 +101,9 @@ export async function notify(input: NotificationInput): Promise<void> {
     const inserted = (await db
       .prepare(
         `INSERT INTO notifications
-           (audience, user_id, email, return_id, channel, kind, title, body, status, dedupe_key)
-         VALUES (?, ?, ?, ?, 'in_app', ?, ?, ?, 'unread', ?)
+           (audience, user_id, email, return_id, order_id, channel, kind, title, body,
+            status, dedupe_key)
+         VALUES (?, ?, ?, ?, ?, 'in_app', ?, ?, ?, 'unread', ?)
          ON CONFLICT (dedupe_key) DO NOTHING
          RETURNING id`
       )
@@ -105,112 +112,53 @@ export async function notify(input: NotificationInput): Promise<void> {
         input.userId ?? null,
         input.email ?? null,
         input.returnId ?? null,
+        input.orderId ?? null,
         input.kind,
         input.title,
         input.body,
         input.dedupeKey
       )) as { changes: number; lastInsertRowid?: number };
 
-    // The message was already recorded — it has been said before.
+    // The message was already recorded — it has been said before, and
+    // the email went out with it the first time.
     if (inserted.changes === 0) return;
 
-    if (!input.email) return;
+    if (!input.email) {
+      await db
+        .prepare(
+          "UPDATE notifications SET email_status = 'not_configured' WHERE dedupe_key = ?"
+        )
+        .run(input.dedupeKey);
+      return;
+    }
 
     const sent = await sendEmail({
       to: input.email,
       subject: input.title,
       body: input.body,
+      // The key tells Resend that this is a message it has already
+      // seen, so that a retry is not a second email.
+      idempotencyKey: input.dedupeKey,
     });
 
+    // The outcome of the email is kept apart from the read state. A
+    // message can be unread on the dashboard and its email can still
+    // have gone out, and the shop needs to be able to tell the two
+    // apart.
     await db
       .prepare(
         `UPDATE notifications
-            SET status = ?, sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE NULL END
+            SET email_status = ?,
+                email_error = ?,
+                email_sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE NULL END
           WHERE dedupe_key = ?`
       )
-      .run(sent.status, sent.status, input.dedupeKey);
+      .run(sent.status, sent.error ?? null, sent.status, input.dedupeKey);
   } catch (err) {
     console.warn(
       `[notifications] could not record "${input.kind}":`,
       err instanceof Error ? err.message : err
     );
-  }
-}
-
-/**
- * Sends one email.
- *
- * It is sent through Resend when the shop has a key for it, and through
- * the shop's own webhook when it has that instead. With neither, the
- * message is not sent and the shop is told so plainly.
- */
-export async function sendEmail(input: {
-  to: string;
-  subject: string;
-  body: string;
-}): Promise<{ status: "sent" | "not_configured" | "failed" }> {
-  const resendKey = process.env.RESEND_API_KEY;
-  const webhook = process.env.MAIL_WEBHOOK_URL;
-
-  if (!resendKey && !webhook) return { status: "not_configured" };
-
-  const text = `${input.body}\n\n— ConsoleSeller\n${fromAddress()}`;
-
-  try {
-    if (resendKey) {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: process.env.MAIL_FROM
-            ? `ConsoleSeller <${process.env.MAIL_FROM}>`
-            : `ConsoleSeller <${fromAddress()}>`,
-          to: [input.to],
-          subject: input.subject,
-          text,
-        }),
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        console.warn(
-          `[notifications] the mail service refused the message (${response.status}): ${detail}`
-        );
-        return { status: "failed" };
-      }
-      return { status: "sent" };
-    }
-
-    const response = await fetch(webhook!, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(process.env.MAIL_WEBHOOK_TOKEN
-          ? { Authorization: `Bearer ${process.env.MAIL_WEBHOOK_TOKEN}` }
-          : {}),
-      },
-      body: JSON.stringify({
-        to: input.to,
-        from: fromAddress(),
-        subject: input.subject,
-        text,
-      }),
-    });
-    if (!response.ok) {
-      console.warn(
-        `[notifications] the mail webhook refused the message (${response.status})`
-      );
-      return { status: "failed" };
-    }
-    return { status: "sent" };
-  } catch (err) {
-    console.warn(
-      "[notifications] could not send the message:",
-      err instanceof Error ? err.message : err
-    );
-    return { status: "failed" };
   }
 }
 
@@ -231,13 +179,71 @@ export async function notifyCustomer(input: {
     userId: input.userId ?? null,
     email: input.email ?? null,
     returnId: input.returnId,
+    orderId: input.orderId,
     kind: input.kind,
     title: input.title,
-    body: input.body,
+    // Every message carries the request it is about, the order it is
+    // about, and a way to go and look at it — so that the customer can
+    // answer without having to find the thread again.
+    body: [
+      input.body,
+      "",
+      `Request: ${input.returnId}`,
+      `Order: ${input.orderId}`,
+      `Track it: ${customerRequestLink(input.returnId)}`,
+    ].join("\n"),
     // One message of each kind per request. The same change never sends
     // the same message twice.
     dedupeKey: `return:${input.returnId}:${input.kind}`,
   });
+}
+
+/**
+ * A message to the customer about their order.
+ *
+ * It goes on their dashboard and, when the shop has a mail service, to
+ * their inbox. The key is the order and the step, so that a retry never
+ * sends a second copy.
+ */
+export async function notifyCustomerAboutOrder(input: {
+  userId?: number | null;
+  email?: string | null;
+  orderId: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+}): Promise<void> {
+  await notify({
+    audience: "customer",
+    userId: input.userId ?? null,
+    email: input.email ?? null,
+    orderId: input.orderId,
+    kind: input.kind,
+    title: input.title,
+    body: [
+      input.body,
+      "",
+      `Order: ${input.orderId}`,
+      `See it: ${customerOrderLink(input.orderId)}`,
+    ].join("\n"),
+    dedupeKey: `order:${input.orderId}:${input.kind}`,
+  });
+}
+
+/**
+ * Where the customer goes to see their request.
+ */
+function customerRequestLink(returnId: string): string {
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://consoleseller.in";
+  return `${base}/account/returns/${returnId}`;
+}
+
+/**
+ * Where the customer goes to see their order.
+ */
+function customerOrderLink(orderId: string): string {
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://consoleseller.in";
+  return `${base}/order/${orderId}`;
 }
 
 /**
@@ -270,17 +276,21 @@ export async function getNotificationsForUser(
   {
     id: number;
     return_id: string | null;
+    order_id: string | null;
     kind: string;
     title: string;
     body: string;
     status: string;
+    /** What became of the email: 'sent', 'not_configured' or 'failed'. */
+    email_status: string | null;
     read_at: string | null;
     created_at: string;
   }[]
 > {
   return (await getDb()
     .prepare(
-      `SELECT id, return_id, kind, title, body, status, read_at, created_at
+      `SELECT id, return_id, order_id, kind, title, body, status, email_status,
+              read_at, created_at
          FROM notifications
         WHERE user_id = ? AND audience = 'customer'
         ORDER BY created_at DESC

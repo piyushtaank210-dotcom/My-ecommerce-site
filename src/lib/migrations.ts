@@ -262,8 +262,18 @@ export async function applyMigrations(db: Db): Promise<void> {
   add("orders", "payment_reference", "payment_reference TEXT");
 
   // What became of the notification the shop was sent about an enquiry.
+  add("contact_messages", "phone", "phone TEXT");
   add("contact_messages", "email_status", "email_status TEXT");
   add("contact_messages", "email_sent_at", "email_sent_at TEXT");
+
+  // A notification carries the read state and the outcome of the email
+  // apart, so that a message can be unread and its email still have
+  // gone out. The order it is about is kept too, so that the messages
+  // about an order can be found.
+  add("notifications", "email_status", "email_status TEXT");
+  add("notifications", "email_error", "email_error TEXT");
+  add("notifications", "email_sent_at", "email_sent_at TEXT");
+  add("notifications", "order_id", "order_id TEXT REFERENCES orders(id) ON DELETE CASCADE");
 
   // A status change says where the request came from and where it went.
   add("return_events", "from_status", "from_status TEXT");
@@ -292,6 +302,7 @@ export async function applyMigrations(db: Db): Promise<void> {
   // office uses, so there is one vocabulary across the shop. The rows
   // that were written before it are moved over.
   await alignRefundStatuses(db);
+  await separateNotificationEmailStatus(db);
 
   await backfillAdminActions(db);
   await sweepReturnUploads(db);
@@ -334,6 +345,31 @@ async function alignRefundStatuses(db: Db): Promise<void> {
   await db
     .prepare(
       "UPDATE return_requests SET refund_status = 'pending' WHERE refund_status = 'approved'"
+    )
+    .run();
+}
+
+/**
+ * Separates the read state of a notification from the outcome of its
+ * email.
+ *
+ * They used to share one column, which meant that a message whose email
+ * had gone out was no longer counted as unread — the dashboard quietly
+ * stopped showing it as new. The outcome of the email now has a column
+ * of its own, and the messages that were written before it are moved
+ * across.
+ */
+async function separateNotificationEmailStatus(db: Db): Promise<void> {
+  if (!(await tableExists(db, "notifications"))) return;
+  if (!(await hasColumn(db, "notifications", "email_status"))) return;
+
+  await db
+    .prepare(
+      `UPDATE notifications
+          SET email_status = status,
+              status = 'unread'
+        WHERE status IN ('sent', 'failed', 'not_configured')
+          AND email_status IS NULL`
     )
     .run();
 }

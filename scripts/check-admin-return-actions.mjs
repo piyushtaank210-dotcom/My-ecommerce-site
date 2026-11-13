@@ -120,6 +120,7 @@ try {
       if (status === expected) break;
     }
     check(note, status === expected, `status is ${status}`);
+
   }
 
   /** Walks a request as far as the inspection. */

@@ -468,6 +468,33 @@ columns an administrator may see, only in a file an administrator may
 apply, and it never appears in a preview — the preview says "purchase cost"
 without giving the number away.
 
+### The email
+
+The shop sends its email through Resend, using Resend's own SDK. The
+module is `src/lib/mail.ts`, and it is the only place that knows how a
+message leaves the shop.
+
+| |
+|---|---|
+| `RESEND_API_KEY` | The Resend API key, read from the environment and never written down in the source. It lives in `.env.local` and in Vercel's environment settings |
+| `MAIL_FROM` | The sender, written out in full — `Consoleseller Orders <orders@consoleseller.in>`. `consoleseller.in` is verified in Resend |
+| `ENQUIRY_NOTIFICATION_EMAIL` | Where the shop's own enquiries are sent. It defaults to `NEXT_PUBLIC_STORE_EMAIL` |
+
+**A message is only ever reported as sent when Resend says it was.** A
+refusal from Resend — an unverified sender, a bad address, a quota — is a
+failure, and it is recorded as one, with Resend's own reason. The shop
+never tells a customer their money is on its way when it is not.
+
+**A message is only ever sent once.** Every message carries a key that
+says which event it belongs to — `order:PF123:confirmed`,
+`return:RET-ABC:refund_completed` — and that key is written down before
+the message goes out. A retry after a failure does not send a second
+copy, and Resend is given the same key so that it recognises it too.
+
+**The read state and the email outcome are kept apart.** A message can
+be unread on the dashboard and its email can still have gone out, and
+the shop needs to be able to tell the two apart.
+
 ### Returns, replacements and refunds
 
 The whole of a claim lives in the database, and the back office sees
@@ -507,6 +534,15 @@ audit log are one case. Beside them:
 | `return_inspections` | Who inspected the unit, when, what they found, and the serial they read off it |
 | `admin_actions` | Every button a member of staff pressed on a request, with who, when, and the status it moved from and to |
 | `notifications` | Every message the shop sent about a request, and what became of it |
+
+**The customer is told at every step.** The request being made, the shop
+looking at it, evidence being asked for, the decision, the pickup, the
+product coming back, the inspection, the replacement going out and
+arriving, the refund being raised, paid or refused — each one is a
+message on the customer's dashboard, and each one is an email when
+the shop has a mail service set up. Every message carries the request
+id, the order id and a link to the request, and the same change never
+sends the same message twice.
 
 **The shop's return policy is set in the same section.** The window,
 whether returns are on at all, the wording the customer is shown, and
@@ -1171,10 +1207,14 @@ This is a **demonstration store**. The commerce flows are complete, but:
 - **No real payments.** Checkout records the order; no processor is contacted
   and no card details are collected. To go live, add Stripe or Razorpay inside
   `placeOrderAction` and finalise the order from the webhook.
-- **Email is optional.** Every message the shop sends about a return is
-  written to the database and shown on the customer's dashboard, whether
-  or not the shop is set up to send mail. Set `RESEND_API_KEY` (or
-  `MAIL_WEBHOOK_URL`) and the same messages go out by email as well.
+- **Email goes through Resend.** The shop sends every message — about a
+  return, a replacement and a refund, and about the order itself — through
+  Resend's API, using Resend's own SDK. Every message is written to
+  the database first and shown on the customer's dashboard, and the
+  email goes out afterwards; what became of the email is recorded beside
+  it, so the shop always knows whether a message really went. Without
+  `RESEND_API_KEY` the messages are still recorded and still shown — they
+  are simply marked as not sent.
 - **An enquiry is saved whether or not the email goes out.** The enquiry is
   in the back office's Enquiries section first, and the notification is
   sent after it. What became of the notification is recorded against the

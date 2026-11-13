@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./db";
 import { applyOrderStatus, getOrder } from "./orders";
+import { notifyCustomerAboutOrder } from "./notifications";
 import type { Order } from "./types";
 import type {
   CancellationDispatchState,
@@ -182,6 +183,20 @@ export async function createCancellationRequest(input: {
      VALUES (?, ?, ?, ?, ?, 'requested')`
   ).run(id, input.orderId, input.userId, input.dispatchState, reason));
 
+  // The customer is told their request is recorded, and what happens
+  // next.
+  await notifyCustomerAboutOrder({
+    userId: input.userId,
+    email: order.email,
+    orderId: input.orderId,
+    kind: "cancellation_requested",
+    title: `We have your cancellation request for order ${input.orderId}`,
+    body:
+      eligibility.dispatchState === "after_dispatch"
+        ? `We have your request to cancel order ${input.orderId}. This order has already shipped, so we will look at it and come back to you.`
+        : `We have your request to cancel order ${input.orderId}. We will confirm it and any refund shortly.`,
+  });
+
   return {
     ok: true,
     id,
@@ -244,6 +259,20 @@ export async function approveCancellation(
     id
   ));
 
+  // The customer is told the order is cancelled, and what is happening
+  // to the money.
+  await notifyCustomerAboutOrder({
+    userId: order.user_id,
+    email: order.email,
+    orderId: request.order_id,
+    kind: "cancellation_approved",
+    title: `Order ${request.order_id} is cancelled`,
+    body:
+      amount > 0
+        ? `Your order ${request.order_id} has been cancelled, and a refund of ₹${amount.toLocaleString("en-IN")} has been raised. The money goes back to you by the same method you paid with — we will write to you again when it has been sent.`
+        : `Your order ${request.order_id} has been cancelled.`,
+  });
+
   return {
     ok: true,
     message:
@@ -278,6 +307,17 @@ export async function rejectCancellation(
      WHERE id = ?`
   ).run(reason.trim(), nowIso, nowIso, id));
 
+  // The customer is told, and why.
+  const order = (await getOrder(request.order_id)) ?? null;
+  await notifyCustomerAboutOrder({
+    userId: request.user_id,
+    email: order?.email ?? null,
+    orderId: request.order_id,
+    kind: "cancellation_rejected",
+    title: `We could not cancel order ${request.order_id}`,
+    body: `We were not able to cancel order ${request.order_id}. The reason is below.\n\n${reason.trim()}\n\nIf you would like this looked at again, please write to us.`,
+  });
+
   return { ok: true, message: "The cancellation request has been declined." };
 }
 
@@ -306,6 +346,18 @@ export async function confirmCancellationRefund(
      SET refund_status = 'processed', refund_reference = ?, updated_at = ?
      WHERE id = ?`
   ).run(reference.trim(), new Date().toISOString(), id));
+
+  // The customer is told the money has actually gone back. This is the
+  // only moment a cancelled order's refund is a fact.
+  const order = (await getOrder(request.order_id)) ?? null;
+  await notifyCustomerAboutOrder({
+    userId: request.user_id,
+    email: order?.email ?? null,
+    orderId: request.order_id,
+    kind: "order_cancelled",
+    title: `The refund for order ${request.order_id} has been sent`,
+    body: `The refund for your cancelled order ${request.order_id} has been paid back to you under reference ${reference.trim()}. It reaches your account in 2–5 working days.`,
+  });
 
   return { ok: true, message: "The refund is confirmed as paid." };
 }
