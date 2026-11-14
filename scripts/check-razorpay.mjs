@@ -56,6 +56,25 @@ const adminPasswords = [
   "myconsole@121",
 ].filter(Boolean);
 
+/**
+ * The shop must not be talking to the real gateway while this runs.
+ *
+ * A test that creates orders at the real gateway creates orders that
+ * somebody has to pay for, or cancel, and the mock is there precisely so
+ * that does not happen. It is the one thing in the script that cannot be
+ * talked past.
+ */
+const KEY_ID = process.env.RAZORPAY_KEY_ID ?? "";
+if (KEY_ID.startsWith("rzp_live_") && process.env.RAZORPAY_ALLOW_LIVE_TESTS !== "1") {
+  console.error(
+    "\n✗ These are LIVE keys. This script would make real orders at the real\n" +
+      "  gateway. Point RAZORPAY_API_BASE at the mock first:\n\n" +
+      "    RAZORPAY_API_BASE=http://127.0.0.1:9595 npm run dev\n\n" +
+      "  Or set RAZORPAY_ALLOW_LIVE_TESTS=1 if that is what you meant."
+  );
+  process.exit(1);
+}
+
 let exitCode = 0;
 function check(name, ok, detail = "") {
   console.log(`  ${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);

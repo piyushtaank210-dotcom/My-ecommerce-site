@@ -56,7 +56,7 @@ export default async function CartPage() {
         </span>
       </h1>
 
-      <div className="mx-auto grid max-w-[1600px] gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {cart.lines.map((line) => (
             <CartLineItem key={line.id} line={line} />
@@ -69,7 +69,7 @@ export default async function CartPage() {
           </Link>
         </div>
 
-        <div className="lg:sticky lg:top-24 lg:self-start">
+        <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <OrderSummary
             subtotal={cart.subtotal}
             savings={cart.savings}

@@ -510,6 +510,106 @@ CREATE TABLE IF NOT EXISTS orders (
   delivered_at   TEXT
 );
 
+/**
+ * The gateway's own order — the thing the customer actually pays against.
+ *
+ * The shop's order and the gateway's order are two records of the same
+ * moment, and the shop keeps both so that a payment can always be traced
+ * back to the order it belongs to and the other way round. The gateway's
+ * order id is the receipt on the shop's order, and the shop's order id is
+ * the receipt on the gateway's order.
+ *
+ * The idempotency key is what stops a double tap on "Pay now" from making
+ * two orders to pay against. It is the key the gateway is given with the
+ * request, so a repeat of the same request comes back as the same order
+ * rather than a second one — and it is unique here, so the shop notices
+ * the repeat as well.
+ */
+/**
+ * A checkout attempt.
+ *
+ * The browser sends an id for the attempt with the request to start an
+ * order, and the shop works out the order id from it. Two requests
+ * arriving at the same moment therefore want the same order — and
+ * Razorpay's order API has no idempotency of its own, so without this
+ * each of them would make its own order at the gateway and leave the
+ * extras behind as orphans.
+ *
+ * The attempt is the claim. The first request to write the row owns the
+ * attempt; every other one waits for it to finish and then answers with
+ * the same order. The gateway order id is written into the row once the
+ * order is whole, so its presence is the signal that there is something
+ * to wait for.
+ */
+CREATE TABLE IF NOT EXISTS checkout_attempts (
+  attempt_key      TEXT PRIMARY KEY,
+  order_id         TEXT NOT NULL,
+  gateway_order_id TEXT,
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  created_at       TEXT NOT NULL ${now}
+);
+
+CREATE TABLE IF NOT EXISTS gateway_orders (
+  gateway_order_id TEXT PRIMARY KEY,
+  -- The shop's own order. One gateway order for one shop order.
+  order_id         TEXT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+  gateway          TEXT NOT NULL DEFAULT 'razorpay',
+  idempotency_key  TEXT UNIQUE,
+  -- What is to be paid, in the gateway's own unit: paise.
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  status           TEXT NOT NULL DEFAULT 'created',
+  created_at       TEXT NOT NULL ${now}
+);
+
+/**
+ * A payment the gateway has taken.
+ *
+ * The payment id is the key, and it is the key that does the work: a
+ * payment is applied to an order once and once only. The row is written
+ * before the order is marked as paid, so two requests carrying the same
+ * payment cannot both get past it — the second one finds the row already
+ * there and leaves the order alone.
+ */
+CREATE TABLE IF NOT EXISTS gateway_payments (
+  payment_id       TEXT PRIMARY KEY,
+  -- The shop's order the payment was for.
+  order_id         TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  gateway_order_id TEXT,
+  gateway          TEXT NOT NULL DEFAULT 'razorpay',
+  -- What was paid, in paise.
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  -- What the gateway said: 'captured', 'authorized', 'failed'.
+  status           TEXT NOT NULL,
+  method           TEXT,
+  captured_at      TEXT,
+  created_at       TEXT NOT NULL ${now}
+);
+
+/**
+ * A webhook the gateway has sent.
+ *
+ * The gateway sends the same webhook again if it does not hear back, and
+ * it may send one that arrives out of order. Every delivery is recorded
+ * by its event id before anything is done about it, so that a webhook
+ * that arrives twice is acted on once. The outcome column says what the
+ * shop did about it, which is what the back office would be asked about
+ * if a payment ever went missing.
+ */
+CREATE TABLE IF NOT EXISTS gateway_events (
+  event_id    TEXT PRIMARY KEY,
+  event_type  TEXT NOT NULL,
+  gateway     TEXT NOT NULL DEFAULT 'razorpay',
+  -- The body as it arrived, so that a delivery can be looked at again.
+  payload     TEXT,
+  -- What the shop did about it: 'applied', 'already_applied', 'ignored',
+  -- 'rejected'.
+  outcome     TEXT NOT NULL,
+  received_at TEXT NOT NULL ${now}
+);
+
 CREATE TABLE IF NOT EXISTS order_items (
   id           ${identity},
   order_id     TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,

@@ -5,6 +5,10 @@ import { clearCart } from "@/lib/cart";
 import { GATEWAY_NAME } from "@/lib/checkout";
 import { getDb } from "@/lib/db";
 import { gatewayIsConfigured } from "@/lib/gateway-config";
+import {
+  claimPaymentAndMarkOrderPaid,
+  findPayment,
+} from "@/lib/gateway-records";
 import { getOrder, notifyOrderPlaced } from "@/lib/orders";
 import {
   fetchGatewayOrder,
@@ -109,16 +113,59 @@ export async function POST(request: Request) {
     return fail("This order has already been paid for.", 409);
   }
 
+  // The same payment, asked about twice.
+  //
+  // The browser can call this endpoint more than once — it retries when
+  // the network wobbles, and the gateway's own webhook may have marked
+  // the order paid a moment before. The payment's own record is what
+  // settles it: the first request claims it, and every later one finds
+  // the claim already made and leaves the order as it is.
+  const alreadyRecorded = await findPayment(razorpay_payment_id);
+  if (alreadyRecorded && alreadyRecorded.orderId === shopOrderId) {
+    return json({
+      ok: true,
+      order_id: shopOrderId,
+      payment_id: razorpay_payment_id,
+      method: alreadyRecorded.method ?? GATEWAY_NAME,
+      already: true,
+    });
+  }
+
   // The payment is real, and it is the shop's order: write down what it
   // was, and how it was paid.
+  //
+  // The claim and the marking of the order happen together, in one
+  // transaction, so that two requests carrying the same payment cannot
+  // both mark the order paid.
   const method = payment.payment.method || GATEWAY_NAME;
-  await getDb()
-    .prepare(
-      `UPDATE orders
-          SET payment_gateway = ?, payment_reference = ?, payment_method = ?
-        WHERE id = ?`
-    )
-    .run(GATEWAY_NAME, razorpay_payment_id, method, shopOrderId);
+  const claimed = await claimPaymentAndMarkOrderPaid({
+    payment: {
+      paymentId: razorpay_payment_id,
+      orderId: shopOrderId,
+      gatewayOrderId: razorpay_order_id,
+      amount: payment.payment.amount,
+      currency: payment.payment.currency,
+      status: payment.payment.status,
+      method,
+    },
+    method,
+  });
+
+  if (!claimed) {
+    // Somebody else got there first — the webhook, most likely. The
+    // order is already paid for, and saying so is the honest answer.
+    const order = await getOrder(shopOrderId);
+    if (order?.payment_reference === razorpay_payment_id) {
+      return json({
+        ok: true,
+        order_id: shopOrderId,
+        payment_id: razorpay_payment_id,
+        method,
+        already: true,
+      });
+    }
+    return fail("This order has already been paid for.", 409);
+  }
 
   // Now the order is in, and the customer is told.
   await notifyOrderPlaced(shopOrderId);

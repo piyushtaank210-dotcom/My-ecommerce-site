@@ -84,6 +84,16 @@ export type GatewayFailure = {
  * The amount is in paise, because that is the gateway's own unit. The
  * receipt is the shop's own reference for the payment — the shop's order
  * id — and it is what ties the payment back to the order it belongs to.
+ *
+ * The receipt is the shop's own reference for the payment — the shop's
+ * order id — and it is what ties the payment back to the order it
+ * belongs to.
+ *
+ * There is no idempotency key here, because the gateway's order API has
+ * none to give: `POST /v1/orders` makes a new order every time, whatever
+ * header is sent with it. The shop stops a repeated request from making
+ * a second order itself, before it ever gets here — see
+ * `checkout_attempts` in `src/lib/gateway-records.ts`.
  */
 export async function createGatewayOrder(input: {
   amount: number;

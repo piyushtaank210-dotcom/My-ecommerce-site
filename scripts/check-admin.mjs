@@ -640,6 +640,20 @@ const catalogueText = catalogue.body
   .replace(/<!--.*?-->/gs, "")
   .replace(/<[^>]+>/g, " ")
   .replace(/\s+/g, " ");
+
+// How many products the catalogue says it has.
+//
+// The check used to say "Showing 1–9 of 9 products", which was true
+// until somebody added a tenth product. A check that fails because the
+// shop sells one more thing is not a check — it is a tripwire. The
+// number is asked for instead, so that the count on the page is
+// checked against the count that is really there.
+const catalogueCount = await fetch(
+  `${BASE}/api/admin/products?limit=100`,
+  { headers: { cookie: `pf_auth=${admin}` } }
+).then((r) => r.json());
+const productTotal = Number(catalogueCount.total ?? 0);
+
 const tableChecks = [
   ["the SKU column is there", catalogue.body.includes(">SKU<")],
   [
@@ -677,8 +691,20 @@ const tableChecks = [
   ],
   ["rows can be selected", catalogue.body.includes('aria-label="Select ')],
   ["the whole page can be selected", catalogue.body.includes('aria-label="Select every product on this page"')],
-  ["the counts are shown", catalogueText.includes("Showing 1–9 of 9 products")],
-  ["the filters carry their own counts", catalogueText.includes("All brands (9)")],
+  [
+    "the counts are shown",
+    new RegExp(`Showing 1[–-]\\d+ of ${productTotal} products?`).test(
+      catalogueText
+    ),
+    `${productTotal} products`,
+  ],
+  [
+    "the filters carry their own counts",
+    // The brand filter counts the products under each brand, so "All
+    // brands" counts the products, not the brands.
+    new RegExp(`All brands \\(${productTotal}\\)`).test(catalogueText),
+    `${productTotal} products`,
+  ],
   [
     "the stock column counts what the product can sell",
     catalogueText.includes("in 2 variants"),

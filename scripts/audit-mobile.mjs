@@ -111,6 +111,26 @@ let chrome;
 let cdp;
 let problems = 0;
 
+/**
+ * Puts something in the basket.
+ *
+ * The checkout page without a basket is the cart page — the shop sends
+ * the customer there to put something in it first. So the checkout is
+ * never checked as it is, and a page that is wrong when it is full goes
+ * unchecked: that is how the checkout was found to be wider than a phone
+ * long after the rest of the shop was fixed.
+ *
+ * The basket is put in through the shop's own button, the way a person
+ * would, so that whatever the button does is what the check sees.
+ */
+const FILL_BASKET = `(() => {
+  const b = [...document.querySelectorAll('button')].find(x =>
+    x.textContent.trim().toLowerCase().includes('add to cart'));
+  if (!b) return 'NO BUTTON';
+  b.click();
+  return 'CLICKED';
+})()`;
+
 try {
   const launched = await launchChrome({
     port: PORT,
@@ -119,6 +139,26 @@ try {
   });
   chrome = launched.chrome;
   cdp = launched.cdp;
+
+  /*
+    The basket is put in once, before the pages are looked at.
+
+    A page that is wrong when it is full and right when it is empty is
+    the worst kind: the checkout is only ever seen with a basket in it,
+    so checking it empty checks a page nobody ever sees. The basket
+    stays in the browser's cookie, so every page after this is looked
+    at as it really is.
+  */
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: WIDTHS[0],
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: true,
+  });
+  await cdp.goto(`${BASE}/product/playstation-5-slim-disc-1tb`);
+  await sleep(900);
+  await cdp.evaluate(FILL_BASKET);
+  await sleep(1200);
 
   for (const [path, label] of PAGES) {
     for (const width of WIDTHS) {

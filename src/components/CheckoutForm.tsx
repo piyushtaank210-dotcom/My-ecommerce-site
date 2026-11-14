@@ -95,6 +95,18 @@ export function CheckoutForm({
   // Whether the money has been taken. It stops a closed payment window
   // from putting away an order that has in fact been paid for.
   const paid = useRef(false);
+  // The id of this attempt at paying.
+  //
+  // It is made once, when the page loads, and sent with every request
+  // to start an order. The shop turns it into the key that makes a
+  // repeated attempt the same attempt: a customer who taps "Pay now"
+  // twice, or whose browser retries after the network wobbles, gets one
+  // order to pay against rather than two and two chances to be charged.
+  const attemptId = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 
   const preferred =
     savedAddresses.find((a) => a.is_default) ?? savedAddresses[0] ?? null;
@@ -156,7 +168,12 @@ export function CheckoutForm({
       response = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(details),
+        body: JSON.stringify({
+          ...details,
+          // The id of this attempt, so that a repeated request is
+          // answered with the order that has already been made.
+          checkout_attempt: attemptId.current,
+        }),
       });
     } catch {
       setBusy(false);

@@ -32,6 +32,16 @@ export function startMockGateway(port = DEFAULT_PORT) {
   const orders = new Map();
   /** The payments the mock has taken. */
   const payments = new Map();
+  /**
+   * The idempotency keys the mock has been given, and the order each one
+   * made.
+   *
+   * The real gateway keeps this: a request that carries a key it has
+   * already seen comes back as the same order rather than a second one.
+   * The mock does the same, so that the shop's own use of the key can be
+   * exercised rather than taken on trust.
+   */
+  const idempotency = new Map();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -47,6 +57,21 @@ export function startMockGateway(port = DEFAULT_PORT) {
     /* ---- an order to pay against ---- */
     if (req.method === "POST" && url.pathname === "/v1/orders") {
       const body = await readBody(req);
+
+      // A request that carries a key the mock has already seen is the
+      // same request again, and comes back as the order it made first.
+      const key = req.headers["idempotency-key"];
+      if (typeof key === "string" && key) {
+        const existing = idempotency.get(key);
+        if (existing) {
+          console.log(
+            `[mock] the idempotency key ${key.slice(0, 12)}… was seen before — ` +
+              `the order ${existing} again`
+          );
+          return json(200, orders.get(existing));
+        }
+      }
+
       const id = `order_${randomBytes(8).toString("hex")}`;
       const order = {
         id,
@@ -59,7 +84,11 @@ export function startMockGateway(port = DEFAULT_PORT) {
         created_at: new Date().toISOString(),
       };
       orders.set(id, order);
-      console.log(`[mock] made the order ${id} for ${order.amount} (${order.receipt})`);
+      if (typeof key === "string" && key) idempotency.set(key, id);
+      console.log(
+        `[mock] made the order ${id} for ${order.amount} (${order.receipt})` +
+          (key ? ` [key ${key.slice(0, 12)}…]` : "")
+      );
       return json(200, order);
     }
 
@@ -120,6 +149,7 @@ export function startMockGateway(port = DEFAULT_PORT) {
         base: `http://127.0.0.1:${on}`,
         orders,
         payments,
+        idempotency,
         close: () => new Promise((done) => server.close(done)),
       });
     });

@@ -146,3 +146,22 @@ export async function writeCheckoutOrder(
 export function isStockError(err: unknown): err is InventoryError {
   return err instanceof InventoryError;
 }
+
+/**
+ * Whether the order was already written.
+ *
+ * Two requests for the same checkout attempt arrive at the same moment
+ * often enough — a double tap, a browser retry — and they both try to
+ * write the same order. The second one is told the order is already
+ * there, and that is not a fault: it is the same order.
+ *
+ * PostgreSQL says so with the code for a unique-constraint violation;
+ * SQLite says it in the message.
+ */
+export function isDuplicateOrderError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  if (e?.code === "23505") return true;
+  return /UNIQUE constraint failed|PRIMARY KEY must be unique/i.test(
+    e?.message ?? ""
+  );
+}

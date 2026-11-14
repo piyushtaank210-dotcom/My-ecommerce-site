@@ -11,6 +11,62 @@ import {
 import { returnsSchemaSql } from "./schema.ts";
 import type { Db } from "./db.ts";
 
+/**
+ * The tables the payment gateway added.
+ *
+ * The gateway's own order, the payments it has taken, and the webhooks it
+ * has sent. They are what makes a payment happen once and only once: a
+ * payment is claimed by a row before the order is marked as paid, and a
+ * webhook is claimed by a row before anything is done about it.
+ *
+ * Every statement is written so that running it twice changes nothing.
+ */
+export function gatewaySchemaSql(identity: string, now: string): string {
+  return `
+CREATE TABLE IF NOT EXISTS checkout_attempts (
+  attempt_key      TEXT PRIMARY KEY,
+  order_id         TEXT NOT NULL,
+  gateway_order_id TEXT,
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  created_at       TEXT NOT NULL ${now}
+);
+
+CREATE TABLE IF NOT EXISTS gateway_orders (
+  gateway_order_id TEXT PRIMARY KEY,
+  order_id         TEXT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+  gateway          TEXT NOT NULL DEFAULT 'razorpay',
+  idempotency_key  TEXT UNIQUE,
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  status           TEXT NOT NULL DEFAULT 'created',
+  created_at       TEXT NOT NULL ${now}
+);
+
+CREATE TABLE IF NOT EXISTS gateway_payments (
+  payment_id       TEXT PRIMARY KEY,
+  order_id         TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  gateway_order_id TEXT,
+  gateway          TEXT NOT NULL DEFAULT 'razorpay',
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  status           TEXT NOT NULL,
+  method           TEXT,
+  captured_at      TEXT,
+  created_at       TEXT NOT NULL ${now}
+);
+
+CREATE TABLE IF NOT EXISTS gateway_events (
+  event_id    TEXT PRIMARY KEY,
+  event_type  TEXT NOT NULL,
+  gateway     TEXT NOT NULL DEFAULT 'razorpay',
+  payload     TEXT,
+  outcome     TEXT NOT NULL,
+  received_at TEXT NOT NULL ${now}
+);
+`;
+}
+
 /** A number out of a row. */
 const num = (v: unknown): number => Number(v ?? 0);
 
@@ -82,6 +138,7 @@ export async function applyMigrations(db: Db): Promise<void> {
   const now =
     db.dialect === "postgres" ? "DEFAULT shop_now()" : "DEFAULT (datetime('now'))";
   await db.exec(returnsSchemaSql(identity, now));
+  await db.exec(gatewaySchemaSql(identity, now));
 
   const add = (table: string, column: string, ddl: string): void => {
     // PostgreSQL can add a column without being told whether it is

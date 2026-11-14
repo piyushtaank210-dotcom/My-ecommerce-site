@@ -83,6 +83,12 @@ try {
     (o) =>
       o.email === "razorpay@example.com" ||
       o.email === "razorpay-check@example.com" ||
+      o.email === "razorpay-webhook@example.com" ||
+      o.email === "race@example.com" ||
+      o.email === "live-check@example.com" ||
+      o.email === "live-idem@example.com" ||
+      o.email === "phone@example.com" ||
+      o.email === "mobile@example.com" ||
       (o.notes ?? "").includes(MARKER)
   );
 

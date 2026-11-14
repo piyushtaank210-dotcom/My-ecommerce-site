@@ -16,6 +16,10 @@ tsconfig.tsbuildinfo
 # Environment & Secrets
 .env
 .env*.local
+# The live gateway keys, kept apart so that the shop can be switched
+# between the test keys and the live ones. The pattern above does not
+# catch this one — `.env.local.live` does not end in `.local`.
+.env.local.live
 *.pem
 
 # SQLite Database & Storage

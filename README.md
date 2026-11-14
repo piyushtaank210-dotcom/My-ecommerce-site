@@ -92,12 +92,71 @@ Two keys, both read from the environment and never written into the source:
 | `RAZORPAY_KEY_ID` | The shop's name at the gateway | Read on the server, handed to the checkout |
 | `RAZORPAY_KEY_SECRET` | What proves a payment came from the gateway | **The server only. It never reaches the browser.** |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | The same key id for the browser | A fallback only — see below |
+| `RAZORPAY_WEBHOOK_SECRET` | What proves a webhook came from the gateway | **The server only.** See the webhook section below |
 
 Put them in `.env.local` (ignored by Git) or in the environment settings of the host. A deployment has no `.env.local`, so on Vercel both keys have to be in **Settings → Environment Variables**, for every environment including Preview.
 
 `NEXT_PUBLIC_RAZORPAY_KEY_ID` is only a fallback. The checkout takes the key id from the shop's own answer to `POST /api/create-order`, so the key that opens the checkout is always the key that can verify the payment. Without it the checkout still works.
 
 > The keys in `.env.local` are **test** keys. They take test payments, not real money. Swap them for the live keys when Razorpay approves the shop, and change `NEXT_PUBLIC_RAZORPAY_KEY_ID` with them.
+
+### Turning live mode on
+
+**Do this after the whole integration has been checked against the mock,
+not before.** The mock is a stand-in for Razorpay's API that behaves the
+way Razorpay's API does, and the whole payment — the order, the
+signature, the webhook, the duplicate payments — is exercised against it
+without a rupee changing hands.
+
+**1. Put the live keys in `.env.local.live`** (ignored by Git):
+
+```
+RAZORPAY_KEY_ID="rzp_live_..."
+RAZORPAY_KEY_SECRET="..."
+```
+
+**2. Add the webhook secret.** In Razorpay: **Settings → Webhooks → Add a
+new webhook**.
+
+| | |
+|---|---|
+| **Webhook URL** | `https://consoleseller.in/api/webhooks/razorpay` |
+| **Secret** | The one shown when the webhook is created |
+| **Events** | `payment.captured` and `payment.failed` |
+
+Put that secret in `.env.local` as `RAZORPAY_WEBHOOK_SECRET`. It is a
+*different* secret from the key secret.
+
+**3. Switch the shop over:**
+
+```bash
+npm run gateway:mode -- live     # or: npm run gateway:mode -- test
+```
+
+The script says what it is about to do, and it will not switch to live
+unless the live keys are in `.env.local.live`. `npm run gateway:mode --
+show` says which mode the shop is in.
+
+**4. On a deployment**, set these in **Settings → Environment Variables**
+for every environment including Preview:
+
+| Variable | |
+|---|---|
+| `RAZORPAY_KEY_ID` | the live key id |
+| `RAZORPAY_KEY_SECRET` | the live key secret |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | the same key id, for the browser |
+| `RAZORPAY_WEBHOOK_SECRET` | the webhook secret |
+| `RAZORPAY_API_BASE` | `https://api.razorpay.com` |
+
+**5. Check it with real money.** Put a small amount in the basket, pay it
+with a real card, and look at the order in the back office: it should be
+marked as paid, with the payment reference on it. Then look at Razorpay's
+dashboard: the payment should be there too.
+
+**The check scripts refuse to run against live keys** unless
+`RAZORPAY_ALLOW_LIVE_TESTS=1` is set, because they make real orders at
+the real gateway. A test that creates orders somebody has to pay for, or
+cancel, is not a test.
 
 ### How a payment goes through
 
@@ -109,6 +168,84 @@ Put them in `.env.local` (ignored by Git) or in the environment settings of the 
 6. **The shop checks the signature.** `POST /api/verify-payment` makes the same HMAC-SHA256 the gateway made — `order_id + "|" + payment_id`, signed with the key secret — and compares it in constant time. **A signature that does not match is refused, and nothing is marked as paid.**
 7. **The gateway is asked to confirm.** The payment and the order it belongs to are fetched together. The payment has to be captured, it has to belong to the order that was named, and it has to be for the amount the shop's own order says is owed.
 8. **The order is marked paid.** The payment reference is written on the order, the customer is told, and the basket is emptied.
+
+### A payment happens once
+
+The same payment can reach the shop twice: the customer's browser retries
+after the network wobbles, the browser calls the verification endpoint at
+the same moment as the webhook arrives, or the customer taps "Pay" twice.
+Each of those is one payment and one order.
+
+**The order is worked out from the attempt.** The browser sends an id for
+the attempt with the request to start an order, and the shop mixes it with
+the browser's session id and hashes it. The shop's own order id comes out
+of that hash, so two requests for the same attempt want the same order —
+the second one finds it already there, and the stock is taken once.
+
+**Razorpay's order API has no idempotency of its own.** Its `POST
+/v1/orders` makes a new order every time, whatever header is sent with
+it, and the extra orders are left behind at the gateway as orphans that
+nobody can merge. So the shop does the claiming itself, in
+`checkout_attempts`: the first request to write the row owns the attempt
+and makes the order, and every other one waits for it to finish and is
+answered with the same order. The waiting is bounded — the request that
+owns the attempt is one call to the gateway away — and a request that
+finds the attempt abandoned takes it over.
+
+**The payment is claimed before the order is marked as paid.** Every
+payment the shop acts on is written to `gateway_payments` first, and the
+payment id is that row's key. The first request to write it wins; every
+later one finds the row already there and leaves the order alone. The
+claim and the marking of the order happen in one transaction, so they
+cannot come apart.
+
+**A second, different payment for an order that is already paid for is
+refused**, not quietly swallowed: it is a second payment, and it is
+somebody's money.
+
+### The webhook
+
+A webhook is Razorpay saying "this happened", sent to the shop's own
+address. It matters most when the browser is not there to report it: a
+customer on a train who loses signal halfway through a payment. The money
+still moves, and without a webhook the shop would never know.
+
+**Set it up in the Razorpay dashboard** — Settings → Webhooks → Add a new
+webhook:
+
+| | |
+|---|---|
+| **Webhook URL** | `https://consoleseller.in/api/webhooks/razorpay` |
+| **Secret** | Shown when the webhook is created. Put it in `RAZORPAY_WEBHOOK_SECRET`. |
+| **Events** | `payment.captured` and `payment.failed` |
+
+The secret is **not** the key secret. It is a separate secret, made in the
+dashboard, and it signs the webhook's body. A secret that does one job
+should not be able to do the other.
+
+**What the endpoint does, in order:**
+
+1. **The body is read exactly as it arrived** — not parsed and put back
+   together. It is signed as it was sent, so the bytes have to be the same
+   bytes.
+2. **The signature is checked** — HMAC-SHA256 of the body, made with the
+   webhook secret, compared in constant time. **A webhook that cannot be
+   checked is not acted on at all.**
+3. **The delivery is claimed** — every webhook carries an id of its own,
+   and Razorpay sends it again if it does not hear back. The id is the
+   key of a row in `gateway_events`, so the same webhook arriving three
+   times is acted on once.
+4. **The payment is checked against Razorpay's own API** — is it captured,
+   does it belong to this order, is it the amount the order says is owed.
+   The webhook says what happened; Razorpay's API is what proves it.
+5. **The order is marked as paid**, the customer is told, and the basket
+   is emptied. The notification is deduplicated, so a customer who was
+   also told by the browser's own call is not told twice.
+
+Without `RAZORPAY_WEBHOOK_SECRET` the endpoint refuses webhooks rather
+than acting on them unchecked. A shop that does not receive webhooks still
+takes payments — the browser's own call marks the order paid — it just
+cannot hear about a payment whose browser went away.
 
 ### If the customer walks away
 
@@ -123,11 +260,13 @@ The order id alone cannot do that — an order id is a receipt, and anyone who h
 | `POST /api/create-order` | Makes the order and asks the gateway for one to pay against | `400` on bad details or an empty basket, `409` when the stock ran out, `503` when the shop has no gateway keys |
 | `POST /api/verify-payment` | Checks the signature and the gateway's own record | `400` on a signature that does not match, on missing details, on a payment the gateway does not know, and on an amount that does not match — **and nothing is marked as paid** |
 | `POST /api/cancel-pending-order` | Puts away an order that was never paid for | `403` when the request does not come from the browser that made the order, `409` when the order has been paid for |
+| `POST /api/webhooks/razorpay` | The gateway saying what happened | `400` on a signature that does not match, `503` when the shop has no webhook secret |
 
 ### Checking it
 
 ```bash
 npm run check:razorpay
+npm run check:razorpay:webhook
 ```
 
 Drives a real browser through the whole payment and checks that a signature
@@ -139,6 +278,14 @@ works, and that an order left unpaid can only be put away by the browser
 that made it. It tidies up after itself: the orders it makes are cancelled
 through the back office, so the stock goes back on the shelf.
 
+The second script checks the webhook and the idempotency: that a webhook
+with no signature, with the wrong signature, or with a body that was changed
+after it was signed is refused and nothing is paid; that a webhook with a
+good signature marks the order paid; that the same webhook arriving twice
+is acted on once; that a second payment for an order that is already paid
+for is refused; and that five requests to start an order at the same moment
+make one order and take the stock once.
+
 The payment half needs a mock of the gateway, because a payment has to be
 made by something. The shop has to be pointed at it:
 
@@ -146,7 +293,13 @@ made by something. The shop has to be pointed at it:
 npm run mock:gateway          # in one terminal — it says where it is
 RAZORPAY_API_BASE=http://127.0.0.1:9595 npm run dev   # in another
 npm run check:razorpay        # in a third
+npm run check:razorpay:webhook
 ```
+
+Both scripts **refuse to run against live keys** unless
+`RAZORPAY_ALLOW_LIVE_TESTS=1` is set, because they make real orders at
+the real gateway. A test that creates orders somebody has to pay for, or
+cancel, is not a test.
 
 Against the real gateway — the order really is made at Razorpay, and the
 refusals are the real ones — leave `RAZORPAY_API_BASE` unset and run

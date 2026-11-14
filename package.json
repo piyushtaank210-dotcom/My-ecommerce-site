@@ -59,6 +59,8 @@
     "db:schema": "node scripts/apply-schema.mjs",
     "check:refunds": "node scripts/check-refunds.mjs",
     "check:razorpay": "node scripts/check-razorpay.mjs",
+    "check:razorpay:webhook": "node scripts/check-razorpay-webhook.mjs",
+    "gateway:mode": "node scripts/gateway-mode.mjs",
     "mock:gateway": "node scripts/lib/mock-gateway.mjs",
     "cleanup:razorpay": "node scripts/cleanup-razorpay-orders.mjs",
     "check:return-settings": "node scripts/check-return-settings.mjs",
