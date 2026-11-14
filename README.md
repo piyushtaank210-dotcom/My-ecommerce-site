@@ -137,31 +137,48 @@ The script says what it is about to do, and it will not switch to live
 unless the live keys are in `.env.local.live`. `npm run gateway:mode --
 show` says which mode the shop is in.
 
-**4. On a deployment**, set these in **Settings → Environment Variables**
-for every environment including Preview:
-
-| Variable | |
-|---|---|
-| `RAZORPAY_KEY_ID` | the live key id |
-| `RAZORPAY_KEY_SECRET` | the live key secret |
-| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | the same key id, for the browser |
-| `RAZORPAY_WEBHOOK_SECRET` | the webhook secret |
-| `RAZORPAY_API_BASE` | `https://api.razorpay.com` |
-
-There is a script for it, which reads the keys out of `.env.local.live`
-so that they are never typed by hand and never end up in the wrong
-variable:
+**4. On a deployment**, the keys are environment variables. The shop is
+on Vercel, in the project `my-ecommerce-site`. There is a script for it:
 
 ```bash
 npx vercel login
-npm run deploy:env -- <your-project-slug>
+npm run deploy:env -- my-ecommerce-site
 npx vercel --prod
 ```
 
-The project slug is in the Vercel dashboard, under **Settings → General
-→ Project ID**. The script refuses to put a secret in a `NEXT_PUBLIC_`
-variable, and refuses to put the test webhook secret on the deployment
-at all.
+The script reads the keys out of `.env.local.live`, so they are never
+typed by hand and never end up in the wrong variable. It replaces what
+is already there rather than failing, so it is safe to run twice. It
+stores the two secrets encrypted and the `NEXT_PUBLIC_` one as a plain
+value — a browser needs that one inlined into the build, and an
+encrypted value cannot be.
+
+| Variable | How it is stored |
+|---|---|
+| `RAZORPAY_KEY_ID` | encrypted |
+| `RAZORPAY_KEY_SECRET` | encrypted |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | plain — the browser needs it |
+| `RAZORPAY_WEBHOOK_SECRET` | encrypted |
+| `RAZORPAY_API_BASE` | plain |
+
+**A new variable needs a redeploy.** Vercel picks up environment
+variables in a new deployment; the old one keeps running with the old
+ones. That is why the checkout can say the gateway keys are missing on
+a site whose code is perfectly correct — the code is deployed and the
+configuration is not.
+
+**The webhook is set through the API**, which is quicker and less
+error-prone than the dashboard:
+
+```bash
+npm run gateway:webhook -- show --live    # what is on the gateway
+npm run gateway:webhook -- set https://consoleseller.in/api/webhooks/razorpay --live
+```
+
+Razorpay's webhook API will only take its events as a **map** of every
+event name to a flag — the same shape its own `GET` hands back. A list
+is refused: *"the json request could not be decoded"* for a list of
+one, *"invalid event name"* for a list of two. The script sends the map.
 
 > **A deployment without these variables shows this on the checkout:**
 >

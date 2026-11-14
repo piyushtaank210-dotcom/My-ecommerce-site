@@ -91,6 +91,11 @@ try {
       o.email === "mobile@example.com" ||
       o.email === "diag@example.com" ||
       o.email === "Diagnosis@example.com" ||
+      o.email === "live-check@example.com" ||
+      o.email === "live-idem@example.com" ||
+      o.email === "live-cod@example.com" ||
+      o.email === "live-final@example.com" ||
+      o.email === "secret@example.com" ||
       (o.notes ?? "").includes(MARKER)
   );
 

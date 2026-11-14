@@ -1,39 +1,63 @@
 /**
- * Puts the shop's payment keys on the deployment.
+ * Puts the shop's payment keys on the deployment, through Vercel's API.
  *
- *   npx vercel login
- *   node scripts/deploy-env.mjs <your-project-slug>
+ *   node scripts/deploy-env.mjs <project-id-or-slug>
  *
  * The keys come from `.env.local.live` — the same file `npm run gateway:
  * mode` uses — so they are never written down twice and never typed by
- * hand. The values are passed to Vercel on the command line, which means
- * they are briefly visible in the machine's process list; nothing else
- * is printed, and the secret is not echoed.
+ * hand.
  *
- * It sets the variables for Production, Preview and Development, and it
- * sets them all at once. It does not deploy: Vercel builds a new
- * deployment when the variables change, and that is the next step.
+ * A variable that starts with `NEXT_PUBLIC_` is sent to the browser, so
+ * it is stored as a plain value: Vercel can only inline one of those
+ * into the build if it is readable there. Everything else is stored
+ * encrypted, which is how the project's other secrets are stored.
  *
  * The webhook secret is not in `.env.local.live` — it is made in
- * Razorpay's dashboard. It is read from `.env.local` if it is there, and
- * the script says so and moves on if it is not.
+ * Razorpay's dashboard, or by `npm run gateway:secret`. It is read from
+ * `.env.local` if it is there, and the script says so and moves on if it
+ * is not.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LIVE = join(ROOT, ".env.local.live");
 const ENV = join(ROOT, ".env.local");
+const AUTH_FILE =
+  process.env.VERCEL_AUTH_FILE ??
+  join(
+    process.env.APPDATA ?? join(process.env.HOME ?? "", "AppData", "Roaming"),
+    "com.vercel.cli",
+    "Data",
+    "auth.json"
+  );
 
 const project = process.argv[2];
 if (!project) {
   console.error(
     "\n✗ Which project? Pass its name or id:\n\n" +
-      "    node scripts/deploy-env.mjs my-ecommerce-site\n\n" +
-      "  The project is in the Vercel dashboard, under Settings → General\n" +
-      "  → Project ID."
+      "    node scripts/deploy-env.mjs my-ecommerce-site"
+  );
+  process.exit(1);
+}
+
+/** The token, from the environment or from the Vercel CLI's own file. */
+function token() {
+  if (process.env.VERCEL_TOKEN) return process.env.VERCEL_TOKEN;
+  if (existsSync(AUTH_FILE)) {
+    const a = JSON.parse(readFileSync(AUTH_FILE, "utf8"));
+    if (a.token && a.expiresAt * 1000 > Date.now()) return a.token;
+  }
+  return null;
+}
+
+const theToken = token();
+if (!theToken) {
+  console.error(
+    "\n✗ No Vercel token.\n\n" +
+      "  Log in with `npx vercel login`, or set VERCEL_TOKEN in the\n" +
+      "  environment for this command."
   );
   process.exit(1);
 }
@@ -62,59 +86,95 @@ if (!keyId || !keySecret) {
 /**
  * Whether a value is one of the test ones.
  *
- * The shop's own webhook secret is made in Razorpay's dashboard and
- * given to the owner once. While the shop is still being tested there
- * is a stand-in in `.env.local` instead, and pushing that to the
- * deployment would leave the live site checking webhooks against a
- * secret that is printed in this repository's history.
+ * The shop's webhook secret is made in Razorpay's dashboard. While the
+ * shop is still being tested there is a stand-in in `.env.local`
+ * instead, and pushing that to the deployment would leave the live site
+ * checking webhooks against a secret that is printed in this
+ * repository's history.
  */
 function isTestValue(value) {
   if (!value) return true;
   return /test|mock|placeholder|example/i.test(value);
 }
 
-if (isTestValue(webhookSecret)) {
-  console.log(
-    "\n  The webhook secret in .env.local is a test one, so it is not being\n" +
-      "  pushed. Make the real one in Razorpay's dashboard\n" +
-      "  (Settings → Webhooks → Add a new webhook) and put it in .env.local\n" +
-      "  as RAZORPAY_WEBHOOK_SECRET, then run this again.\n"
-  );
-}
-
-/**
- * What goes on the deployment, and how.
- *
- * A name that starts with `NEXT_PUBLIC_` is sent to the browser. The
- * key secret and the webhook secret must never be one of those — the
- * list is written out here rather than worked out, so that the mistake
- * of adding a secret as a public variable is impossible to make.
- */
 const VARIABLES = [
-  { name: "RAZORPAY_KEY_ID", value: keyId, secret: false },
-  { name: "RAZORPAY_KEY_SECRET", value: keySecret, secret: true },
-  { name: "NEXT_PUBLIC_RAZORPAY_KEY_ID", value: keyId, secret: false },
+  { name: "RAZORPAY_KEY_ID", value: keyId, type: "encrypted" },
+  { name: "RAZORPAY_KEY_SECRET", value: keySecret, type: "encrypted" },
+  // Public by nature — it goes to the browser to open the checkout — so
+  // it has to be readable at build time.
+  { name: "NEXT_PUBLIC_RAZORPAY_KEY_ID", value: keyId, type: "plain" },
   {
     name: "RAZORPAY_WEBHOOK_SECRET",
     value: isTestValue(webhookSecret) ? null : webhookSecret,
-    secret: true,
+    type: "encrypted",
     optional: true,
   },
-  {
-    name: "RAZORPAY_API_BASE",
-    value: "https://api.razorpay.com",
-    secret: false,
-  },
+  { name: "RAZORPAY_API_BASE", value: "https://api.razorpay.com", type: "plain" },
 ];
 
 for (const v of VARIABLES) {
-  if (v.secret && v.name.startsWith("NEXT_PUBLIC_")) {
-    console.error(`\n✗ ${v.name} is a secret and would be sent to the browser.`);
+  if (v.type === "encrypted" && v.name.startsWith("NEXT_PUBLIC_")) {
+    console.error(`\n✗ ${v.name} would be encrypted, and the browser needs it.`);
     process.exit(1);
   }
 }
 
-console.log(`setting the payment keys on "${project}"…\n`);
+/** The project, by name or by id. */
+async function findProject() {
+  const res = await fetch("https://api.vercel.com/v9/projects?limit=50", {
+    headers: { Authorization: `Bearer ${theToken}` },
+  });
+  const body = await res.json();
+  return (body.projects ?? []).find(
+    (p) => p.id === project || p.name === project
+  );
+}
+
+const found = await findProject();
+if (!found) {
+  console.error(`\n✗ There is no project called "${project}".`);
+  process.exit(1);
+}
+console.log(`setting the payment keys on "${found.name}" (${found.id})…\n`);
+
+/** Adds a variable to every environment, replacing any that is there. */
+async function addVariable(v) {
+  // Vercel will not let two variables share a name and a target, so the
+  // ones that are already there are removed first. That is what makes
+  // this script safe to run twice — the second run replaces the first
+  // run's values rather than failing.
+  const existing = await fetch(
+    `https://api.vercel.com/v9/projects/${found.id}/env`,
+    { headers: { Authorization: `Bearer ${theToken}` } }
+  ).then((r) => r.json());
+
+  for (const e of existing.envs ?? []) {
+    if (e.key !== v.name) continue;
+    await fetch(
+      `https://api.vercel.com/v9/projects/${found.id}/env/${e.id}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${theToken}` } }
+    );
+  }
+
+  const res = await fetch(
+    `https://api.vercel.com/v10/projects/${found.id}/env`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${theToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        key: v.name,
+        value: v.value,
+        type: v.type,
+        target: ["production", "preview", "development"],
+      }),
+    }
+  );
+  const body = await res.json().catch(() => ({}));
+  return { ok: res.ok, body };
+}
 
 let failed = 0;
 for (const v of VARIABLES) {
@@ -128,35 +188,29 @@ for (const v of VARIABLES) {
     continue;
   }
 
-  const args = [
-    "vercel",
-    "env",
-    "add",
-    v.name,
-    "--value",
-    v.value,
-    "--project",
-    project,
-    "--environment",
-    "production,preview,development",
-    "--force",
-    "--yes",
-  ];
-  if (v.secret) args.push("--sensitive");
-
-  const result = spawnSync("npx", args, {
-    cwd: ROOT,
-    stdio: ["ignore", "pipe", "pipe"],
-    shell: process.platform === "win32",
-    encoding: "utf8",
-  });
-
-  if (result.status === 0) {
-    console.log(`  ✓ ${v.name} set for production, preview and development`);
+  const r = await addVariable(v);
+  if (r.ok) {
+    console.log(`  ✓ ${v.name} (${v.type})`);
   } else {
-    console.log(`  ✗ ${v.name} — ${(result.stderr || result.stdout || "").trim().split("\n").slice(-2).join(" ")}`);
+    console.log(
+      `  ✗ ${v.name} — ${r.body?.error?.message ?? JSON.stringify(r.body).slice(0, 120)}`
+    );
     failed++;
   }
+}
+
+/** What is on the project now, so that it can be seen to be right. */
+const listed = await fetch(
+  `https://api.vercel.com/v9/projects/${found.id}/env`,
+  { headers: { Authorization: `Bearer ${theToken}` } }
+).then((r) => r.json());
+
+console.log("\nthe payment variables on the project now:");
+for (const e of listed.envs ?? []) {
+  if (!e.key.startsWith("RAZORPAY") && !e.key.startsWith("NEXT_PUBLIC_RAZORPAY")) {
+    continue;
+  }
+  console.log(`  ${e.key.padEnd(28)} ${e.type.padEnd(10)} [${e.target.join(", ")}]`);
 }
 
 console.log(
@@ -168,13 +222,10 @@ console.log(
 if (!failed) {
   console.log(
     "\nNext: redeploy, so that the new variables are in the running site.\n\n" +
-      "    npx vercel --prod\n\n" +
-      "Then set the webhook up in Razorpay — Settings → Webhooks → Add a new\n" +
-      "webhook — with the URL\n\n" +
-      "    https://consoleseller.in/api/webhooks/razorpay\n\n" +
-      "and the events payment.captured and payment.failed. The secret it shows\n" +
-      "is RAZORPAY_WEBHOOK_SECRET: put it in .env.local and run this script\n" +
-      "again."
+      "    npx vercel --prod --token " +
+      theToken.slice(0, 6) +
+      "…\n\n" +
+      "(or let Vercel build it from the next push)."
   );
 }
 
