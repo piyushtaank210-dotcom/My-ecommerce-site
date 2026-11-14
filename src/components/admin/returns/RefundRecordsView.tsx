@@ -19,7 +19,7 @@ import {
   REFUND_STATUS_LABEL,
   REFUND_STATUS_TONE,
 } from "@/lib/return-status";
-import { gatewayIsConfigured } from "@/lib/refund-gateway";
+import { gatewayIsConfigured } from "@/lib/gateway-config";
 import { money, formatDate } from "@/lib/format";
 import { StatCard } from "@/components/admin/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";

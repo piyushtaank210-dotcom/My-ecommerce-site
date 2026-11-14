@@ -27,6 +27,14 @@
  * administrator's own confirmation with that reference.
  */
 
+import {
+  gatewayApiBase,
+  gatewayCurrency,
+  gatewayIsConfigured,
+  gatewayKeyId,
+  gatewayKeySecret,
+} from "./gateway-config";
+
 export type GatewayRefundResult = {
   ok: boolean;
   /** The gateway's own reference for the refund. */
@@ -56,19 +64,10 @@ export type GatewayRefundRequest = {
 };
 
 /**
- * Whether the shop has been given the keys it needs to reach the
- * gateway.
- *
- * The keys are read from the environment, and they are never written
- * down anywhere else.
+ * The currency the shop takes payment in.
  */
-export function gatewayIsConfigured(): boolean {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
-}
-
-/** The currency the shop takes payment in. */
 function currencyOf(): string {
-  return process.env.RAZORPAY_CURRENCY || "INR";
+  return gatewayCurrency();
 }
 
 /**
@@ -77,8 +76,8 @@ function currencyOf(): string {
  * The key id and the key secret are joined with a colon and encoded.
  */
 function authorization(): string {
-  const id = process.env.RAZORPAY_KEY_ID ?? "";
-  const secret = process.env.RAZORPAY_KEY_SECRET ?? "";
+  const id = gatewayKeyId() ?? "";
+  const secret = gatewayKeySecret() ?? "";
   return `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 }
 
@@ -114,7 +113,7 @@ export async function refundThroughGateway(
 
   try {
     const response = await fetch(
-      `https://api.razorpay.com/v1/payments/${encodeURIComponent(request.paymentId)}/refund`,
+      `${gatewayApiBase()}/v1/payments/${encodeURIComponent(request.paymentId)}/refund`,
       {
         method: "POST",
         headers: {
@@ -181,7 +180,7 @@ export async function checkGatewayRefund(
 
   try {
     const response = await fetch(
-      `https://api.razorpay.com/v1/refunds/${encodeURIComponent(refundId)}`,
+      `${gatewayApiBase()}/v1/refunds/${encodeURIComponent(refundId)}`,
       {
         method: "GET",
         headers: { Authorization: authorization() },

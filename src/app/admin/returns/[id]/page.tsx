@@ -30,7 +30,7 @@ import {
   calculateRefund,
   listRefunds,
 } from "@/lib/returns-records";
-import { gatewayIsConfigured } from "@/lib/refund-gateway";
+import { gatewayIsConfigured } from "@/lib/gateway-config";
 import { getOrder } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
 import { evidenceSatisfied, policyForReason } from "@/lib/return-policy";

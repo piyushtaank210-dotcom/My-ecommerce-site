@@ -23,6 +23,7 @@ import { getProduct } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/auth";
 import { isStaff } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
+import { paymentMethodLabel } from "@/lib/payment-method";
 import {
   cancellationEligibility,
   getCancellationForOrder,
@@ -321,11 +322,7 @@ export default async function OrderPage({
               Payment
             </h2>
             <p className="text-[13px] text-gray-600">
-              {order.payment_method === "emi"
-                ? "No Cost EMI"
-                : order.payment_method === "cod"
-                  ? "Cash on Delivery"
-                  : order.payment_method.toUpperCase()}
+              {paymentMethodLabel(order.payment_method)}
             </p>
             <p className="mt-1 text-[12.5px] capitalize text-gray-500">
               Placed {formatDate(order.created_at)}

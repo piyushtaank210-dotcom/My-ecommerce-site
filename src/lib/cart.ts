@@ -92,6 +92,22 @@ export async function getCart(): Promise<Cart> {
   };
 }
 
+/**
+ * Empties the basket.
+ *
+ * It is called once the order is in — after the money has been taken for
+ * a card order, and straight away for a cash-on-delivery one. The basket
+ * is emptied through the shop's own session, so one shopper cannot empty
+ * another's.
+ */
+export async function clearCart(): Promise<void> {
+  const sessionId = await readSessionId();
+  if (!sessionId) return;
+  await getDb()
+    .prepare("DELETE FROM cart_items WHERE session_id = ?")
+    .run(sessionId);
+}
+
 export async function getCartCount(): Promise<number> {
   const sessionId = await readSessionId();
   if (!sessionId) return 0;

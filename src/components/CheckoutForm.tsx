@@ -1,41 +1,100 @@
 "use client";
 
-import { useActionState, useRef } from "react";
-import { useFormStatus } from "react-dom";
-import Link from "next/link";
+import { useRef, useState } from "react";
+import Script from "next/script";
+import { useRouter } from "next/navigation";
 import {
-  Smartphone,
-  CreditCard,
   Banknote,
-  Layers,
+  CreditCard,
   Loader2,
   Lock,
   MapPin,
+  Smartphone,
 } from "lucide-react";
-import { placeOrderAction, type CheckoutState } from "@/lib/actions";
+import type { LucideIcon } from "lucide-react";
+import { money } from "@/lib/format";
 import { STATES } from "@/lib/states";
 import type { Address } from "@/lib/types";
+import { toast } from "./Toaster";
 
-const PAYMENTS = [
-  { value: "upi", label: "UPI", sub: "GPay, PhonePe, Paytm", Icon: Smartphone },
-  { value: "card", label: "Card", sub: "Visa, Mastercard, RuPay", Icon: CreditCard },
-  { value: "emi", label: "No Cost EMI", sub: "3 / 6 / 9 months", Icon: Layers },
-  { value: "cod", label: "Cash on Delivery", sub: "Pay when it arrives", Icon: Banknote },
-];
+/**
+ * Razorpay's own checkout.
+ *
+ * The script is Razorpay's; it opens a window on their site where the
+ * customer chooses how to pay — UPI, a card, netbanking, a wallet, an
+ * EMI. It is loaded here rather than in the layout because it is only
+ * needed at the checkout, and it is loaded after the page is ready
+ * because nothing happens until the customer asks to pay.
+ */
+const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 
-const initial: CheckoutState = { ok: false };
+/** The colour the gateway's window is shown in. */
+const BRAND = "#0071c5";
+
+/** The shop's name, as the gateway shows it. */
+const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME || "ConsoleSeller";
+
+type RazorpayResponse = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description?: string;
+  prefill?: { name?: string; email?: string; contact?: string };
+  notes?: Record<string, string>;
+  theme?: { color?: string };
+  handler: (response: RazorpayResponse) => void;
+  modal?: { ondismiss?: () => void; onescape?: () => void };
+};
+
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: string, handler: (response: unknown) => void) => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+
+/** What the shop's own endpoint answered with. */
+type GatewayOrder = {
+  order_id: string;
+  amount: number;
+  currency: string;
+  key_id: string | null;
+  shop_order_id: string;
+  pending_token: string;
+};
 
 export function CheckoutForm({
   account,
   savedAddresses = [],
+  total = 0,
 }: {
   /** The signed-in customer's details, if there is one. */
   account?: { name: string; email: string; phone: string | null } | null;
   savedAddresses?: Address[];
+  /** What the order comes to, so the button can say so. */
+  total?: number;
 }) {
-  const [state, formAction] = useActionState(placeOrderAction, initial);
-  const errors = state.errors ?? {};
+  const router = useRouter();
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [method, setMethod] = useState<"online" | "cod">("online");
   const formRef = useRef<HTMLFormElement>(null);
+  // Whether the money has been taken. It stops a closed payment window
+  // from putting away an order that has in fact been paid for.
+  const paid = useRef(false);
 
   const preferred =
     savedAddresses.find((a) => a.is_default) ?? savedAddresses[0] ?? null;
@@ -64,14 +123,226 @@ export function CheckoutForm({
     set("pincode", saved.pincode);
   }
 
+  /** What the customer has typed into a field. */
+  function field(name: string): string {
+    const form = formRef.current;
+    if (!form) return "";
+    const el = form.elements.namedItem(name);
+    return el instanceof HTMLInputElement ? el.value.trim() : "";
+  }
+
+  /**
+   * Starts the order.
+   *
+   * The shop is asked for an order to pay against, and it answers with
+   * the gateway's order, the amount and the currency. Money taken at the
+   * door is finished here instead.
+   */
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+
+    const form = formRef.current;
+    if (!form) return;
+
+    setBusy(true);
+    setMessage(null);
+    setErrors({});
+
+    const details = Object.fromEntries(new FormData(form).entries());
+
+    let response: Response;
+    try {
+      response = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(details),
+      });
+    } catch {
+      setBusy(false);
+      setMessage(
+        "We could not reach the shop. Please check your connection and try again."
+      );
+      return;
+    }
+
+    const body = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      errors?: Record<string, string>;
+      mode?: string;
+      order_id?: string;
+      amount?: number;
+      currency?: string;
+      key_id?: string | null;
+      shop_order_id?: string;
+      pending_token?: string;
+    };
+
+    if (!response.ok || !body.ok) {
+      setBusy(false);
+      setErrors(body.errors ?? {});
+      setMessage(body.error ?? "We could not start the order. Please try again.");
+      return;
+    }
+
+    // Money taken at the door — the order is in.
+    if (body.mode === "cod") {
+      router.push(`/order/${body.order_id}`);
+      return;
+    }
+
+    await openGateway({
+      order_id: body.order_id ?? "",
+      amount: body.amount ?? 0,
+      currency: body.currency ?? "INR",
+      key_id: body.key_id ?? null,
+      shop_order_id: body.shop_order_id ?? "",
+      pending_token: body.pending_token ?? "",
+    });
+  }
+
+  /**
+   * Opens the gateway's own window.
+   */
+  async function openGateway(order: GatewayOrder) {
+    const ready = await gatewayIsReady();
+    if (!ready || !window.Razorpay) {
+      setBusy(false);
+      setMessage(
+        "The payment window could not be loaded. Please check your connection and try again."
+      );
+      return;
+    }
+
+    const razorpay = new window.Razorpay({
+      // The key that opens the checkout is the key that can verify the
+      // payment, so it is the one the shop's own answer carried.
+      key: order.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
+      amount: order.amount,
+      currency: order.currency,
+      order_id: order.order_id,
+      name: STORE_NAME,
+      description: `Order ${order.shop_order_id}`,
+      prefill: {
+        name: field("name"),
+        email: field("email"),
+        contact: contactForGateway(field("phone")),
+      },
+      notes: { shop_order_id: order.shop_order_id },
+      theme: { color: BRAND },
+      handler: (response) => {
+        void confirmPayment(response, order);
+      },
+      modal: {
+        // The window was closed without paying. Nothing has been paid,
+        // so the order the shop wrote is put away again.
+        ondismiss: () => {
+          void abandonOrder(order);
+        },
+      },
+    });
+
+    // A payment that was refused. The customer can try again inside the
+    // window, so the order is left alone until the window is closed.
+    razorpay.on("payment.failed", (response) => {
+      setMessage(failedMessage(response));
+    });
+
+    razorpay.open();
+  }
+
+  /**
+   * Checks that the payment is real, and finishes the order.
+   */
+  async function confirmPayment(
+    response: RazorpayResponse,
+    order: GatewayOrder
+  ) {
+    paid.current = true;
+
+    let verified: Response;
+    try {
+      verified = await fetch("/api/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+      });
+    } catch {
+      setBusy(false);
+      setMessage(
+        "We could not confirm your payment just now. If you have been charged, please do not pay again — we will confirm your order by email."
+      );
+      return;
+    }
+
+    const body = (await verified.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      order_id?: string;
+    };
+
+    if (!verified.ok || !body.ok) {
+      setBusy(false);
+      setMessage(
+        body.error ??
+          "We could not confirm your payment just now. If you have been charged, please do not pay again — we will confirm your order by email."
+      );
+      return;
+    }
+
+    toast("Payment received — your order is in.", "success");
+    router.push(`/order/${body.order_id}`);
+  }
+
+  /**
+   * Puts away an order the customer did not pay for.
+   *
+   * The basket is left as it was, so they can simply try again.
+   */
+  async function abandonOrder(order: GatewayOrder, reason?: string) {
+    if (paid.current) return;
+
+    setBusy(false);
+    setMessage(
+      reason ??
+        "The payment was not completed, so no order has been placed. Your basket is untouched — you can try again."
+    );
+
+    try {
+      await fetch("/api/cancel-pending-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: order.shop_order_id,
+          pending_token: order.pending_token,
+        }),
+      });
+    } catch {
+      // The shop will sort it out — an order that was never paid for is
+      // not one the customer has to worry about.
+    }
+  }
+
   return (
-    <form ref={formRef} action={formAction} className="space-y-6" noValidate>
-      {state.message && !state.ok && (
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      className="space-y-6"
+      noValidate
+    >
+      <Script src={RAZORPAY_SCRIPT} strategy="afterInteractive" />
+
+      {message && (
         <p
           role="alert"
           className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-medium text-red-700"
         >
-          {state.message}
+          {message}
         </p>
       )}
 
@@ -218,37 +489,46 @@ export function CheckoutForm({
 
       <Section title="Payment method">
         <p className="-mt-2 mb-4 text-[12.5px] text-gray-500">
-          Demo store — no real payment is taken and no card details are collected.
+          Paying now is done on our payment provider&rsquo;s secure page.
+          Your card details never reach our servers.
         </p>
         <div className="grid gap-2.5 sm:grid-cols-2">
-          {PAYMENTS.map(({ value, label, sub, Icon }) => (
-            <label
-              key={value}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3.5 transition-colors hover:border-gray-300 has-[:checked]:border-brand has-[:checked]:bg-brand-tint"
-            >
-              <input
-                type="radio"
-                name="paymentMethod"
-                value={value}
-                defaultChecked={value === "upi"}
-                className="sr-only"
-              />
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13.5px] font-semibold text-ink">
-                  {label}
-                </span>
-                <span className="block text-[12px] text-gray-500">{sub}</span>
-              </span>
-            </label>
-          ))}
+          <PaymentOption
+            value="online"
+            label="Pay now"
+            sub="UPI, card, netbanking, EMI"
+            Icon={Smartphone}
+            checked={method === "online"}
+            onSelect={setMethod}
+          />
+          <PaymentOption
+            value="cod"
+            label="Cash on Delivery"
+            sub="Pay when it arrives"
+            Icon={Banknote}
+            checked={method === "cod"}
+            onSelect={setMethod}
+          />
         </div>
       </Section>
 
-      <button type="submit" className="btn btn-primary btn-lg w-full">
-        <SubmitLabel />
+      <button type="submit" disabled={busy} className="btn btn-primary btn-lg w-full">
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {method === "cod" ? "Placing your order…" : "Opening the payment window…"}
+          </>
+        ) : method === "cod" ? (
+          <>
+            <Lock className="h-4 w-4" />
+            Place order
+          </>
+        ) : (
+          <>
+            <CreditCard className="h-4 w-4" />
+            Pay {total > 0 ? money(total) : "now"}
+          </>
+        )}
       </button>
 
       <p className="flex items-center justify-center gap-1.5 text-[12.5px] text-gray-500">
@@ -259,21 +539,102 @@ export function CheckoutForm({
   );
 }
 
-function SubmitLabel() {
-  const { pending } = useFormStatus();
-  if (pending) {
-    return (
-      <>
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Placing your order…
-      </>
-    );
-  }
+/**
+ * The customer's number, as the gateway wants it.
+ *
+ * The gateway shows the country the number belongs to, and it wants the
+ * number with that country on the front of it — "9876543210" on its own
+ * is not enough for it to know where the number is from, and it asks
+ * the customer for it again. The shop is in India and takes Indian
+ * numbers, so the country is put on the front of the number when it is
+ * not there already.
+ */
+function contactForGateway(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  return phone;
+}
+
+/**
+ * Whether the gateway's script has arrived.
+ *
+ * It is loaded in the background, so it may not be there yet when the
+ * customer presses the button. This waits a little for it rather than
+ * telling them to try again.
+ */
+async function gatewayIsReady(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (window.Razorpay) return true;
+
+  return new Promise((resolve) => {
+    let waited = 0;
+    const timer = window.setInterval(() => {
+      if (window.Razorpay) {
+        window.clearInterval(timer);
+        resolve(true);
+        return;
+      }
+      waited += 100;
+      if (waited >= 10000) {
+        window.clearInterval(timer);
+        resolve(false);
+      }
+    }, 100);
+  });
+}
+
+/**
+ * What the gateway said when it refused the payment.
+ */
+function failedMessage(response: unknown): string {
+  const error = (response as { error?: { description?: string; message?: string } })
+    ?.error;
   return (
-    <>
-      <Lock className="h-4 w-4" />
-      Place order
-    </>
+    error?.description ??
+    error?.message ??
+    "The payment was not completed, so no order has been placed. Your basket is untouched — you can try again."
+  );
+}
+
+function PaymentOption({
+  value,
+  label,
+  sub,
+  Icon,
+  checked,
+  onSelect,
+}: {
+  value: string;
+  label: string;
+  sub: string;
+  Icon: LucideIcon;
+  checked: boolean;
+  onSelect: (value: "online" | "cod") => void;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-3 rounded-lg border bg-white p-3.5 transition-colors hover:border-gray-300 ${
+        checked ? "border-brand bg-brand-tint" : "border-gray-200"
+      }`}
+    >
+      <input
+        type="radio"
+        name="paymentMethod"
+        value={value}
+        checked={checked}
+        onChange={() => onSelect(value as "online" | "cod")}
+        className="sr-only"
+      />
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13.5px] font-semibold text-ink">
+          {label}
+        </span>
+        <span className="block text-[12px] text-gray-500">{sub}</span>
+      </span>
+    </label>
   );
 }
 

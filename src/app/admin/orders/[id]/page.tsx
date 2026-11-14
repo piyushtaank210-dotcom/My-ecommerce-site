@@ -6,6 +6,7 @@ import { getOrder } from "@/lib/orders";
 import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
+import { paymentMethodLabel } from "@/lib/payment-method";
 import { STOCK_STATE_LABEL } from "@/lib/stock";
 import { getUserById } from "@/lib/auth";
 import { OrderStatusSelect } from "@/components/admin/OrderStatusSelect";
@@ -182,12 +183,25 @@ export default async function AdminOrderDetailPage({
               Payment
             </h2>
             <p className="text-[13px] text-gray-600">
-              {order.payment_method === "emi"
-                ? "No Cost EMI"
-                : order.payment_method === "cod"
-                  ? "Cash on Delivery"
-                  : order.payment_method.toUpperCase()}
+              {paymentMethodLabel(order.payment_method)}
             </p>
+            {order.payment_gateway && (
+              <p className="mt-1.5 text-[12.5px] text-gray-500">
+                {order.payment_reference ? (
+                  <>
+                    Paid through {order.payment_gateway} ·{" "}
+                    <span className="tnum">{order.payment_reference}</span>
+                  </>
+                ) : order.status === "cancelled" ? (
+                  <>Cancelled before the payment was made — nothing was taken.</>
+                ) : (
+                  <>
+                    Waiting for the payment to be confirmed — nothing has been
+                    taken yet.
+                  </>
+                )}
+              </p>
+            )}
             <p className="mt-2 text-[12.5px] text-gray-500">
               {order.email} · {order.phone}
             </p>

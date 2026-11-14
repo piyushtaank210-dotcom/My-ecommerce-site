@@ -232,6 +232,16 @@ export type Order = {
   shipping: number;
   total: number;
   payment_method: string;
+  /**
+   * The payment provider the order was paid through, when there is one.
+   */
+  payment_gateway: string | null;
+  /**
+   * The provider's own reference for the payment. It is what a refund
+   * is sent against, so it is written down only once the provider has
+   * confirmed the money.
+   */
+  payment_reference: string | null;
   status: string;
   delivered_at?: string | null;
   items: OrderItem[];

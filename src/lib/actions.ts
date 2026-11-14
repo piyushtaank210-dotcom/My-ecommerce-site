@@ -4,21 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "./db";
-import { getCart } from "./cart";
 import { createContactMessage } from "./contact";
 import { ensureSessionId, readSessionId } from "./session";
-import { createOrder } from "./orders";
-import { InventoryError } from "./inventory";
 import { getBackorderPolicy } from "./settings";
 import { backordersAllowed } from "./variations";
 import { getProduct } from "./queries";
-import { createAddress } from "./addresses";
 import { STORE } from "./store-info";
 import {
   createUser,
   endSession,
   findUserByEmail,
-  getCurrentUser,
   safeNext,
   startSession,
   verifyPassword,
@@ -293,120 +288,10 @@ export async function sendContactMessageAction(
 
 /* --------------------------------------------------------------- checkout */
 
-const checkoutSchema = z.object({
-  name: z.string().trim().min(2, "Enter your full name."),
-  email: z.string().trim().email("Enter a valid email address."),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^[0-9+\-\s]{10,15}$/, "Enter a valid phone number."),
-  address1: z.string().trim().min(5, "Enter your street address."),
-  address2: z.string().trim().optional(),
-  city: z.string().trim().min(2, "Enter your city."),
-  state: z.string().trim().min(2, "Select your state."),
-  pincode: z.string().trim().regex(/^[0-9]{6}$/, "PIN code must be 6 digits."),
-  notes: z.string().trim().optional(),
-  paymentMethod: z.enum(["upi", "card", "cod", "emi"]),
-  // The payment provider that took the money, and its own reference
-  // for the payment. They are what a refund is sent against, so a
-  // checkout that talks to a gateway writes them down.
-  paymentGateway: z.string().trim().optional(),
-  paymentReference: z.string().trim().optional(),
-  saveAddress: z.string().trim().optional(),
-});
+/*
+ * Placing an order is not a server action any more: it goes through
+ * POST /api/create-order, because the payment has to be started from the
+ * browser and the two halves of it — the order and the gateway's order —
+ * are made together. The checkout itself lives in src/lib/checkout.ts.
+ */
 
-export type CheckoutState = {
-  ok: boolean;
-  errors?: Record<string, string>;
-  message?: string;
-};
-
-export async function placeOrderAction(
-  _prev: CheckoutState,
-  formData: FormData
-): Promise<CheckoutState> {
-  const parsed = checkoutSchema.safeParse({
-    name: formData.get("name"),
-    email: formData.get("email"),
-    phone: formData.get("phone"),
-    address1: formData.get("address1"),
-    address2: formData.get("address2") ?? undefined,
-    city: formData.get("city"),
-    state: formData.get("state"),
-    pincode: formData.get("pincode"),
-    notes: formData.get("notes") ?? undefined,
-    paymentMethod: formData.get("paymentMethod"),
-    paymentGateway: formData.get("paymentGateway") ?? undefined,
-    paymentReference: formData.get("paymentReference") ?? undefined,
-    saveAddress: formData.get("saveAddress") ?? undefined,
-  });
-
-  if (!parsed.success) {
-    const errors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "form");
-      if (!errors[key]) errors[key] = issue.message;
-    }
-    return { ok: false, errors, message: "Check the highlighted fields." };
-  }
-
-  const cart = await getCart();
-  if (cart.lines.length === 0) {
-    return { ok: false, message: "Your cart is empty." };
-  }
-
-  let orderId: string;
-  try {
-    orderId = await createOrder(
-      parsed.data,
-      cart.lines.map((l) => ({
-        productSlug: l.product.slug,
-        variantId: l.variant?.id ?? null,
-        variantName: l.variant?.name ?? null,
-        name: l.product.name,
-        price: l.unitPrice,
-        quantity: l.quantity,
-      })),
-      {
-        subtotal: cart.subtotal,
-        shipping: cart.shipping,
-        total: cart.total,
-      }
-    );
-  } catch (err) {
-    // The stock ran out between the basket and the checkout. Nothing was
-    // charged and nothing was taken off the shelf.
-    if (err instanceof InventoryError) {
-      return {
-        ok: false,
-        message: `${err.message} Nothing has been ordered — please adjust your basket.`,
-      };
-    }
-    throw err;
-  }
-
-  const sessionId = await readSessionId();
-  if (sessionId) {
-    (await getDb().prepare("DELETE FROM cart_items WHERE session_id = ?").run(sessionId));
-  }
-
-  // "Save this address" — keep it on the account for next time.
-  if (parsed.data.saveAddress) {
-    const user = await getCurrentUser();
-    if (user) {
-      await createAddress(user.id, {
-        label: "Checkout",
-        name: parsed.data.name,
-        phone: parsed.data.phone,
-        address1: parsed.data.address1,
-        address2: parsed.data.address2,
-        city: parsed.data.city,
-        state: parsed.data.state,
-        pincode: parsed.data.pincode,
-      });
-    }
-  }
-
-  revalidatePath("/", "layout");
-  redirect(`/order/${orderId}`);
-}

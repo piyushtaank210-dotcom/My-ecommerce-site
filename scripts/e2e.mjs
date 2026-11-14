@@ -43,6 +43,22 @@ const PORT = 9222;
 
 mkdirSync(SHOTS, { recursive: true });
 
+/**
+ * Chooses cash on delivery.
+ *
+ * The checkout offers two ways to pay: money now, through the gateway,
+ * or money when the goods arrive. This suite is about the shop and not
+ * about the gateway, so the order is placed the way that needs no
+ * payment provider — the payment itself is checked by
+ * `check-razorpay.mjs`, which has a gateway to pay through.
+ */
+const pickCashOnDelivery = `(() => {
+  const el = document.querySelector('input[name="paymentMethod"][value="cod"]');
+  if (!el) return 'NOT_FOUND';
+  el.click();
+  return 'CLICKED';
+})()`;
+
 /* -------------------------------------------------------------------- main */
 let chrome;
 let cdp;
@@ -375,6 +391,11 @@ try {
   await cdp.evaluate(setInput("pincode", "411045"));
   await sleep(250);
 
+  // The money is taken at the door for this order. The other way round
+  // is taken by the payment check, which has a gateway to pay through.
+  await cdp.evaluate(pickCashOnDelivery);
+  await sleep(250);
+
   await cdp.evaluate(clickByText("Place order"));
   await waitFor(cdp, `location.pathname.startsWith('/order/') ? location.pathname : ''`);
 
@@ -400,6 +421,7 @@ try {
   await cdp.evaluate(clickByText("Add to cart"));
   await sleep(1400);
   await cdp.goto(`${BASE}/checkout`);
+  await cdp.evaluate(pickCashOnDelivery);
   await cdp.evaluate(clickByText("Place order"));
   await sleep(1800);
   const errText = await cdp.evaluate("document.body.innerText");

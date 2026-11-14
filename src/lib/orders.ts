@@ -8,6 +8,7 @@ import {
 } from "./inventory";
 import type { Order, OrderItem } from "./types";
 import { money } from "./format";
+import { paymentMethodLabel } from "./payment-method";
 
 type Row = Record<string, unknown>;
 const str = (v: unknown) => String(v ?? "");
@@ -84,10 +85,11 @@ export function generateOrderId(): string {
 export async function createOrder(
   input: CheckoutInput,
   lines: CheckoutLine[],
-  totals: { subtotal: number; shipping: number; total: number }
+  totals: { subtotal: number; shipping: number; total: number },
+  options: { id?: string; notify?: boolean } = {}
 ): Promise<string> {
   const db = getDb();
-  const id = generateOrderId();
+  const id = options.id ?? generateOrderId();
   const user = await getCurrentUser();
 
   (await withTransaction(async (db) => {
@@ -148,7 +150,14 @@ export async function createOrder(
   // The customer is told their order is in. It is sent after the order
   // is written, so that a mail that cannot go out never stops the order
   // from being placed.
-  await notifyOrderPlaced(id, input, lines, totals);
+  //
+  // An order that is waiting on a payment is the exception: it is not
+  // placed until the money is in, so the message waits for that. The
+  // order is written first and the message is sent when the payment is
+  // confirmed.
+  if (options.notify !== false) {
+    await notifyOrderPlaced(id);
+  }
 
   return id;
 }
@@ -158,43 +167,46 @@ export async function createOrder(
  *
  * The message lists what they ordered and what they paid, so that the
  * order in their inbox is the order they can check against their card.
+ *
+ * It reads the order back from the shop's own record rather than being
+ * handed the details that were written, so that the message can be sent
+ * at the moment the payment is confirmed — long after the order itself
+ * was written.
  */
-async function notifyOrderPlaced(
-  orderId: string,
-  input: CheckoutInput,
-  lines: CheckoutLine[],
-  totals: { subtotal: number; shipping: number; total: number }
-): Promise<void> {
-  const email = input.email.trim();
+export async function notifyOrderPlaced(orderId: string): Promise<void> {
+  const order = await getOrder(orderId);
+  if (!order) return;
+
+  const email = order.email.trim();
   if (!email) return;
 
-  const items = lines
+  const items = order.items
     .map(
       (l) =>
-        `  ${l.name}${l.variantName ? ` (${l.variantName})` : ""} — ${l.quantity} × ${money(l.price)}`
+        `  ${l.name}${l.variant_name ? ` (${l.variant_name})` : ""} — ${l.quantity} × ${money(l.price)}`
     )
     .join("\n");
 
   await notifyCustomerAboutOrder({
-    userId: null,
+    userId: order.user_id ?? null,
     email,
     orderId,
     kind: "order_confirmed",
     title: `Order ${orderId} confirmed`,
     body: [
-      `Thank you for your order, ${input.name.trim() || "there"}.`,
+      `Thank you for your order, ${order.name.trim() || "there"}.`,
       "",
       `Order: ${orderId}`,
       "",
       "What you ordered:",
       items,
       "",
-      `Subtotal: ${money(totals.subtotal)}`,
-      `Delivery: ${money(totals.shipping)}`,
-      `Total: ${money(totals.total)}`,
+      `Subtotal: ${money(order.subtotal)}`,
+      `Delivery: ${money(order.shipping)}`,
+      `Total: ${money(order.total)}`,
       "",
-      `Paid by: ${input.paymentMethod}`,
-      `Delivering to: ${input.address1}${input.address2 ? `, ${input.address2}` : ""}, ${input.city}, ${input.state} — ${input.pincode}`,
+      `Paid by: ${paymentMethodLabel(order.payment_method)}`,
+      `Delivering to: ${order.address1}${order.address2 ? `, ${order.address2}` : ""}, ${order.city}, ${order.state} — ${order.pincode}`,
       "",
       "We will write to you again when your order is on its way.",
     ].join("\n"),
@@ -216,7 +228,8 @@ async function notifyOrderPlaced(
 export async function applyOrderStatus(
   orderId: string,
   status: OrderStatus,
-  userId: number | null = null
+  userId: number | null = null,
+  options: { notify?: boolean } = {}
 ): Promise<{ ok: boolean; message?: string }> {
   const db = getDb();
 
@@ -307,7 +320,13 @@ export async function applyOrderStatus(
     // The customer is told where their order has got to. It is sent
     // after the change is recorded, so that a mail that cannot go out
     // never stops the order from moving.
-    await notifyOrderStatus(orderId, status);
+    //
+    // An order the customer never paid for is the exception: there is
+    // nothing to tell them about, and a cancellation email for an order
+    // they walked away from is only noise.
+    if (options.notify !== false) {
+      await notifyOrderStatus(orderId, status);
+    }
 
     return { ok: true };
   } catch (err) {
@@ -433,6 +452,8 @@ export async function getOrder(id: string): Promise<Order | null> {
     shipping: num(row.shipping),
     total: num(row.total),
     payment_method: str(row.payment_method),
+    payment_gateway: strOrNull(row.payment_gateway),
+    payment_reference: strOrNull(row.payment_reference),
     status: str(row.status),
     delivered_at: strOrNull(row.delivered_at),
     items,

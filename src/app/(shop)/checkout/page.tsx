@@ -27,7 +27,8 @@ export default async function CheckoutPage() {
 
       <h1 className="mb-2 text-[28px] font-bold text-ink">Checkout</h1>
       <p className="mb-7 text-[13.5px] text-gray-500">
-        Demo checkout — no real payment is processed.
+        Pay by UPI, card, netbanking or No Cost EMI on our payment
+        provider&rsquo;s secure page — or have cash on delivery.
       </p>
 
       <div className="mx-auto grid max-w-[1600px] gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -39,6 +40,7 @@ export default async function CheckoutPage() {
                 : null
             }
             savedAddresses={savedAddresses}
+            total={cart.total}
           />
         </div>
 

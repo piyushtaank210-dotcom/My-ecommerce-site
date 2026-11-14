@@ -79,6 +79,83 @@ Override them with `PF_ADMIN_EMAIL`, `PF_ADMIN_PASSWORD`, `PF_SUPPORT_EMAIL`, an
 
 ---
 
+## Taking payment
+
+The shop takes payment through **Razorpay's Standard Checkout** — UPI, cards, netbanking, wallets and No Cost EMI on Razorpay's own secure page — and cash on delivery.
+
+### The keys
+
+Two keys, both read from the environment and never written into the source:
+
+| Variable | What it is | Where it goes |
+|---|---|---|
+| `RAZORPAY_KEY_ID` | The shop's name at the gateway | Read on the server, handed to the checkout |
+| `RAZORPAY_KEY_SECRET` | What proves a payment came from the gateway | **The server only. It never reaches the browser.** |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | The same key id for the browser | A fallback only — see below |
+
+Put them in `.env.local` (ignored by Git) or in the environment settings of the host. A deployment has no `.env.local`, so on Vercel both keys have to be in **Settings → Environment Variables**, for every environment including Preview.
+
+`NEXT_PUBLIC_RAZORPAY_KEY_ID` is only a fallback. The checkout takes the key id from the shop's own answer to `POST /api/create-order`, so the key that opens the checkout is always the key that can verify the payment. Without it the checkout still works.
+
+> The keys in `.env.local` are **test** keys. They take test payments, not real money. Swap them for the live keys when Razorpay approves the shop, and change `NEXT_PUBLIC_RAZORPAY_KEY_ID` with them.
+
+### How a payment goes through
+
+1. **The customer presses "Pay".** The browser sends the checkout details to `POST /api/create-order`.
+2. **The shop asks the gateway for an order.** It calls Razorpay's `POST /v1/orders` with the amount **in paise** — the shop keeps its money in rupees, and the conversion happens at that edge and nowhere else. The shop's own order id is the gateway's `receipt`, which is what ties a payment back to the order it belongs to.
+3. **The shop writes its own order.** The stock comes off the shelf *before* any money moves: a customer who has paid for a console has to be able to have that console. The order waits for the money — it is not announced until the payment is confirmed.
+4. **The gateway's window opens.** Razorpay's `checkout.js` is loaded at the checkout and opens on Razorpay's own site. The card number never reaches this server.
+5. **The gateway hands back three things** — the order id, the payment id, and a signature over the two.
+6. **The shop checks the signature.** `POST /api/verify-payment` makes the same HMAC-SHA256 the gateway made — `order_id + "|" + payment_id`, signed with the key secret — and compares it in constant time. **A signature that does not match is refused, and nothing is marked as paid.**
+7. **The gateway is asked to confirm.** The payment and the order it belongs to are fetched together. The payment has to be captured, it has to belong to the order that was named, and it has to be for the amount the shop's own order says is owed.
+8. **The order is marked paid.** The payment reference is written on the order, the customer is told, and the basket is emptied.
+
+### If the customer walks away
+
+An order that is waiting for a payment is not a real order: nothing was paid, nothing should be sent, and the stock has to go back on the shelf. When the payment window is closed, the browser calls `POST /api/cancel-pending-order` and the order is put away again.
+
+The order id alone cannot do that — an order id is a receipt, and anyone who has seen one can write it down. The request has to come from the same browser that started the payment, and it has to carry a token signed with the session's own secret. **A payment that has gone through is never touched by that endpoint**: money that has been taken is not the shop's to give back there.
+
+### The endpoints
+
+| Endpoint | What it does | When it fails |
+|---|---|---|
+| `POST /api/create-order` | Makes the order and asks the gateway for one to pay against | `400` on bad details or an empty basket, `409` when the stock ran out, `503` when the shop has no gateway keys |
+| `POST /api/verify-payment` | Checks the signature and the gateway's own record | `400` on a signature that does not match, on missing details, on a payment the gateway does not know, and on an amount that does not match — **and nothing is marked as paid** |
+| `POST /api/cancel-pending-order` | Puts away an order that was never paid for | `403` when the request does not come from the browser that made the order, `409` when the order has been paid for |
+
+### Checking it
+
+```bash
+npm run check:razorpay
+```
+
+Drives a real browser through the whole payment and checks that a signature
+that does not match is refused, that a payment the gateway does not know is
+refused, that neither of them marks the order paid, that a good signature
+does mark it paid and writes the payment reference on the order, that the
+basket is emptied, that the customer is told, that cash on delivery still
+works, and that an order left unpaid can only be put away by the browser
+that made it. It tidies up after itself: the orders it makes are cancelled
+through the back office, so the stock goes back on the shelf.
+
+The payment half needs a mock of the gateway, because a payment has to be
+made by something. The shop has to be pointed at it:
+
+```bash
+npm run mock:gateway          # in one terminal — it says where it is
+RAZORPAY_API_BASE=http://127.0.0.1:9595 npm run dev   # in another
+npm run check:razorpay        # in a third
+```
+
+Against the real gateway — the order really is made at Razorpay, and the
+refusals are the real ones — leave `RAZORPAY_API_BASE` unset and run
+`npm run check:razorpay`; the payment half is skipped, because there is
+no way to make a payment that the real gateway will accept without paying
+for something.
+
+---
+
 ## The design
 
 Three brand colours:
@@ -585,12 +662,10 @@ answers with. The gateway's own status is what decides whether the
 refund is complete: a refund the gateway has not processed is
 *processing*, never *completed*.
 
-
-**Razorpay is not live on this shop yet.** Until it is approved and the
-checkout is wired to it, the gateway button is not shown at all and every
-refund is paid by hand — a bank transfer, a UPI refund, cash — with the
-reference of the payment written down against it. The panel on the refunds
-page says which path is in use, so nobody has to guess.
+**A refund goes back through the gateway because the money came in
+through it.** Every payment taken at the checkout is written on the
+order with the gateway's own reference for it, and that reference is
+what the refund is sent against.
 
 **Where the shop cannot use the gateway** — it has not been given the
 credentials, or the order carries no gateway payment reference — the
@@ -1117,6 +1192,7 @@ scripts/
   set-role.mjs          ← changes an account's role
   write-schema.mjs      ← regenerates schema.sql from src/lib/schema.ts
   lib/browser.mjs       ← the headless-Chrome driver the test scripts share
+  lib/mock-gateway.mjs  ← a mock of the gateway's API, for testing the payment
   e2e.mjs               ← browser test suite
   check-admin.mjs       ← back-office smoke test
   check-catalogue.mjs   ← catalogue test
@@ -1126,6 +1202,8 @@ scripts/
   check-import.mjs      ← import, export, validation and dashboard test
   check-pages.mjs       ← opens every page and reports what the browser complains about
   check-product-form.mjs ← product editor test
+  check-razorpay.mjs    ← the payment, end to end
+  cleanup-razorpay-orders.mjs ← puts away the orders the payment check made
   screenshot.mjs        ← single-page screenshot helper
 src/
   app/
@@ -1135,6 +1213,9 @@ src/
     admin/              ← the back office: overview, orders, inventory, messages, users, products
     api/admin/          ← back-office JSON endpoints
     api/account/        ← the signed-in customer's own endpoints
+    api/create-order/   ← starts an order, and asks the gateway for one to pay against
+    api/verify-payment/ ← checks the gateway's signature before an order is marked paid
+    api/cancel-pending-order/ ← puts away an order that was never paid for
     login/ register/    ← full-height auth pages, no site chrome
   components/
     admin/              ← the back-office shell and its controls
@@ -1160,6 +1241,12 @@ src/
     admin.ts            ← back-office queries: stats, orders, customers, enquiries
     addresses.ts        ← the address book
     cart.ts  orders.ts  actions.ts
+    checkout.ts         ← what the customer fills in, and what the shop does with it
+    gateway-config.ts   ← the gateway's keys and its address (no database)
+    payment-gateway.ts  ← taking a payment and checking the gateway's signature
+    payment-method.ts   ← how a payment method is written for a person to read (no database)
+    pending-order.ts    ← the token that lets a browser put away its own unpaid order
+    refund-gateway.ts   ← sending a refund back through the gateway
     admin-actions.ts    ← back-office server actions
     account-actions.ts  ← customer-panel server actions
     contact.ts          ← contact-page enquiries
@@ -1204,9 +1291,17 @@ import the database.
 
 This is a **demonstration store**. The commerce flows are complete, but:
 
-- **No real payments.** Checkout records the order; no processor is contacted
-  and no card details are collected. To go live, add Stripe or Razorpay inside
-  `placeOrderAction` and finalise the order from the webhook.
+- **Payments go through Razorpay's test keys.** The checkout takes a real
+  payment through Razorpay's Standard Checkout, and the signature is checked
+  on the server before anything is marked as paid. The keys in `.env.local`
+  are test keys, so they take test payments and not real money. Swapping them
+  for the live keys is the only change needed to take real money.
+- **There is no webhook.** The shop finds out that a payment went through
+  because the customer's browser tells it, and it checks the gateway's own
+  record before believing it. That is enough for a payment the customer
+  started, but a payment that goes through in some other way — or one the
+  browser never reports — would be missed. A webhook on Razorpay's side
+  would cover that.
 - **Email goes through Resend.** The shop sends every message — about a
   return, a replacement and a refund, and about the order itself — through
   Resend's API, using Resend's own SDK. Every message is written to
@@ -1259,6 +1354,7 @@ This is a **demonstration store**. The commerce flows are complete, but:
   something past the check.
 
 ### Taking it further
-- Add Stripe/Razorpay to `src/lib/actions.ts` and create the order from the webhook.
+- Add a Razorpay webhook, so a payment is picked up even when the customer's
+  browser never reports it.
 - Move the enquiries queue into a support inbox when the support role is
   settled — the `contact_messages.status` column is already there for it.

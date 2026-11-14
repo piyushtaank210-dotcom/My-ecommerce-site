@@ -8,8 +8,12 @@ export function json(data: unknown, status = 200): NextResponse {
   return NextResponse.json(data, { status });
 }
 
-export function fail(error: string, status: number): NextResponse {
-  return NextResponse.json({ error }, { status });
+export function fail(
+  error: string,
+  status: number,
+  extra?: Record<string, unknown>
+): NextResponse {
+  return NextResponse.json(extra ? { error, ...extra } : { error }, { status });
 }
 
 /**
