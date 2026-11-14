@@ -61,6 +61,7 @@
     "check:razorpay": "node scripts/check-razorpay.mjs",
     "check:razorpay:webhook": "node scripts/check-razorpay-webhook.mjs",
     "gateway:mode": "node scripts/gateway-mode.mjs",
+    "deploy:env": "node scripts/deploy-env.mjs",
     "mock:gateway": "node scripts/lib/mock-gateway.mjs",
     "cleanup:razorpay": "node scripts/cleanup-razorpay-orders.mjs",
     "check:return-settings": "node scripts/check-return-settings.mjs",

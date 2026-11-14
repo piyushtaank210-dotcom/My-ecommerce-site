@@ -89,6 +89,8 @@ try {
       o.email === "live-idem@example.com" ||
       o.email === "phone@example.com" ||
       o.email === "mobile@example.com" ||
+      o.email === "diag@example.com" ||
+      o.email === "Diagnosis@example.com" ||
       (o.notes ?? "").includes(MARKER)
   );
 

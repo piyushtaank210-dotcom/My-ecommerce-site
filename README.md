@@ -148,6 +148,33 @@ for every environment including Preview:
 | `RAZORPAY_WEBHOOK_SECRET` | the webhook secret |
 | `RAZORPAY_API_BASE` | `https://api.razorpay.com` |
 
+There is a script for it, which reads the keys out of `.env.local.live`
+so that they are never typed by hand and never end up in the wrong
+variable:
+
+```bash
+npx vercel login
+npm run deploy:env -- <your-project-slug>
+npx vercel --prod
+```
+
+The project slug is in the Vercel dashboard, under **Settings → General
+→ Project ID**. The script refuses to put a secret in a `NEXT_PUBLIC_`
+variable, and refuses to put the test webhook secret on the deployment
+at all.
+
+> **A deployment without these variables shows this on the checkout:**
+>
+> *The shop has not been given its payment gateway keys, so it cannot
+> take money online right now.*
+>
+> That is the shop saying it cannot find `RAZORPAY_KEY_ID` or
+> `RAZORPAY_KEY_SECRET` in its environment — it is not a payment that
+> was refused, and nothing has been charged. Cash on delivery still
+> works. A variable that was added after the last build is not in the
+> running site either: Vercel builds a new deployment when a variable
+> changes, and the old deployment keeps running until it does.
+
 **5. Check it with real money.** Put a small amount in the basket, pay it
 with a real card, and look at the order in the back office: it should be
 marked as paid, with the payment reference on it. Then look at Razorpay's
