@@ -201,11 +201,30 @@
 
   /* On a touch screen a button has to be big enough to hit with a thumb.
      The rules above describe the desktop design and are left alone; this
-     raises the floor only for a device that is actually being touched. */
+     raises the floor only for a device that is actually being touched.
+
+     44px is Apple's floor for a tap target — the size of a fingertip on
+     a phone. 40px is the near-miss that makes a phone feel fiddly: every
+     button on the site is a little harder to hit than it needs to be. */
   @media (pointer: coarse) {
     .btn,
     .btn-sm {
-      min-height: 2.5rem;
+      min-height: 2.75rem;
+    }
+  }
+
+  /* The same floor, for the controls that are not buttons in the
+     `.btn` sense — a chip, a gallery thumbnail, a stepper. The class is
+     added to the control in the markup and does nothing on a screen
+     that is being pointed at, so the desktop design is untouched.
+
+     It is scoped to the phone's width rather than to the touch screen
+     itself, because the tablet layout is a wide layout with room to
+     spare, and a taller chip there would only move the things around
+     it. */
+  @media (max-width: 767px) {
+    .tap-lg {
+      min-height: 2.75rem;
     }
   }
 
@@ -345,6 +364,33 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* A row that slides sideways fades out at the edge it slides towards.
+
+     The fade is part of the row itself, so it stays at the edge of the
+     screen while the row scrolls under it — the chip under it is always
+     the one being cut off, which is the sign that there is more of the
+     row to come.
+
+     The row sits on white, so over the empty space at the end of a row
+     that fits, the fade has nothing to fade and cannot be seen.
+
+     It only applies to the phone, where the row slides. From the tablet
+     breakpoint the row wraps and there is no edge to fade. */
+  @media (max-width: 639px) {
+    .scroll-fade {
+      -webkit-mask-image: linear-gradient(
+        to right,
+        #000 calc(100% - 2.5rem),
+        transparent 100%
+      );
+      mask-image: linear-gradient(
+        to right,
+        #000 calc(100% - 2.5rem),
+        transparent 100%
+      );
+    }
   }
 
   /* Hero carousel ---------------------------------------------------- */
@@ -497,9 +543,53 @@
 @media (max-width: 639px) {
   .btn-invert,
   .btn-outline-invert {
+    /* The height comes from a floor, not from deeper padding. The two
+       buttons have to sit side by side on a phone — at 375 pixels, which
+       is the width of an SE and of a mini, there is room for exactly
+       two of them and no more — so the width of a button cannot be
+       spent on making it taller. A floor of 44px gives a thumb
+       something it can hit without looking, and leaves the width alone.
+    */
+    min-height: 2.75rem;
     padding: 0.8rem 0.9rem;
     font-size: 0.66rem;
     letter-spacing: 0.05em;
+  }
+}
+
+/*
+  Form fields on a phone.
+  ---------------------------------------------------------------------------
+  iOS Safari zooms the whole page in when a form field smaller than 16px
+  is tapped, and it never zooms back out on its own: the shopper is left
+  looking at a blown-up form, and has to pinch the screen to undo it.
+  The zoom is silent and there is nothing wrong on the page to point at,
+  so it reads as the site being broken.
+
+  Every field is 16px on a phone, and on any screen that is being touched.
+  A field at 16px is exactly the size at which iOS stops zooming.
+
+  These rules sit outside the layers on purpose. Tailwind's own size
+  utilities live in a layer, and an unlayered rule outranks a layered one
+  whatever its specificity — which is what lets one rule reach every
+  field on the site, including the ones that carry an explicit size of
+  their own.
+*/
+@media (max-width: 767px), (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/*
+  The same floor for the fields themselves: a text box under 44px is a
+  short, thin strip that is easy to miss and easy to mistype into.
+*/
+@media (pointer: coarse) {
+  .input {
+    min-height: 2.75rem;
   }
 }
 
@@ -523,11 +613,50 @@
   }
 }
 
+/*
+  The header's own padding is not added on top of the gutter's: the
+  gutter inside the header already carries the safe area, and doing it
+  twice pushes the logo and the icons twice as far in as they should be
+  on a phone held sideways.
+
+  The header is also pushed down by the notch at the top, so the logo
+  never sits underneath the camera. */
 @supports (padding: max(0px)) {
   header {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
   }
+
+  header .container-x {
+    padding-left: clamp(1.25rem, 3.5vw, 4rem);
+    padding-right: clamp(1.25rem, 3.5vw, 4rem);
+  }
+
+  /* The footer's last line sits above the home indicator. Without this
+     the copyright line is the thing under the bar, and on a phone with
+     no browser toolbar — added to the home screen — it cannot be read
+     at all. */
+  footer {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/*
+  A tap on a phone.
+  ---------------------------------------------------------------------------
+  iOS Safari puts a grey flash over whatever was tapped, by default, and
+  it is a different grey every time — it follows the text colour of the
+  element. The blue here is the site's own colour, so the flash reads as
+  part of the shop rather than as a glitch, and it is the same blue on
+  every control.
+*/
+a,
+button,
+summary,
+label,
+[role="button"] {
+  -webkit-tap-highlight-color: rgb(0 113 197 / 0.16);
 }
 
 /* From the desktop breakpoint the copy moves to one side of the

@@ -8,22 +8,16 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { randomBytes } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import { launchChrome } from "./lib/browser.mjs";
+import { tokenForRole, deleteToken } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9241;
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-const user = db
-  .prepare("SELECT id, email FROM users WHERE role = 'admin' ORDER BY id LIMIT 1")
-  .get();
-const token = randomBytes(32).toString("hex");
-db.prepare(
-  "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)"
-).run(token, user.id, new Date(Date.now() + 3600_000).toISOString());
+// The session is made in the shop's own database, which is where the
+// back office looks for it.
+const token = await tokenForRole("admin");
 
 const { chrome, cdp } = await launchChrome({
   port: PORT,
@@ -56,6 +50,5 @@ try {
   }
 } finally {
   chrome.kill();
-  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
-  db.close();
+  await deleteToken(token);
 }

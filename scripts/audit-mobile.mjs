@@ -48,15 +48,44 @@ const DESCRIBE = `((el, vw) => {
   return tag + id + cls + (text ? ' "' + text + '"' : '');
 })`;
 
+/**
+ * Whether an element that sticks out past the edge of the screen can
+ * actually be seen.
+ *
+ * Something with a negative offset — a glow bled off the side of a card,
+ * a photograph scaled up by a carousel — is deliberately wider than the
+ * screen. If an ancestor clips it, it is not a problem: the page does
+ * not scroll sideways and nothing is cut off. It only becomes a problem
+ * when it is painted past the edge of the screen with nothing to stop it.
+ */
+const IS_CLIPPED = `((el) => {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const cs = getComputedStyle(p);
+    if (cs.overflowX === 'hidden' || cs.overflowX === 'clip') return true;
+  }
+  return false;
+})`;
+
 const MEASURE = `(() => {
   const vw = document.documentElement.clientWidth;
   const doc = document.documentElement;
+  const clipped = ${IS_CLIPPED};
   const offenders = [];
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) continue;
     // Right edge past the viewport, by more than a pixel of rounding.
     if (r.right > vw + 1) {
+      // A row that slides sideways on purpose is not a fault either.
+      let scrollRow = false;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const cs = getComputedStyle(p);
+        if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') {
+          scrollRow = true;
+          break;
+        }
+      }
+      if (clipped(el) || scrollRow) continue;
       offenders.push({
         desc: ${DESCRIBE}(el, vw),
         right: Math.round(r.right),

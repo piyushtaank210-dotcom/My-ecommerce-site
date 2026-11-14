@@ -41,7 +41,7 @@ export function MobileMenu() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 lg:hidden"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -62,7 +62,13 @@ export function MobileMenu() {
               onClick={() => setOpen(false)}
               className="absolute inset-0 bg-ink/40"
             />
-            <div className="absolute inset-y-0 left-0 flex w-[85%] max-w-xs flex-col bg-white shadow-pop">
+            {/*
+              The drawer keeps clear of the notch and the home indicator.
+              On a phone held sideways the notch cuts into the left of the
+              screen, and the drawer opens from the left — so the logo and
+              the links would sit underneath it without this.
+            */}
+            <div className="absolute inset-y-0 left-0 flex w-[85%] max-w-xs flex-col bg-white shadow-pop pl-[env(safe-area-inset-left)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
               <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-5">
                 <Link href="/" onClick={() => setOpen(false)} aria-label="ConsoleSeller Home">
                   <Image
@@ -77,7 +83,7 @@ export function MobileMenu() {
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close menu"
-                  className="grid h-9 w-9 place-items-center rounded-lg text-gray-500 hover:bg-gray-100"
+                  className="grid h-11 w-11 place-items-center rounded-lg text-gray-500 hover:bg-gray-100"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -87,7 +93,7 @@ export function MobileMenu() {
                 <Link
                   href="/search"
                   onClick={() => setOpen(false)}
-                  className="flex h-10 items-center gap-2 rounded-lg border border-gray-200 px-3 text-[14px] text-gray-500"
+                  className="flex h-11 items-center gap-2 rounded-lg border border-gray-200 px-3 text-[14px] text-gray-500"
                 >
                   <Search className="h-4 w-4" />
                   Search products

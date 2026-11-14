@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Star } from "lucide-react";
 import type { Product } from "@/lib/types";
 import { money, discountPct } from "@/lib/format";
@@ -22,17 +23,28 @@ export function ProductCard({ product }: { product: Product }) {
         className="relative block aspect-square overflow-hidden bg-gray-50"
       >
         {product.image ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
+          /*
+            The photograph is served at the size it is shown at.
+
+            The catalogue's pictures are full-size files — a console is a
+            1920-pixel photograph — and a card on a phone is about 170
+            pixels wide. Fetching the whole file to draw a thumbnail means
+            a phone downloads megabytes it will never be able to show,
+            and the page arrives late on anything but wifi. The optimiser
+            hands over a copy cut to the card instead.
+          */
+          <Image
             src={product.image}
             alt={product.name}
+            fill
             loading="lazy"
-            className="h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-[1.04] sm:p-6"
+            sizes="(min-width: 1536px) 14vw, (min-width: 1024px) 22vw, (min-width: 768px) 29vw, 46vw"
+            className="object-contain p-4 transition-transform duration-300 group-hover:scale-[1.04] sm:p-6"
           />
         ) : null}
 
         {off > 0 && (
-          <span className="absolute left-2 top-2 rounded-md bg-ink px-1.5 py-0.5 text-[10px] font-bold text-white sm:left-3 sm:top-3 sm:px-2 sm:py-0.5 sm:text-[11px]">
+          <span className="absolute left-2 top-2 rounded-md bg-ink px-1.5 py-0.5 text-[11px] font-bold text-white sm:left-3 sm:top-3 sm:px-2 sm:py-0.5 sm:text-[11px]">
             {off}% off
           </span>
         )}
@@ -48,7 +60,7 @@ export function ProductCard({ product }: { product: Product }) {
 
       <div className="flex flex-1 flex-col p-3 sm:p-4">
         {product.brand && (
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-brand sm:text-[11px]">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-brand sm:text-[11px]">
             {product.brand}
           </p>
         )}
@@ -57,7 +69,7 @@ export function ProductCard({ product }: { product: Product }) {
           <Link href={`/product/${product.slug}`}>{product.name}</Link>
         </h3>
 
-        <div className="mb-2.5 flex items-center gap-1.5 text-[11px] text-gray-500 sm:mb-3 sm:text-[12px]">
+        <div className="mb-2.5 flex items-center gap-1.5 text-[12px] text-gray-500 sm:mb-3 sm:text-[12px]">
           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
           <span className="tnum font-semibold text-ink">
             {product.rating.toFixed(1)}

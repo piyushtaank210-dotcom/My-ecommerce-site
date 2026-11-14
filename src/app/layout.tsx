@@ -21,8 +21,20 @@ export const metadata: Metadata = {
   description:
     "Buy gaming consoles and controllers — PS5, PS5 Pro, PS4, Xbox and DualSense on consoleseller.in. Genuine stock with Indian warranty, fast delivery.",
   icons: {
-    icon: "/icon.png",
-    apple: "/icon.png",
+    /*
+      Each size is named, so a browser downloads the one it will actually
+      use: a 32-pixel mark for the tab, a 180-pixel one for the home
+      screen of a phone. The drawing they are all cut from is 395KB, and
+      a phone downloading all of it to put a small mark on the screen is
+      the sort of thing that makes a shop feel slow. `npm run icons`
+      makes them.
+    */
+    icon: [
+      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 
@@ -30,6 +42,15 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
+  /*
+    `cover` lets the page reach into the area behind the notch and the
+    home indicator, and it is the switch that turns the safe-area
+    insets on: without it, `env(safe-area-inset-*)` is always zero and
+    the padding in globals.css has nothing to measure. On a phone held
+    sideways the notch cuts into the side of the screen, and the header
+    would otherwise sit underneath it.
+  */
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({

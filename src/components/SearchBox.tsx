@@ -97,7 +97,7 @@ export function SearchBox({
                 setResults([]);
               }}
               aria-label="Clear search"
-              className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded text-gray-400 transition-colors hover:text-ink sm:right-2.5 sm:h-auto sm:w-auto sm:p-1"
+              className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded text-gray-400 transition-colors hover:text-ink sm:right-2.5 sm:h-auto sm:w-auto sm:p-1"
             >
               <X className="h-3.5 w-3.5" />
             </button>

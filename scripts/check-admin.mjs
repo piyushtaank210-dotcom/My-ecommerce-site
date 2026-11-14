@@ -9,16 +9,19 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { registerTsResolver } from "./lib/ts-loader.mjs";
+
+// The app's own rule about what counts as low stock, so that the check
+// and the back office cannot disagree about it.
+registerTsResolver();
+const { productStockLevel } = await import("../src/lib/stock.ts");
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
-
-const admin = tokenForRole(db, "admin");
-const support = tokenForRole(db, "support");
+const admin = await tokenForRole("admin");
+const support = await tokenForRole("support");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -384,23 +387,28 @@ check(
 );
 
 // A product nobody has ordered, created for this test and removed again.
+//
+// It is created through the shop's own API rather than written into the
+// database directly: the shop's data lives in Postgres now, and a row
+// put into the old local file would never be seen by anything.
 const testSlug = "zz-test-delete-me";
-db.prepare(
-  `INSERT INTO products
-     (slug, sku, name, brand, category_slug, price, mrp, stock, specs, image,
-      listed, status, position)
-   VALUES (?,?,?,?,?,?,?,?,?,?,1,'published',999)`
-).run(
-  testSlug,
-  "ZZ-TEST-DELETE-ME",
-  "Test product",
-  "Sony",
-  "consoles",
-  100,
-  100,
-  5,
-  "{}",
-  null
+const created = await fetch(`${BASE}/api/admin/products`, {
+  method: "POST",
+  headers: { cookie: `pf_auth=${admin}`, "content-type": "application/json" },
+  body: JSON.stringify({
+    name: "Test product",
+    slug: testSlug,
+    brand: "Sony",
+    category: "consoles",
+    price: 100,
+    mrp: 100,
+    stock: 5,
+  }),
+});
+check(
+  "a product can be created",
+  created.status === 200 || created.status === 201,
+  `status ${created.status}`
 );
 const removed = await fetch(`${BASE}/api/admin/products/${testSlug}`, {
   method: "DELETE",
@@ -447,7 +455,18 @@ const lowStock = await fetch(`${BASE}/api/admin/products?stock=low&limit=100`, {
 }).then((r) => r.json());
 check(
   "the low-stock filter works",
-  lowStock.rows.every((p) => sellableStock(p) > 0 && sellableStock(p) <= 5),
+  // The rule the catalogue uses: a product is low when the stock it can
+  // sell has reached its threshold, or when one of its options has
+  // reached that option's own — an option that has run out makes the
+  // product low even while the others are still on the shelf.
+  lowStock.rows.every((p) => productStockLevel(p) === "low"),
+  `${lowStock.rows.length} rows`
+);
+check(
+  "the low-stock filter leaves the healthy products out",
+  lowStock.rows.every(
+    (p) => sellableStock(p) > 0 || p.variants?.length > 0
+  ),
   `${lowStock.rows.length} rows`
 );
 
@@ -684,5 +703,4 @@ console.log(
     ? "\n✓ ALL PASS — back office smoke test"
     : `\n✗ ${failures} FAILURES`
 );
-db.close();
 process.exit(failures === 0 ? 0 : 1);

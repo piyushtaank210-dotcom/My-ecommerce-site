@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { launchChrome } from "./lib/browser.mjs";
+import { LABEL_CHECK } from "./lib/label-check.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -22,33 +23,6 @@ const PAGES = [
   "/contact",
   "/search?q=playstation",
 ];
-
-const CHECK = `(() => {
-  const out = [];
-  for (const el of document.querySelectorAll('a, button')) {
-    const r = el.getBoundingClientRect();
-    if (r.width === 0) continue;
-    // The width the text would need, measured on a clone that is allowed to
-    // be as wide as it likes.
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const textW = range.getBoundingClientRect().width;
-    const cs = getComputedStyle(el);
-    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-    const inner = r.width - padX;
-    if (textW > inner + 1 && el.scrollWidth <= el.clientWidth + 1) {
-      out.push({
-        text: (el.textContent || '').trim().slice(0, 40),
-        textW: Math.round(textW),
-        inner: Math.round(inner),
-        w: Math.round(r.width),
-        clipped: el.scrollWidth > el.clientWidth + 1,
-        cls: (typeof el.className === 'string' ? el.className : '').trim().split(/\\s+/).slice(0,4).join('.'),
-      });
-    }
-  }
-  return out;
-})()`;
 
 const { chrome, cdp } = await launchChrome({
   port: 9233,
@@ -69,7 +43,7 @@ try {
       await cdp.goto(`${BASE}${path}`);
       await sleep(1400);
 
-      const out = await cdp.evaluate(CHECK);
+      const out = await cdp.evaluate(LABEL_CHECK);
       if (out.length) {
         bad += out.length;
         console.log(`\n✗ ${path} @${width}px`);

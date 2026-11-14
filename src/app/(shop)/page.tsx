@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, Check } from "lucide-react";
 import { getCategories, getProducts, getHeroSlides } from "@/lib/queries";
 import type { Product } from "@/lib/types";
@@ -117,7 +118,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/shop"
-            className="shrink-0 text-[13.5px] font-medium text-brand hover:underline"
+            className="shrink-0 py-1.5 text-[13.5px] font-medium text-brand hover:underline"
           >
             View all
           </Link>
@@ -163,11 +164,19 @@ export default async function HomePage() {
                       {/* Hero */}
                       <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-3 shadow-card sm:p-4">
                         {hero?.image && (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
+                          /*
+                            Served at the size it is shown at. These are
+                            full-size catalogue photographs, and the tile
+                            they sit in is a fraction of that — a phone
+                            was downloading megabytes for a thumbnail.
+                          */
+                          <Image
                             src={hero.image}
                             alt=""
                             loading="lazy"
+                            width={1200}
+                            height={1200}
+                            sizes="(min-width: 640px) 26vw, 46vw"
                             className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.04]"
                           />
                         )}
@@ -180,11 +189,17 @@ export default async function HomePage() {
                             key={p.slug}
                             className="flex items-center justify-center overflow-hidden rounded-2xl bg-white p-2.5 shadow-card sm:p-3"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            {/*
+                              Served at the size it is shown at — see the
+                              note on the photograph above.
+                            */}
+                            <Image
                               src={p.image}
                               alt=""
                               loading="lazy"
+                              width={1200}
+                              height={1200}
+                              sizes="(min-width: 640px) 26vw, 46vw"
                               className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.05]"
                             />
                           </div>
@@ -246,7 +261,7 @@ export default async function HomePage() {
             </div>
             <Link
               href="/shop"
-              className="shrink-0 text-[13.5px] font-medium text-brand hover:underline"
+              className="shrink-0 py-1.5 text-[13.5px] font-medium text-brand hover:underline"
             >
               View all
             </Link>

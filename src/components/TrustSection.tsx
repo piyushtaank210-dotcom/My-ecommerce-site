@@ -252,7 +252,7 @@ export function TrustSection() {
               <Link
                 key={l.href}
                 href={l.href}
-                className="rounded-full border border-white/20 px-3 py-1.5 text-[12.5px] text-white/75 transition-colors hover:border-white/45 hover:text-white"
+                className="tap-lg rounded-full border border-white/20 px-3 py-1.5 text-[12.5px] text-white/75 transition-colors hover:border-white/45 hover:text-white"
               >
                 {l.label}
               </Link>

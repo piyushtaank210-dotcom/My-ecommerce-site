@@ -19,6 +19,7 @@
     "sync-hero:live": "node scripts/sync-hero-live.mjs",
     "encode:hero": "node scripts/encode-hero-video.mjs",
     "encode:hero:mobile": "node scripts/encode-hero-mobile.mjs",
+    "icons": "node scripts/icons.mjs",
     "hero:posters": "node scripts/hero-frame.mjs public/hero/hero-console-web.mp4 public/hero/hero-console-web-poster.jpg 0 1280 614 && node scripts/hero-frame.mjs public/hero/hero-controller-web.mp4 public/hero/hero-controller-web-poster.jpg 0 1280 614",
     "hero:posters:mobile": "node scripts/hero-frame.mjs public/hero/hero-mobile-showcase.mp4 public/hero/hero-mobile-showcase-poster.jpg 0 1080 1434",
     "hero:build": "npm run encode:hero && npm run encode:hero:mobile && npm run hero:posters && npm run hero:posters:mobile",

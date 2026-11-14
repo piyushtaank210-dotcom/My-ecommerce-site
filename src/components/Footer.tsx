@@ -137,12 +137,12 @@ function FooterLinks({
       <h3 className="mb-3 text-[12px] font-bold uppercase tracking-[0.12em] text-ink">
         {title}
       </h3>
-      <ul className="space-y-2">
+      <ul className="space-y-0.5">
         {links.map((l) => (
           <li key={l.label}>
             <Link
               href={l.href}
-              className="text-[13.5px] text-gray-500 transition-colors hover:text-brand"
+              className="inline-block py-1.5 text-[13.5px] text-gray-500 transition-colors hover:text-brand"
             >
               {l.label}
             </Link>

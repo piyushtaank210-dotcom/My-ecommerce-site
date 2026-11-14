@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { DatabaseSync } from "node:sqlite";
-import { launchChrome, clickByText, setInput } from "./lib/browser.mjs";
+import { launchChrome, clickByText, setInput, waitFor } from "./lib/browser.mjs";
+import { sessionState } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -21,24 +21,15 @@ const env = readFileSync(join(ROOT, ".env.local"), "utf8");
 const email = env.match(/^PF_ADMIN_EMAIL="(.*)"/m)[1];
 const password = env.match(/^PF_ADMIN_PASSWORD="(.*)"/m)[1];
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
+/*
+  How many sessions the signed-in account has, and how many are live.
 
-/** How many sessions the signed-in account has, and how many are live. */
-function sessionState() {
-  const user = db
-    .prepare("SELECT id FROM users WHERE email = ?")
-    .get(email);
-  if (!user) return { user: null, total: 0, live: 0 };
-  const total = db
-    .prepare("SELECT COUNT(*) c FROM sessions WHERE user_id = ?")
-    .get(user.id).c;
-  const live = db
-    .prepare(
-      "SELECT COUNT(*) c FROM sessions WHERE user_id = ? AND expires_at > datetime('now')"
-    )
-    .get(user.id).c;
-  return { user: user.id, total, live };
-}
+  The count comes from the shop's own database, which is where the
+  sessions live. It used to be read from the old local file, which
+  nothing reads any more — so the count was always zero and the check
+  that the session survived a click was not checking anything.
+*/
+const sessionCounts = () => sessionState(email);
 
 const SIZES = [
   { name: "desktop 1440x900", w: 1440, h: 900 },
@@ -53,6 +44,15 @@ const { chrome, cdp } = await launchChrome({
   profile: join(tmpdir(), "consoleseller-adminwalk-chrome"),
   dir: join(ROOT, ".shots"),
 });
+
+/*
+  Every click that landed somewhere other than where it was asked to.
+
+  The script used to print a cross for a click that missed and then exit
+  as if nothing had happened, so `npm run check:admin` reported success
+  over a walk that had failed. The count is what makes the walk a check.
+*/
+let missed = 0;
 
 try {
   // Sign in once.
@@ -69,7 +69,7 @@ try {
   await cdp.evaluate(clickByText("Sign in"));
   await sleep(3000);
   console.log("signed in, path:", await cdp.evaluate("location.pathname"));
-  console.log("sessions before:", JSON.stringify(sessionState()));
+  console.log("sessions before:", JSON.stringify(await sessionCounts()));
   console.log();
 
   for (const size of SIZES) {
@@ -125,10 +125,24 @@ try {
         };
       })()`);
 
-      await sleep(1300);
+      // The click is made, and then the walk waits for the page to arrive
+      // rather than for a fixed length of time.
+      //
+      // A fixed wait is the wrong shape here: the shop's database is a
+      // long way off, so the URL of a page that has been clicked does
+      // not change until the new page's data has come back. Waiting a
+      // second and a half and then reading the address reads the address
+      // of the page before the click — which is how a click on "Returns"
+      // came to be reported as landing on "Orders".
+      await waitFor(
+        cdp,
+        `location.pathname === ${JSON.stringify(href)}`,
+        { timeout: 20000 }
+      );
       const path = await cdp.evaluate("location.pathname");
-      const sess = sessionState();
+      const sess = await sessionCounts();
       const ok = path === href;
+      if (!ok) missed++;
       console.log(
         `   ${ok ? "✓" : "✗"} ${String(href).padEnd(20)} -> ${String(path).padEnd(22)}` +
           ` sessions ${sess.live}/${sess.total}` +
@@ -141,3 +155,10 @@ try {
 } finally {
   chrome.kill();
 }
+
+console.log(
+  missed === 0
+    ? "\n✓ every link in the back office goes where it says"
+    : `\n✗ ${missed} link(s) went somewhere else`
+);
+process.exit(missed === 0 ? 0 : 1);

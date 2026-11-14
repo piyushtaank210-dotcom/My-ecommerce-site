@@ -49,7 +49,7 @@ export async function Header() {
           <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
             <Link
               href="/search"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink md:hidden"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink md:hidden"
               aria-label="Search"
             >
               <Search className="h-[18px] w-[18px]" />
@@ -63,7 +63,7 @@ export async function Header() {
               <div className="group relative">
                 <Link
                   href="/account"
-                  className="flex h-10 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
+                  className="flex h-11 min-w-[2.75rem] items-center justify-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
                 >
                   <User className="h-[18px] w-[18px]" />
                   {/* Icons only below xl — the text would squeeze the
@@ -79,14 +79,14 @@ export async function Header() {
                   </p>
                   <Link
                     href="/account"
-                    className="block rounded-lg px-3 py-2 text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
+                    className="block rounded-lg px-3 py-2.5 text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
                   >
                     My account
                   </Link>
                   {isStaff(user.role) && (
                     <Link
                       href="/admin"
-                      className="block rounded-lg px-3 py-2 text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
+                      className="block rounded-lg px-3 py-2.5 text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
                     >
                       Admin panel
                     </Link>
@@ -94,7 +94,7 @@ export async function Header() {
                   <form action={logoutAction}>
                     <button
                       type="submit"
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13.5px] font-medium text-gray-700 hover:bg-gray-100"
                     >
                       <LogOut className="h-3.5 w-3.5" />
                       Sign out
@@ -105,7 +105,7 @@ export async function Header() {
             ) : (
               <Link
                 href="/login"
-                className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
+                className="flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
               >
                 <User className="h-[18px] w-[18px]" />
                 <span className="hidden xl:inline">Sign in</span>
@@ -114,7 +114,7 @@ export async function Header() {
 
             <Link
               href="/cart"
-              className="relative flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
+              className="relative flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-ink xl:px-2.5"
               aria-label={`Cart, ${cartCount} items`}
             >
               <ShoppingCart className="h-[18px] w-[18px]" />

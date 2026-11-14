@@ -697,7 +697,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                     aria-label={s.title}
                     aria-current={i === index}
                     onClick={() => setIndex(i)}
-                    className="group h-8 p-0 sm:h-6"
+                    className="tap-lg group grid min-w-7 place-items-center p-0 sm:min-h-6 sm:min-w-0"
                   >
                     {i === index ? (
                       <span className="block h-1 w-8 overflow-hidden rounded-full bg-white/30">
@@ -731,7 +731,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 type="button"
                 onClick={() => go(-1)}
                 aria-label="Previous slide"
-                className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
+                className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25"
               >
                 <ChevronLeft className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
               </button>
@@ -739,7 +739,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 type="button"
                 onClick={() => go(1)}
                 aria-label="Next slide"
-                className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25 sm:h-11 sm:w-11"
+                className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-ink/30 text-white backdrop-blur transition-colors hover:bg-white/25"
               >
                 <ChevronRight className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
               </button>

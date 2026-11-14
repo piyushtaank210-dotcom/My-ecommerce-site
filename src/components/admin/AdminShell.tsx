@@ -109,21 +109,37 @@ export function AdminShell({
     </div>
   );
 
-  const brand = (
+  /*
+    The shop's logo, in the two colours it is drawn in.
+
+    The white one is for the dark sidebar: its "Console" is drawn in white
+    and disappears against a white background. The dark one is for the
+    header bar, which is white — the white logo there left the first half
+    of the name invisible, and on a phone, where the sidebar is a drawer
+    and the header is all there is, the shop looked like it was called
+    "Seller".
+  */
+  const brandOn = (dark: boolean) => (
     <Link href="/admin" className="flex items-center gap-2">
       <Image
-        src="/logo-white.png"
+        src={dark ? "/logo.png" : "/logo-white.png"}
         alt="ConsoleSeller"
         width={155}
         height={30}
         priority
         className="h-7 w-auto object-contain"
       />
-      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/80">
+      <span
+        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+          dark ? "bg-ink text-white/80" : "bg-white/10 text-white/80"
+        }`}
+      >
         Admin
       </span>
     </Link>
   );
+
+  const brand = brandOn(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -182,7 +198,7 @@ export function AdminShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="lg:hidden">{brand}</div>
+            <div className="lg:hidden">{brandOn(true)}</div>
 
             <div className="ml-auto flex items-center gap-3">
               <Link

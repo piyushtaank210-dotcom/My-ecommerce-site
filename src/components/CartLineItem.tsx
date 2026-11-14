@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Minus, Plus, Trash2, Loader2 } from "lucide-react";
 import type { CartLine } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -32,10 +33,14 @@ export function CartLineItem({ line }: { line: CartLine }) {
         className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-gray-50 sm:h-24 sm:w-24"
       >
         {line.product.image && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
+          /* Served at the size it is shown at — see the note on the
+             product card. */
+          <Image
             src={line.product.image}
             alt={line.product.name}
+            width={200}
+            height={200}
+            sizes="96px"
             className="h-full w-full object-contain p-2"
           />
         )}

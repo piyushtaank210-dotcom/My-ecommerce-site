@@ -237,7 +237,7 @@ export function ProductDetails({
                         disabled={missing}
                         aria-pressed={active}
                         onClick={() => pick(name, value)}
-                        className={`rounded-lg border px-3.5 py-2 text-left text-[13.5px] font-medium transition-colors ${
+                        className={`tap-lg rounded-lg border px-3.5 py-2 text-left text-[13.5px] font-medium transition-colors ${
                           active
                             ? "border-brand bg-brand-tint text-brand"
                             : "border-gray-200 bg-white hover:border-gray-400"
@@ -276,7 +276,7 @@ export function ProductDetails({
                       type="button"
                       aria-pressed={active}
                       onClick={() => setSelectedId(v.id)}
-                      className={`rounded-lg border px-3.5 py-2 text-left text-[13.5px] font-medium transition-colors ${
+                      className={`tap-lg rounded-lg border px-3.5 py-2 text-left text-[13.5px] font-medium transition-colors ${
                         active
                           ? "border-brand bg-brand-tint text-brand"
                           : "border-gray-200 bg-white hover:border-gray-400"

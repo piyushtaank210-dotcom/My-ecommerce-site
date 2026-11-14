@@ -29,7 +29,16 @@ export function PanelDateRange({
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    /*
+      On a phone the two dates are stacked, not side by side.
+
+      A date field has a width of its own — it cannot be made narrower
+      than the date it is showing — and two of them side by side are
+      wider than a phone. The fields are also 16px on a phone, which is
+      what stops iOS zooming in when they are tapped, and that makes
+      them wider still.
+    */
+    <div className="flex flex-col items-stretch gap-1.5 sm:flex-row sm:items-center">
       <input
         type="date"
         name="from"
@@ -37,9 +46,9 @@ export function PanelDateRange({
         max={to ?? undefined}
         onChange={(e) => push(e.target.value, to ?? "")}
         aria-label="From date"
-        className="input h-9 text-[13px]"
+        className="input h-9 min-w-0 text-[13px]"
       />
-      <span className="text-[12.5px] text-gray-400">to</span>
+      <span className="text-[12.5px] text-gray-400 sm:text-center">to</span>
       <input
         type="date"
         name="to"
@@ -47,7 +56,7 @@ export function PanelDateRange({
         min={from ?? undefined}
         onChange={(e) => push(from ?? "", e.target.value)}
         aria-label="To date"
-        className="input h-9 text-[13px]"
+        className="input h-9 min-w-0 text-[13px]"
       />
     </div>
   );

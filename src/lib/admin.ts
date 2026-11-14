@@ -678,7 +678,7 @@ async function variantSkuTaken(sku: string, exceptVariantId: string | null): Pro
     .get(sku));
   if (product) return true;
   const variant = (await db
-    .prepare("SELECT id FROM variants WHERE sku = ? AND id IS NOT ? LIMIT 1")
+    .prepare("SELECT id FROM variants WHERE sku = ? AND id IS DISTINCT FROM ? LIMIT 1")
     .get(sku, exceptVariantId));
   return Boolean(variant);
 }
@@ -689,7 +689,7 @@ async function variantBarcodeTaken(
   exceptVariantId: string | null
 ): Promise<boolean> {
   const row = (await getDb()
-    .prepare("SELECT id FROM variants WHERE barcode = ? AND id IS NOT ? LIMIT 1")
+    .prepare("SELECT id FROM variants WHERE barcode = ? AND id IS DISTINCT FROM ? LIMIT 1")
     .get(barcode, exceptVariantId));
   return Boolean(row);
 }

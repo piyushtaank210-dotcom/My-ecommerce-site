@@ -69,7 +69,7 @@ export function ProductPurchase({
             onClick={() => setQty((q) => Math.max(1, q - 1))}
             disabled={qty <= 1}
             aria-label="Decrease quantity"
-            className="grid h-10 w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
+            className="tap-lg grid w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
           >
             <Minus className="h-3.5 w-3.5" />
           </button>
@@ -81,7 +81,7 @@ export function ProductPurchase({
             onClick={() => setQty((q) => Math.min(maximum, q + 1))}
             disabled={qty >= maximum}
             aria-label="Increase quantity"
-            className="grid h-10 w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
+            className="tap-lg grid w-10 place-items-center text-gray-500 transition-colors hover:text-ink disabled:opacity-35"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>

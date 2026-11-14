@@ -387,7 +387,46 @@ export default function ContactPage() {
           </p>
         </div>
 
-        <div className="mt-8 overflow-x-auto">
+        {/*
+          The same four routes, two ways.
+
+          A three-column table is the right shape on a wide screen. On a
+          phone it is 640 pixels of table in 390 pixels of screen, so it
+          has to be scrolled sideways to be read at all — and the shopper
+          has to work out which way to scroll. The same information as
+          stacked cards reads straight down the page, with the route
+          named first and what happens next underneath it.
+        */}
+        <div className="mt-8 space-y-3 sm:hidden">
+          {ROUTES.map((r) => (
+            <div
+              key={r.need}
+              className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+            >
+              <p className="text-[14px] font-semibold leading-snug text-ink">
+                {r.need}
+              </p>
+              <p className="mt-2 text-[13.5px] text-gray-600">
+                <span className="font-medium text-gray-500">Go to </span>
+                {r.href ? (
+                  <Link
+                    href={r.href}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    {r.where}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-ink">{r.where}</span>
+                )}
+              </p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-gray-500">
+                {r.then}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[640px] border-collapse text-left">
             <thead>
               <tr className="border-b border-gray-200">
@@ -520,7 +559,10 @@ export default function ContactPage() {
                       screen. */}
                   <dd className="min-w-0 break-words text-[13.5px] leading-relaxed text-white/85">
                     {d.href ? (
-                      <a href={d.href} className="hover:underline">
+                      <a
+                        href={d.href}
+                        className="inline-block py-1.5 hover:underline"
+                      >
                         {d.value}
                       </a>
                     ) : (

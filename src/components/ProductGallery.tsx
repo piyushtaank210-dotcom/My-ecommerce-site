@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import type { GalleryImage } from "@/lib/types";
 
 export type { GalleryImage };
@@ -29,11 +30,19 @@ export function ProductGallery({
   return (
     <div>
       <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        {/*
+          Served at the size it is shown at. The catalogue's photographs
+          are full-size files — a console is a 1920-pixel photograph — and
+          the frame on a phone is about 350 pixels wide, so the whole file
+          would be downloaded to be shrunk back down again.
+        */}
+        <Image
           src={active.src}
           alt={active.alt}
-          className="h-full w-full object-contain p-6"
+          fill
+          priority
+          sizes="(min-width: 1024px) 45vw, 92vw"
+          className="object-contain p-6"
         />
         {badge}
       </div>
@@ -48,15 +57,20 @@ export function ProductGallery({
               aria-selected={i === index}
               aria-label={img.alt}
               onClick={() => setIndex(i)}
-              className={`w-20 overflow-hidden rounded-lg border bg-white transition-colors sm:w-24 ${
+              className={`relative w-20 overflow-hidden rounded-lg border bg-white transition-colors sm:w-24 ${
                 i === index
                   ? "border-brand ring-1 ring-brand"
                   : "border-gray-200 hover:border-gray-400"
               }`}
               style={{ aspectRatio: "4 / 3" }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.src} alt="" className="h-full w-full object-contain p-1.5" />
+              <Image
+                src={img.src}
+                alt=""
+                fill
+                sizes="96px"
+                className="object-contain p-1.5"
+              />
             </button>
           ))}
         </div>
