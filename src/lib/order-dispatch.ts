@@ -285,9 +285,21 @@ export async function confirmOrderWithShipping(input: {
       .prepare(`SELECT status FROM orders WHERE id = ?${lock}`)
       .get(input.orderId)) as { status?: string } | undefined;
     if (!current) throw new Error("That order no longer exists.");
-    if (String(current.status) === "cancelled") {
+    const from = String(current.status);
+    if (from === "cancelled") {
       throw new Error("This order has been cancelled, so it cannot be confirmed.");
     }
+    if (from === "delivered") {
+      throw new Error(
+        "This order has been delivered, so it cannot be confirmed. It is returned or replaced under the return rules."
+      );
+    }
+
+    // An order that is still pending becomes confirmed. One that has
+    // already been confirmed — or has moved on since — keeps the status
+    // it has: correcting a tracking number does not put an order back
+    // to the start.
+    const nextStatus = from === "pending" ? "confirmed" : from;
 
     await tx
       .prepare(
@@ -296,8 +308,8 @@ export async function confirmOrderWithShipping(input: {
                 shipping_method = ?,
                 custom_shipping_method = ?,
                 tracking_id = ?,
-                shipping_confirmed_at = ?,
-                status = 'confirmed'
+                shipping_confirmed_at = COALESCE(shipping_confirmed_at, ?),
+                status = ?
           WHERE id = ?`
       )
       .run(
@@ -306,6 +318,7 @@ export async function confirmOrderWithShipping(input: {
         checked.value.customShippingMethod,
         checked.value.trackingId,
         new Date().toISOString(),
+        nextStatus,
         input.orderId
       );
   });
@@ -318,26 +331,45 @@ export async function confirmOrderWithShipping(input: {
       ? checked.value.customShippingMethod
       : SHIPPING_METHOD_LABEL[checked.value.shippingMethod];
 
+  // An order that was pending has been confirmed, and the customer hears
+  // so. One that was already confirmed — or that has moved on since —
+  // has only had its details corrected, which is a smaller thing.
+  const wasPending = order.status === "pending";
+
   await notifyCustomerAboutOrder({
     userId: order.user_id,
     email: order.email,
     orderId: order.id,
-    kind: "order_tracking",
-    title: `Order ${order.id} is confirmed and on its way to the courier`,
-    body: [
-      `Good news, ${order.name || "there"} — order ${order.id} is confirmed and has been handed to the courier.`,
-      "",
-      `Courier: ${checked.value.courierPartner}`,
-      `Shipping method: ${method}`,
-      `Tracking number: ${checked.value.trackingId}`,
-      "",
-      "You can follow your order from your account.",
-    ].join("\n"),
+    kind: wasPending ? "order_confirmed" : "order_tracking",
+    title: wasPending
+      ? `Order ${order.id} confirmed`
+      : `Order ${order.id} — shipping details updated`,
+    body: wasPending
+      ? [
+          `Good news, ${order.name || "there"} — we have checked order ${order.id} and it is confirmed.`,
+          "",
+          `Courier: ${checked.value.courierPartner}`,
+          `Shipping method: ${method}`,
+          `Tracking number: ${checked.value.trackingId}`,
+          "",
+          "We are getting it ready to go out. You can follow your order from your account.",
+        ].join("\n")
+      : [
+          `The shipping details for order ${order.id} have been updated.`,
+          "",
+          `Courier: ${checked.value.courierPartner}`,
+          `Shipping method: ${method}`,
+          `Tracking number: ${checked.value.trackingId}`,
+          "",
+          "You can follow your order from your account.",
+        ].join("\n"),
   });
 
   return {
     ok: true,
-    message: `Order ${order.id} is confirmed and will go out with ${checked.value.courierPartner}.`,
+    message: wasPending
+      ? `Order ${order.id} is confirmed and will go out with ${checked.value.courierPartner}.`
+      : `The shipping details for order ${order.id} have been saved.`,
     order: await getOrder(order.id),
   };
 }
@@ -638,7 +670,8 @@ export async function refundCancelledOrder(input: {
     .prepare(
       `UPDATE orders
           SET refund_id = ?, refund_amount = ?, refund_status = ?,
-              refunded_at = ?, refund_error = NULL
+              refunded_at = ?, refund_error = NULL,
+              payment_status = ?
         WHERE id = ?`
     )
     .run(
@@ -646,6 +679,15 @@ export async function refundCancelledOrder(input: {
       amount,
       processed ? "processed" : "pending",
       refundedAt,
+      // The money is on its way back, so the payment status says so. It
+      // is only "refunded" once the gateway says it has paid it; until
+      // then it is "partially refunded" if some of it went back, and the
+      // order's own status is untouched.
+      processed
+        ? amount >= order.total
+          ? "refunded"
+          : "partially_refunded"
+        : order.payment_status,
       order.id
     );
 
@@ -679,6 +721,19 @@ export async function refundCancelledOrder(input: {
 }
 
 /**
+ * What an order was paid for, in rupees.
+ *
+ * It is the amount the payment status is measured against: a refund of
+ * the whole of it is a refund, and anything less is a partial one.
+ */
+async function orderTotalFor(orderId: string): Promise<number> {
+  const row = (await getDb()
+    .prepare("SELECT total FROM orders WHERE id = ?")
+    .get(orderId)) as { total?: number } | undefined;
+  return Number(row?.total ?? 0);
+}
+
+/**
  * Finds a refund the gateway has already made against the payment, and
  * adopts it.
  *
@@ -707,6 +762,7 @@ async function adoptExistingGatewayRefund(
 
   const processed = gatewayStatusIsComplete(found.status);
   const refundedAt = processed ? new Date().toISOString() : null;
+  const orderTotal = await orderTotalFor(orderId);
 
   await getDb()
     .prepare(
@@ -740,7 +796,8 @@ async function adoptExistingGatewayRefund(
     .prepare(
       `UPDATE orders
           SET refund_id = ?, refund_amount = ?, refund_status = ?,
-              refunded_at = ?, refund_error = NULL
+              refunded_at = ?, refund_error = NULL,
+              payment_status = ?
         WHERE id = ?`
     )
     .run(
@@ -748,6 +805,11 @@ async function adoptExistingGatewayRefund(
       amount,
       processed ? "processed" : "pending",
       refundedAt,
+      processed
+        ? amount >= orderTotal
+          ? "refunded"
+          : "partially_refunded"
+        : "pending",
       orderId
     );
 
@@ -811,10 +873,23 @@ export async function refreshRefundStatus(input: {
   await getDb()
     .prepare(
       `UPDATE orders
-          SET refund_status = ?, refunded_at = ?, refund_error = NULL
+          SET refund_status = ?, refunded_at = ?, refund_error = NULL,
+              payment_status = ?
         WHERE id = ?`
     )
-    .run(processed ? "processed" : status, refundedAt, order.id);
+    .run(
+      processed ? "processed" : status,
+      refundedAt,
+      // The payment status follows the gateway: it is only "refunded"
+      // once the gateway says the money has gone back, and a refund of
+      // less than the whole order is a partial one.
+      processed
+        ? refund.amount >= order.total
+          ? "refunded"
+          : "partially_refunded"
+        : order.payment_status,
+      order.id
+    );
 
   if (processed && refund.status !== "processed") {
     await notifyCustomerAboutOrder({

@@ -403,7 +403,13 @@ try {
   const orderBody = await cdp.evaluate("document.body.innerText");
   const orderId = (orderBody.match(/PF[A-Z0-9]{6}/) ?? [])[0] ?? null;
   check("redirected to the order page", /^\/order\/PF/.test(orderUrl), orderUrl);
-  check("order confirmed", /Order confirmed/i.test(orderBody));
+  // A new order is pending until the back office checks it. It is never
+  // confirmed by the checkout.
+  check("order received", /Order received/i.test(orderBody));
+  check(
+    "and it is pending, not confirmed",
+    /Order confirmed/i.test(orderBody) === false
+  );
   check("order id issued", Boolean(orderId), orderId ?? "none");
   if (orderId) placedOrders.push(orderId);
   await cdp.shot("06-order", true);
@@ -1729,10 +1735,16 @@ try {
   // which is what puts the stock back — the same way the shop does it.
   try {
     for (const id of placedOrders) {
+      // A cancellation needs a reason — the same rule the back office
+      // is held to.
       await cdp.evaluate(`fetch('/api/admin/orders/${id}', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: 'cancelled' })
+        body: JSON.stringify({
+          status: 'cancelled',
+          reasonCode: 'customer_requested',
+          reasonDetail: 'Placed by the end-to-end test; the stock is put back.'
+        })
       }).then(r => r.text()).then(() => 'OK')`);
     }
   } catch (err) {

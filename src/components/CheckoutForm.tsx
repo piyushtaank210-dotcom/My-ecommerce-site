@@ -312,7 +312,9 @@ export function CheckoutForm({
       return;
     }
 
-    toast("Payment received — your order is in.", "success");
+    // The payment is in. The order is not confirmed by that — it is
+    // pending until the shop has checked it.
+    toast("Payment received — we are checking your order now.", "success");
     router.push(`/order/${body.order_id}`);
   }
 

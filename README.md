@@ -443,6 +443,59 @@ account.
 | `/admin/products` | The whole catalogue — listed, delisted, draft and archived — with a SKU column, brand / stock / status / listing filters, sorting, counts beside every filter, bulk selection, and per-row archive, duplicate and delete actions |
 | `/admin/products/[slug]` | One product: the editor, its photographs, and its **Variations** — the attributes it varies by and the options that come out of them |
 
+### Two statuses: the order and the payment
+
+An order carries **two** statuses, and they are two different things. They
+are never moved together, and neither one is ever set by the other.
+
+| | |
+|---|---|
+| **Order status** — where the parcel is | `pending`, `confirmed`, `packed`, `shipped`, `delivered`, `cancelled` |
+| **Payment status** — where the money is | `pending`, `paid`, `failed`, `partially_refunded`, `refunded` |
+
+**A new order is always `pending`.** It is written that way by the
+checkout, whatever the payment does, and it stays that way until somebody
+in the back office has checked it and saved its shipping details. A
+customer paying for something does not get to decide that the shop has
+checked it.
+
+**A payment only moves the payment status.** When Razorpay takes the
+money — through the browser's own check, through the webhook, or through
+the API — the order's `payment_status` becomes `paid` and the payment
+reference is written down. The order's own status is not touched by any of
+them. The webhook cannot confirm an order, and the payment endpoint cannot
+confirm an order; only the back office can.
+
+The two are shown side by side, as two badges, everywhere an order is
+shown — the back office's list, the back office's order page, the
+customer's order list and the customer's order page — so that "paid" and
+"confirmed" are never confused for one another.
+
+An order paid for at the door is marked `paid` when it is delivered,
+because that is the moment the money changes hands.
+
+### The order's journey
+
+An order moves forward along one path, and the server refuses every move
+that is not on it:
+
+```
+pending → confirmed → packed → shipped → delivered
+```
+
+- an order may skip a step or two (an administrator who forgets to mark
+  an order packed has not done anything wrong)
+- an order may be **cancelled** from any step before it is delivered — a
+  delivered order is returned or replaced, not cancelled
+- a cancelled order may be **opened again**, which puts the stock back on
+  the shelf once more
+- nothing else is allowed: an order does not go backwards, and the back
+  office is only offered the moves that make sense from where the order
+  is now
+
+The rules live in `canTransition()` in `src/lib/order-status.ts`, and they
+are checked on the server before anything is written.
+
 ### Dispatch, cancellation and refunds
 
 An order is confirmed, cancelled and refunded from its own page in the back
@@ -450,7 +503,8 @@ office. The decisions are made on the server — the page asks, and what comes
 back is what the database says afterwards.
 
 **Confirming an order** opens a form below the actions. All three of its
-details are required:
+details are required, and the order stays `pending` until they are all
+there:
 
 | | |
 |---|---|
@@ -507,7 +561,7 @@ The endpoints behind the page are `POST /api/admin/orders/[id]/ship`,
 `POST /api/admin/orders/[id]/cancel`, `POST /api/admin/orders/[id]/refund`
 and `POST /api/admin/orders/[id]/refund/status`. The older
 `PATCH /api/admin/orders/[id]` can no longer cancel an order without a
-reason either.
+reason either, and it refuses any move the journey does not allow.
 
 ### SKUs, status and archiving
 
@@ -1297,7 +1351,24 @@ that the status and listing filters narrow the catalogue, that archiving
 hides a product and restoring brings it back, and that a product with order
 history cannot be deleted.
 
-The order page has two of its own:
+The order page has three of its own:
+
+```bash
+npm run check:pending-orders
+```
+
+It proves that the payment and the order are two different things: a new
+order is written as `pending` whatever the payment does; a payment that is
+taken only changes the payment status; a webhook that says the money is in
+only changes the payment status, and sending the same webhook again does
+nothing; the order stays `pending` until the back office saves the
+shipping details; an order moves forward along its journey and not
+backwards; a customer cannot change an order's status; and a status the
+shop does not know is refused rather than guessed at.
+
+It starts a second copy of the shop on port 3017, pointed at the mock
+gateway, so that the webhook can be exercised over HTTP without the real
+gateway being touched. The shop's LIVE keys are never used.
 
 ```bash
 npm run check:order-dispatch
@@ -1319,18 +1390,20 @@ npm run check:order-actions
 ```
 
 It opens an order in a browser and does what an administrator does: the
-Confirm Order button is there and the Refund button is greyed out; the
-arrow beside it opens the Cancel Order menu; Confirm Order opens the
-shipping form, which cannot be sent without all three details; the details
-are saved and shown on the order and on the customer's own page; cancelling
-asks for a reason and turns the Refund button on; and the refund dialog
-says what it is about before anything is sent. It also calls the endpoints
-directly — an incomplete shipment, a cancellation without a reason and a
-refund for an order with no gateway payment are all refused — and checks
-that nothing runs off the side of the page at 320, 375, 768 or 1024 pixels.
+order reads as **Pending** on the back office's page, on the customer's
+page and in the list under the Pending filter; the Confirm Order button is
+there and the Refund button is greyed out; the arrow beside it opens the
+Cancel Order menu; Confirm Order opens the shipping form, which cannot be
+sent without all three details; the details are saved and shown on the
+order and on the customer's own page; cancelling asks for a reason and
+turns the Refund button on; and the refund dialog says what it is about
+before anything is sent. It also calls the endpoints directly — an
+incomplete shipment, a cancellation without a reason and a refund for an
+order with no gateway payment are all refused — and checks that nothing
+runs off the side of the page at 320, 375, 768 or 1024 pixels.
 
-Both need the dev server on port 3000 for the browser half; the dispatch
-check stands on its own.
+The browser half of the order checks needs the dev server on port 3000; the
+dispatch and pending checks stand on their own.
 
 The catalogue has a test of its own:
 
@@ -1497,6 +1570,7 @@ scripts/
   check-inventory.mjs   ← stock and order test
   check-order-dispatch.mjs ← confirming, cancelling and refunding an order
   check-order-actions.mjs ← the order actions in a real browser
+  check-pending-orders.mjs ← the payment and the order are two different things
   check-variations.mjs  ← variations and purchasing test
   check-taxonomy.mjs    ← categories, subcategories, brands and specifications test
   check-import.mjs      ← import, export, validation and dashboard test
@@ -1551,7 +1625,7 @@ src/
     admin-order-actions.ts ← confirming, cancelling and refunding an order
     account-actions.ts  ← customer-panel server actions
     contact.ts          ← contact-page enquiries
-    order-status.ts     ← order statuses (kept apart from the database)
+    order-status.ts     ← the order statuses, the payment statuses and the rules of a move (no database)
     order-dispatch.ts   ← the dispatch of an order, and the money that goes back
     order-dispatch-options.ts ← the choices and the couriers' tracking pages (no database)
     order-action-state.ts ← what an order action answers with (no database)

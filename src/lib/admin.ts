@@ -291,7 +291,7 @@ export async function listOrders(query: OrderQuery = {}): Promise<OrderSummary[]
     (await getDb()
       .prepare(
         `SELECT o.id, o.created_at, o.name, o.email, o.city, o.state, o.total,
-                o.payment_method, o.status, o.user_id,
+                o.payment_method, o.status, o.payment_status, o.user_id,
                 (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
          FROM orders o
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
@@ -309,6 +309,7 @@ export async function listOrders(query: OrderQuery = {}): Promise<OrderSummary[]
     item_count: num(r.item_count),
     payment_method: str(r.payment_method),
     status: str(r.status),
+    payment_status: str(r.payment_status) || "pending",
     user_id: r.user_id === null ? null : num(r.user_id),
   }));
 }

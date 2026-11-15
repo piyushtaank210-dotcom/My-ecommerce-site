@@ -61,8 +61,7 @@ export function OrderActionBar({
   hasShipping: boolean;
   canUpdate: boolean;
   refundStatus: string;
-}) {
-  const router = useRouter();
+}) {  const router = useRouter();
 
   const [shippingState, shippingAction, isShippingPending] = useActionState(
     confirmOrderAction,
@@ -91,6 +90,7 @@ export function OrderActionBar({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const cancelled = status === "cancelled";
+  const pending = status === "pending";
   const refunded = refundStatus === "processed";
   const refundStarted = refundStatus === "pending" || refundStatus === "processed";
 
@@ -166,9 +166,11 @@ export function OrderActionBar({
           <h2 className="text-[14px] font-bold text-ink">Order actions</h2>
           {!cancelled && (
             <span className="text-[12px] text-gray-500">
-              {hasShipping
-                ? "The shipping details below can be changed."
-                : "Confirm the order with its shipping details."}
+              {pending
+                ? "This order is waiting to be checked. Confirm it with its shipping details."
+                : hasShipping
+                  ? "The shipping details below can be changed."
+                  : "Save the shipping details before the order is confirmed."}
             </span>
           )}
         </header>
@@ -199,7 +201,11 @@ export function OrderActionBar({
                     className="inline-flex items-center gap-2 bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <PackageCheck className="h-4 w-4" />
-                    {hasShipping ? "Update shipping" : "Confirm Order"}
+                    {pending
+                      ? "Confirm Order"
+                      : hasShipping
+                        ? "Update shipping"
+                        : "Confirm Order"}
                   </button>
                   <button
                     type="button"
@@ -272,7 +278,9 @@ export function OrderActionBar({
                 Shipping details
               </h3>
               <p className="mt-1 text-[12.5px] text-gray-600">
-                All three are needed before the order can be confirmed.
+                {pending
+                  ? "All three are needed. The order stays pending until they are saved."
+                  : "All three are needed before the order can be confirmed."}
               </p>
 
               <form action={shippingAction} className="mt-4 space-y-4">

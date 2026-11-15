@@ -42,8 +42,12 @@ import {
  *
  * Then, and only then, the payment is checked against the gateway's own
  * API — is it captured, does it belong to this order, is it the amount
- * the order says is owed — and the order is marked as paid. The webhook
- * says what happened; the gateway's API is what proves it.
+ * the order says is owed — and the **payment** is marked as paid.
+ *
+ * The order's own status is not touched here, and cannot be. A webhook
+ * says what happened to the money; it says nothing about whether the
+ * shop has checked the order, and the order is confirmed by the back
+ * office and by nothing else.
  */
 export async function POST(request: Request) {
   if (!gatewayWebhooksConfigured()) {
@@ -109,9 +113,15 @@ async function handleEvent(
   //
   // `payment.captured` is the one that matters: the money is in.
   // `payment.failed` is recorded so that the shop can see a payment that
-  // did not go through, but it does not touch the order — the browser
-  // tells the customer about that, and the order is put away by the
-  // endpoint that cancels it.
+  // did not go through.
+  //
+  // Neither of them touches the order's own status. A webhook says what
+  // happened to the money; it says nothing about whether the shop has
+  // checked the order, and it is not allowed to confirm one.
+  if (event.event === "payment.failed") {
+    return { outcome: await recordFailedPayment(event.receipt) };
+  }
+
   if (event.event !== "payment.captured") {
     return { outcome: "ignored" };
   }
@@ -198,6 +208,37 @@ async function handleEvent(
   await clearCart();
 
   return { outcome: "applied" };
+}
+
+/**
+ * Records that a payment did not go through.
+ *
+ * It is the payment status that changes, and only that. The order is
+ * left exactly where it was: a payment that failed is not a cancelled
+ * order, and the order is not confirmed by anything the gateway says.
+ *
+ * The webhook is not trusted on its own — the signature has already been
+ * checked by the time this is called — and it never throws: a failure to
+ * write down a failure is not a reason to fail the delivery.
+ */
+async function recordFailedPayment(receipt: string | null): Promise<string> {
+  if (!receipt) return "ignored";
+
+  try {
+    const written = await getDb()
+      .prepare(
+        `UPDATE orders SET payment_status = 'failed'
+          WHERE id = ? AND payment_status = 'pending'`
+      )
+      .run(receipt);
+    return written.changes > 0 ? "applied" : "already_applied";
+  } catch (err) {
+    console.warn(
+      `[webhook] the failed payment could not be written down:`,
+      err instanceof Error ? err.message : err
+    );
+    return "failed";
+  }
 }
 
 /**

@@ -24,6 +24,7 @@ import { requirePermission, requireUser } from "./guard";
 import { can } from "./roles";
 import { MESSAGE_STATUSES, type MessageStatus } from "./contact";
 import { applyOrderStatus, ORDER_STATUSES, type OrderStatus } from "./orders";
+import { ORDER_STATUS_LABEL } from "./order-status";
 import {
   adjustStock,
   resolveStockCheck,
@@ -678,6 +679,16 @@ export async function setOrderStatusAction(
     return { ok: false, message: "Pick a valid status." };
   }
 
+  // A cancellation needs a reason, and the reason is asked for on the
+  // order's own page. It is not something that can be done from here.
+  if (status === "cancelled") {
+    return {
+      ok: false,
+      message:
+        "Cancel the order from its own page, where you can say why it is being cancelled.",
+    };
+  }
+
   const result = (await applyOrderStatus(id, status as OrderStatus, user.id));
   if (!result.ok) {
     return { ok: false, message: result.message ?? "That order could not be changed." };
@@ -686,9 +697,13 @@ export async function setOrderStatusAction(
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/account/orders");
+  revalidatePath(`/order/${id}`);
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
-  return { ok: true, message: `Order ${id} is now ${status}.` };
+  return {
+    ok: true,
+    message: `Order ${id} is now ${ORDER_STATUS_LABEL[status as OrderStatus] ?? status}.`,
+  };
 }
 
 /* -------------------------------------------------------------- inventory */

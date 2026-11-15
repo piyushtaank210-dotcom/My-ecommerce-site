@@ -243,6 +243,14 @@ export type Order = {
    */
   payment_reference: string | null;
   status: string;
+  /**
+   * Where the money is.
+   *
+   * It is nothing to do with `status`, which is where the parcel is. A
+   * paid order is still pending until somebody in the back office has
+   * checked it.
+   */
+  payment_status: string;
   delivered_at?: string | null;
   /**
    * The dispatch: who is carrying the order, how it is going, and the
@@ -399,6 +407,8 @@ export type OrderSummary = {
   item_count: number;
   payment_method: string;
   status: string;
+  /** Where the money is, as against where the parcel is. */
+  payment_status: string;
   user_id: number | null;
 };
 

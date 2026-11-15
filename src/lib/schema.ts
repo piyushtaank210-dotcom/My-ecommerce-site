@@ -551,7 +551,14 @@ CREATE TABLE IF NOT EXISTS orders (
   -- provider, and it needs the provider's reference to do it.
   payment_gateway TEXT,
   payment_reference TEXT,
-  status         TEXT NOT NULL DEFAULT 'confirmed',
+  -- Where the order is: pending, confirmed, packed, shipped, delivered
+  -- or cancelled. A new order is always pending, and only the back
+  -- office moves it.
+  status         TEXT NOT NULL DEFAULT 'pending',
+  -- Where the money is: pending, paid, failed, partially_refunded or
+  -- refunded. It is nothing to do with where the parcel is — a paid
+  -- order is still pending until somebody has checked it.
+  payment_status TEXT NOT NULL DEFAULT 'pending',
   delivered_at   TEXT,
   -- The dispatch: who is carrying the order, how it is going, and the
   -- number it can be tracked by. They are written together, when the

@@ -3,8 +3,9 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ORDER_STATUSES,
+  NEXT_ORDER_STATUS,
   ORDER_STATUS_LABEL,
+  nextOrderStatuses,
   type OrderStatus,
 } from "@/lib/order-status";
 import { setOrderStatusAction, type PanelState } from "@/lib/admin-actions";
@@ -13,8 +14,16 @@ import { toast } from "@/components/Toaster";
 const initial: PanelState = { ok: false };
 
 /**
- * Moves an order along its journey. The select submits itself the moment it
- * changes — no separate save button to forget.
+ * Moves an order along its journey from the orders list.
+ *
+ * It offers only the moves that make sense from where the order is now:
+ * an order that is pending can be confirmed or cancelled, an order that
+ * is packed can be shipped, and a delivered order cannot be moved at
+ * all. The server checks the same thing, so nothing here can put an
+ * order somewhere it should not be.
+ *
+ * Cancelling is not on this list. A cancellation needs a reason, and the
+ * reason is asked for on the order's own page.
  */
 export function OrderStatusSelect({
   orderId,
@@ -23,14 +32,19 @@ export function OrderStatusSelect({
   orderId: string;
   status: string;
 }) {
-  const [state, formAction] = useActionState(setOrderStatusAction, initial);
+  const [state, formAction, isPending] = useActionState(
+    setOrderStatusAction,
+    initial
+  );
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const seen = useRef<string | undefined>(undefined);
 
-  const current = (ORDER_STATUSES as readonly string[]).includes(status)
+  const current = (Object.keys(ORDER_STATUS_LABEL) as OrderStatus[]).includes(
+    status as OrderStatus
+  )
     ? (status as OrderStatus)
-    : "confirmed";
+    : "pending";
 
   useEffect(() => {
     if (!state.message || state.message === seen.current) return;
@@ -39,6 +53,16 @@ export function OrderStatusSelect({
     if (state.ok) router.refresh();
   }, [state, router]);
 
+  const choices = nextOrderStatuses(current).filter((choice) => choice !== "cancelled");
+
+  if (choices.length === 0) {
+    return (
+      <span className="text-[12.5px] font-medium capitalize text-gray-600">
+        {ORDER_STATUS_LABEL[current]}
+      </span>
+    );
+  }
+
   return (
     <form ref={formRef} action={formAction} className="inline-block">
       <input type="hidden" name="id" value={orderId} />
@@ -46,21 +70,38 @@ export function OrderStatusSelect({
         name="status"
         defaultValue={current}
         aria-label={`Status for order ${orderId}`}
+        disabled={isPending}
         onChange={() => formRef.current?.requestSubmit()}
-        className={`h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium ${
+        className={`h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium disabled:opacity-60 ${
           current === "cancelled"
             ? "text-red-600"
             : current === "delivered"
               ? "text-green-700"
-              : "text-ink"
+              : current === "pending"
+                ? "text-amber-700"
+                : "text-ink"
         }`}
       >
-        {ORDER_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {ORDER_STATUS_LABEL[s]}
+        <option value={current}>{ORDER_STATUS_LABEL[current]}</option>
+        {choices.map((choice) => (
+          <option key={choice} value={choice}>
+            {ORDER_STATUS_LABEL[choice]}
           </option>
         ))}
       </select>
     </form>
   );
+}
+
+/**
+ * The step the order is at, as a word.
+ */
+export function nextStatusLabel(status: string): string | null {
+  const current = (Object.keys(ORDER_STATUS_LABEL) as OrderStatus[]).includes(
+    status as OrderStatus
+  )
+    ? (status as OrderStatus)
+    : "pending";
+  const next = NEXT_ORDER_STATUS[current];
+  return next ? ORDER_STATUS_LABEL[next] : null;
 }

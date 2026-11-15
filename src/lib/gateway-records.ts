@@ -307,6 +307,11 @@ export async function recordGatewayOrder(
  * It runs inside a transaction so that the claim and the marking of the
  * order as paid are one thing: if the order cannot be marked as paid,
  * the claim is undone with it.
+ *
+ * It marks the **payment**, not the order. The order's own status is
+ * left exactly as it was: a payment that has been taken says that the
+ * money is in, and nothing more. The order is confirmed by the back
+ * office, and by nothing else.
  */
 export async function claimPaymentAndMarkOrderPaid(input: {
   payment: GatewayPaymentRecord;
@@ -338,20 +343,21 @@ export async function claimPaymentAndMarkOrderPaid(input: {
 
     if (!claimed.changes) return false;
 
-    // The order is marked as paid only now, and only if it is not
-    // already paid for by a different payment. A second payment for an
-    // order that has already been paid for is refused rather than
-    // quietly overwriting the first.
+    // The payment is recorded against the order, and the payment status
+    // says the money is in. The order's own status is not touched: an
+    // order is confirmed by the back office, never by a payment.
     const updated = await db
       .prepare(
         `UPDATE orders
-            SET payment_gateway = ?, payment_reference = ?, payment_method = ?
+            SET payment_gateway = ?, payment_reference = ?, payment_method = ?,
+                payment_status = ?
           WHERE id = ? AND (payment_reference IS NULL OR payment_reference = ?)`
       )
       .run(
         GATEWAY,
         input.payment.paymentId,
         input.method ?? GATEWAY,
+        input.payment.status === "captured" ? "paid" : "pending",
         input.payment.orderId,
         input.payment.paymentId
       );

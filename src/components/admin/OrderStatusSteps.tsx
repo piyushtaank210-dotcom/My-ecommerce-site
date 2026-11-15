@@ -6,6 +6,7 @@ import { Check, Loader2 } from "lucide-react";
 import {
   NEXT_ORDER_STATUS,
   ORDER_STATUS_LABEL,
+  ORDER_TIMELINE,
   type OrderStatus,
 } from "@/lib/order-status";
 import { setOrderStatusAction, type PanelState } from "@/lib/admin-actions";
@@ -16,10 +17,12 @@ const initial: PanelState = { ok: false };
 /**
  * The rest of the order's journey.
  *
- * The order is confirmed with its shipping details, and from there it is
- * packed, shipped and delivered. Rather than a dropdown in the corner of
- * the page, the steps are laid out where the order's progress is, so
- * that moving it on is one click and the next step is obvious.
+ * An order is pending until the back office checks it, and confirming it
+ * means saving the courier it is going with and the number it can be
+ * tracked by — so the first step here opens the shipping form rather
+ * than moving the order on its own.
+ *
+ * After that the steps are one click each: packed, shipped, delivered.
  */
 export function OrderStatusSteps({
   orderId,
@@ -48,9 +51,9 @@ export function OrderStatusSteps({
     status as OrderStatus
   )
     ? (status as OrderStatus)
-    : "confirmed";
+    : "pending";
 
-  const steps: OrderStatus[] = ["confirmed", "packed", "shipped", "delivered"];
+  const steps = ORDER_TIMELINE.map((s) => s.status);
   const at = steps.indexOf(current);
   const next = NEXT_ORDER_STATUS[current];
 
@@ -65,7 +68,6 @@ export function OrderStatusSteps({
           {steps.map((step, index) => {
             const done = index < at;
             const here = index === at;
-            const isNext = next === step;
 
             return (
               <li key={step} className="flex items-center gap-2">
@@ -94,7 +96,14 @@ export function OrderStatusSteps({
           })}
         </ol>
 
-        {next && (
+        {current === "pending" && (
+          <p className="mt-4 border-t border-gray-100 pt-3.5 text-[12.5px] text-gray-600">
+            This order is waiting to be checked. Save its shipping details
+            above to confirm it.
+          </p>
+        )}
+
+        {next && current !== "pending" && (
           <form action={formAction} className="mt-4 flex flex-wrap items-center gap-3">
             <input type="hidden" name="id" value={orderId} />
             <input type="hidden" name="status" value={next} />

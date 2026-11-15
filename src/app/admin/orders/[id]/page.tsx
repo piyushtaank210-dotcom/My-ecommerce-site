@@ -23,7 +23,7 @@ import { STOCK_STATE_LABEL } from "@/lib/stock";
 import { getUserById } from "@/lib/auth";
 import { getCancellationForOrder } from "@/lib/cancellations";
 import { getOrderRefund, courierTrackingUrl } from "@/lib/order-dispatch";
-import { OrderStatusBadge } from "@/components/OrderStatusBadge";
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import { OrderActionBar } from "@/components/admin/OrderActionBar";
 import { OrderStatusSteps } from "@/components/admin/OrderStatusSteps";
 import { OrderCancellationPanel } from "@/components/admin/OrderCancellationPanel";
@@ -48,12 +48,6 @@ export default async function AdminOrderDetailPage({
   const canUpdate = can(user.role, "orders.update");
   const cancelled = order.status === "cancelled";
   const hasShipping = Boolean(order.courier_partner && order.tracking_id);
-
-  // An order written for the gateway but not yet paid for is waiting on
-  // the money, and saying so is more useful than saying it is confirmed.
-  const awaitingPayment = Boolean(
-    order.payment_gateway && !order.payment_reference && !cancelled
-  );
 
   const trackingUrl = courierTrackingUrl(order.courier_partner);
   const shippingMethod =
@@ -98,10 +92,12 @@ export default async function AdminOrderDetailPage({
             </p>
           </div>
 
-          <OrderStatusBadge
-            status={order.status}
-            awaitingPayment={awaitingPayment}
-          />
+          {/* The order's own status, and the payment's — two separate
+              things, shown separately. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <OrderStatusBadge status={order.status} />
+            <PaymentStatusBadge status={order.payment_status} />
+          </div>
         </div>
       </header>
 
@@ -407,9 +403,12 @@ export default async function AdminOrderDetailPage({
               <CreditCard className="h-4 w-4 text-brand" />
               Payment
             </h2>
-            <p className="text-[13px] text-gray-600">
-              {paymentMethodLabel(order.payment_method)}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[13px] text-gray-600">
+                {paymentMethodLabel(order.payment_method)}
+              </p>
+              <PaymentStatusBadge status={order.payment_status} size="sm" />
+            </div>
             {order.payment_gateway && (
               <p className="mt-1.5 text-[12.5px] text-gray-500">
                 {order.payment_reference ? (
@@ -426,6 +425,10 @@ export default async function AdminOrderDetailPage({
             )}
             <p className="mt-2 text-[12.5px] text-gray-500">
               {order.email} · {order.phone}
+            </p>
+            <p className="mt-2 text-[12px] text-gray-400">
+              The payment and the order are two different things. A paid
+              order is still pending until somebody has checked it.
             </p>
             {order.notes && (
               <p className="mt-3 rounded-lg bg-gray-50 p-3 text-[12.5px] text-gray-600">

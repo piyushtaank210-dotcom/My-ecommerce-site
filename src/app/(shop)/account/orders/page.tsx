@@ -3,18 +3,10 @@ import { Package } from "lucide-react";
 import { requireUser } from "@/lib/guard";
 import { getOrdersForUser } from "@/lib/orders";
 import { money, formatDate } from "@/lib/format";
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import { getReturnRequestsForOrder, isReturnEligible } from "@/lib/returns";
 
 export const metadata = { title: "My orders" };
-
-const TONE: Record<string, string> = {
-  confirmed: "bg-brand-tint text-brand",
-  packed: "bg-indigo-50 text-indigo-700",
-  shipped: "bg-sky-50 text-sky-700",
-  delivered: "bg-green-50 text-green-700",
-  cancelled: "bg-red-50 text-red-600",
-};
 
 export default async function AccountOrdersPage() {
   const user = await requireUser("/account/orders");
@@ -60,13 +52,10 @@ export default async function AccountOrdersPage() {
                   Placed {formatDate(o.created_at)}
                 </p>
               </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[12px] font-semibold capitalize ${
-                  TONE[o.status] ?? "bg-gray-100 text-gray-600"
-                }`}
-              >
-                {ORDER_STATUS_LABEL[o.status as OrderStatus] ?? o.status}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <OrderStatusBadge status={o.status} size="sm" />
+                <PaymentStatusBadge status={o.payment_status} size="sm" />
+              </div>
             </header>
 
             <ul className="mt-4 space-y-2 border-t border-gray-100 pt-3.5">

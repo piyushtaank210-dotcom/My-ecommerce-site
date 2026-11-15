@@ -71,7 +71,7 @@ export default async function OrderPage({
     order.status as OrderStatus
   )
     ? (order.status as OrderStatus)
-    : "confirmed";
+    : "pending";
   const cancelled = status === "cancelled";
   const step = ORDER_TIMELINE.findIndex((s) => s.status === status);
   const returnRequests = (await getReturnRequestsForOrder(order.id));
@@ -115,16 +115,26 @@ export default async function OrderPage({
             )}
           </span>
           <h1 className="mt-5 text-[28px] font-bold text-ink">
-            {status === "confirmed"
-              ? "Order confirmed"
-              : `Order ${ORDER_STATUS_LABEL[status]}`}
+            {status === "pending"
+              ? "Order received"
+              : status === "confirmed"
+                ? "Order confirmed"
+                : `Order ${ORDER_STATUS_LABEL[status]}`}
           </h1>
           <p className="mt-2 text-[14px] text-gray-500">
-            {status === "confirmed" ? (
+            {status === "pending" ? (
+              <>
+                Thanks{order.name ? `, ${order.name.split(" ")[0]}` : ""}! We have
+                your order and we are checking it now. We&apos;ll email{" "}
+                <span className="font-medium text-ink">{order.email}</span> as
+                soon as it is confirmed and on its way.
+              </>
+            ) : status === "confirmed" ? (
               <>
                 Thanks{order.name ? `, ${order.name.split(" ")[0]}` : ""}! We&apos;ve
-                received your order and sent a confirmation to{" "}
-                <span className="font-medium text-ink">{order.email}</span>.
+                checked your order and it is confirmed. We&apos;ll email{" "}
+                <span className="font-medium text-ink">{order.email}</span> as
+                soon as it is on its way.
               </>
             ) : (
               <>
@@ -136,15 +146,20 @@ export default async function OrderPage({
               </>
             )}
           </p>
-          <p className="mt-4 inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[13.5px]">
+          <p className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[13.5px]">
             <span className="text-gray-500">Order ID</span>
             <span className="tnum font-bold text-ink">{order.id}</span>
+            <span className="text-gray-300" aria-hidden="true">
+              /
+            </span>
+            <span className="text-gray-500">Status</span>
+            <OrderStatusBadge status={order.status} size="sm" />
           </p>
         </div>
 
         {/* Status */}
         {!cancelled && (
-          <ol className="mt-10 grid gap-5 sm:grid-cols-4">
+          <ol className="mt-10 grid gap-5 sm:grid-cols-5">
             {ORDER_TIMELINE.map((s, i) => (
               <li key={s.status}>
                 <div className="flex items-center gap-2.5">
@@ -157,7 +172,7 @@ export default async function OrderPage({
                   >
                     {i + 1}
                   </span>
-                  {i < 3 && (
+                  {i < ORDER_TIMELINE.length - 1 && (
                     <span
                       className={`hidden h-px flex-1 sm:block ${
                         i < step ? "bg-brand" : "bg-gray-200"

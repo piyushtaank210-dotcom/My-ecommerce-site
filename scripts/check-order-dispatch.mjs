@@ -142,8 +142,8 @@ async function makeOrder(options = {}) {
         `INSERT INTO orders
            (id, user_id, name, email, phone, address1, city, state, pincode,
             subtotal, shipping, total, payment_method, payment_gateway,
-            payment_reference, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'confirmed')`
+            payment_reference, status, payment_status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?)`
       )
       .run(
         id,
@@ -160,7 +160,8 @@ async function makeOrder(options = {}) {
         total,
         "upi",
         options.paymentReference ? "razorpay" : null,
-        options.paymentReference ?? null
+        options.paymentReference ?? null,
+        options.paymentReference ? "paid" : "pending"
       );
 
     const taken = await takeStockForOrder(
@@ -322,7 +323,8 @@ try {
 
   const shippingNotification = await getDb()
     .prepare(
-      "SELECT id FROM notifications WHERE order_id = ? AND kind = 'order_tracking'"
+      `SELECT id FROM notifications
+        WHERE order_id = ? AND kind IN ('order_tracking', 'order_confirmed')`
     )
     .get(order.id);
   check("the customer was told", Boolean(shippingNotification));
@@ -669,12 +671,8 @@ try {
     orderStatusLabel("cancelled") === "Cancelled"
   );
   check(
-    "an order waiting for its money says Pending",
-    orderStatusLabel("confirmed", { awaitingPayment: true }) === "Pending"
-  );
-  check(
-    "but a cancelled order is never Pending",
-    orderStatusLabel("cancelled", { awaitingPayment: true }) === "Cancelled"
+    "an order waiting to be checked says Pending",
+    orderStatusLabel("pending") === "Pending"
   );
 
   /* ─────────────────────────────────────────────────────────────── */
@@ -692,11 +690,28 @@ try {
   );
   check(
     "so it reads as Pending",
-    orderStatusLabel(awaitingOrder.status, {
-      awaitingPayment: Boolean(
-        awaitingOrder.payment_gateway && !awaitingOrder.payment_reference
-      ),
-    }) === "Pending"
+    orderStatusLabel(awaitingOrder.status) === "Pending"
+  );
+  check(
+    "and its payment status is pending too",
+    awaitingOrder.payment_status === "pending",
+    awaitingOrder.payment_status
+  );
+
+  /* ─────────────────────────────────────────────────────────────── */
+  section("17. The payment and the order are two different things");
+
+  const paidOrder = await makeOrder({ paymentReference: "pay_PENDINGCHECK1" });
+  const paidRow = await getOrder(paidOrder.id);
+  check("a paid order says so", paidRow.payment_status === "paid");
+  check(
+    "and the order is still pending",
+    paidRow.status === "pending",
+    paidRow.status
+  );
+  check(
+    "so the two are read apart",
+    paidRow.status !== paidRow.payment_status
   );
 } catch (err) {
   console.error("\n✗ the run stopped:", err);

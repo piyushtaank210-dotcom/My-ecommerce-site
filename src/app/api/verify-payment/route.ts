@@ -4,8 +4,7 @@ import { fail, json } from "@/lib/api";
 import { clearCart } from "@/lib/cart";
 import { GATEWAY_NAME } from "@/lib/checkout";
 import { getDb } from "@/lib/db";
-import { gatewayIsConfigured } from "@/lib/gateway-config";
-import {
+import { gatewayIsConfigured } from "@/lib/gateway-config";import {
   claimPaymentAndMarkOrderPaid,
   findPayment,
 } from "@/lib/gateway-records";
@@ -21,6 +20,33 @@ const paymentSchema = z.object({
   razorpay_payment_id: z.string().trim().min(1, "The payment reference is missing."),
   razorpay_signature: z.string().trim().min(1, "The payment signature is missing."),
 });
+
+/**
+ * Records that a payment did not go through.
+ *
+ * It is the payment status that changes, and only that: the order stays
+ * where it is. An order whose payment failed is still an order, and the
+ * customer can still be told about it.
+ *
+ * It never throws: a failure to write down a failure is not a reason to
+ * fail the request twice.
+ */
+async function recordPaymentFailure(orderId: string | null | undefined): Promise<void> {
+  if (!orderId) return;
+  try {
+    await getDb()
+      .prepare(
+        `UPDATE orders SET payment_status = 'failed'
+          WHERE id = ? AND payment_status = 'pending'`
+      )
+      .run(orderId);
+  } catch (err) {
+    console.warn(
+      "[payment] the failed payment could not be written down:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
 
 /**
  * POST /api/verify-payment — check that the payment is real.
@@ -82,6 +108,10 @@ export async function POST(request: Request) {
   if (!gatewayOrder.ok) return fail(gatewayOrder.reason, gatewayOrder.status);
 
   if (payment.payment.status !== "captured") {
+    // The gateway says the money was not taken. The order's payment
+    // status says so, and the order itself is left where it is: a
+    // failed payment is not a cancelled order.
+    await recordPaymentFailure(gatewayOrder.order.receipt);
     return fail("The payment has not been captured, so the order has not been marked as paid.", 400);
   }
   if (payment.payment.orderId !== razorpay_order_id) {

@@ -100,8 +100,8 @@ async function makeOrder(id) {
       .prepare(
         `INSERT INTO orders
            (id, user_id, name, email, phone, address1, city, state, pincode,
-            subtotal, shipping, total, payment_method, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'cod','confirmed')`
+            subtotal, shipping, total, payment_method, status, payment_status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'cod','pending','pending')`
       )
       .run(
         id,
@@ -202,6 +202,123 @@ try {
 
   const arrow = buttons.find((b) => b.label === "More order actions");
   check("the button has an arrow beside it", Boolean(arrow));
+
+  /* ─────────────────────────────────────────────────────────────── */
+  section("1b. The order reads as PENDING everywhere");
+
+  const badge = await cdp.evaluate(`
+    (() => {
+      const el = document.querySelector('[data-status-badge]');
+      const pay = document.querySelector('[data-payment-badge]');
+      return {
+        status: el ? el.getAttribute('data-status-badge') : null,
+        statusText: el ? el.textContent.trim() : null,
+        payment: pay ? pay.getAttribute('data-payment-badge') : null
+      };
+    })()
+  `);
+  check("the order's status badge says pending", badge.status === "pending", badge.status);
+  check("and it reads as Pending", badge.statusText === "Pending", badge.statusText);
+  check(
+    "and the payment status is shown beside it",
+    badge.payment === "pending",
+    badge.payment
+  );
+
+  // The customer's own page.
+  await cdp.goto(`${BASE}/order/${orderId}`);
+  await sleep(1200);
+  const customerBadge = await cdp.evaluate(`
+    (() => {
+      const text = document.body.innerText;
+      const el = document.querySelector('[data-status-badge]');
+      return {
+        pending: /\\bPending\\b/.test(text),
+        confirmed: /Order confirmed/.test(text),
+        received: /Order received/.test(text),
+        badge: el ? el.getAttribute('data-status-badge') : null
+      };
+    })()
+  `);
+  check("the customer's page shows Pending", customerBadge.pending);
+  check("and says the order was received", customerBadge.received);
+  check(
+    "and the badge on it says pending",
+    customerBadge.badge === "pending",
+    customerBadge.badge
+  );
+  check(
+    "and never says it is confirmed",
+    !customerBadge.confirmed,
+    "the customer must not see CONFIRMED before the back office confirms"
+  );
+
+  // The back office's orders list, under the Pending filter.
+  await cdp.goto(`${BASE}/admin/orders?status=pending`);
+  await waitFor(cdp, `document.body.innerText.includes('Orders')`);
+  await sleep(700);
+  const inTheList = await cdp.evaluate(`
+    (() => {
+      const text = document.body.innerText;
+      return text.includes(${JSON.stringify(orderId)});
+    })()
+  `);
+  check("the order is in the list under Pending", inTheList);
+
+  // The list's filter has a Pending tab, and the tab's count is the
+  // number of orders that are actually pending.
+  const tabs = await cdp.evaluate(`
+    (() => {
+      const links = [...document.querySelectorAll('a[href*="status="]')];
+      const pending = links.find(a => a.getAttribute('href').includes('status=pending'));
+      if (!pending) return null;
+      return {
+        count: pending.textContent.match(/\\d+/)?.[0] ?? null,
+        text: pending.textContent.trim()
+      };
+    })()
+  `);
+  check("the Pending tab is there", tabs !== null, JSON.stringify(tabs));
+
+  // The banner above the list must count the pending ones and nothing
+  // else — it says how many are waiting to be checked.
+  await cdp.goto(`${BASE}/admin/orders`);
+  await waitFor(cdp, `document.body.innerText.includes('Orders')`);
+  await sleep(700);
+  const banner = await cdp.evaluate(`
+    (() => {
+      const text = document.body.innerText;
+      const m = text.match(/(\\d+) orders? (?:is|are) waiting to be checked/);
+      const tab = [...document.querySelectorAll('a[href*="status=pending"]')][0];
+      return {
+        banner: m ? Number(m[1]) : null,
+        tab: tab ? Number(tab.textContent.match(/\\d+/)?.[0] ?? '0') : null
+      };
+    })()
+  `);
+  check(
+    "the banner counts the pending orders, not all of them",
+    banner.banner !== null && banner.tab !== null && banner.banner === banner.tab,
+    JSON.stringify(banner)
+  );
+
+  // The filter has a Pending option.
+  const filter = await cdp.evaluate(`
+    (() => {
+      const select = document.querySelector('select[name="status"]');
+      if (!select) return null;
+      return [...select.options].map(o => o.value);
+    })()
+  `);
+  check(
+    "and the filter offers Pending",
+    Array.isArray(filter) && filter.includes("pending"),
+    JSON.stringify(filter)
+  );
+
+  await cdp.goto(`${BASE}/admin/orders/${orderId}`);
+  await waitFor(cdp, `document.body.innerText.includes('Order actions')`);
+  await sleep(400);
 
   /* ─────────────────────────────────────────────────────────────── */
   section("2. The arrow opens the Cancel Order menu");

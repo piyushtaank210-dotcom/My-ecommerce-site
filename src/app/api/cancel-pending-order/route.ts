@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (order.payment_reference) {
     return fail("This order has been paid for, so it cannot be cancelled here.", 409);
   }
-  if (order.status !== "confirmed") {
+  if (order.status !== "pending") {
     return fail("That order is no longer waiting for a payment.", 409);
   }
 

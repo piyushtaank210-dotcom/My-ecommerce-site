@@ -5,6 +5,9 @@
 
 # Next.js Build Output
 /.next/
+# The second server that the pending-order check runs on has a build
+# and a lock file of its own.
+/.next-pending-check/
 /out/
 /build/
 /dist/

@@ -50,6 +50,8 @@ export {
 import {
   type OrderStatus,
   ORDER_STATUS_LABEL,
+  canTransition,
+  isOrderStatus,
 } from "./order-status";
 import {
   notifyCustomerAboutOrder,
@@ -81,6 +83,12 @@ export function generateOrderId(): string {
  * behind and takes nothing out of the shelf. The stock is never allowed to
  * go below zero, and the sale movement for an order can only be written
  * once — so the same order cannot be charged against the stock twice.
+ *
+ * The order is written as **pending**. It is not confirmed, and it is
+ * not confirmed by anything that happens to it afterwards: a payment that
+ * is taken only says that the money is in. Somebody in the back office
+ * has to check the order and save the shipping details before it moves
+ * on, and that is the only thing that confirms it.
  */
 export async function createOrder(
   input: CheckoutInput,
@@ -96,8 +104,9 @@ export async function createOrder(
     (await db.prepare(
       `INSERT INTO orders
         (id, user_id, name, email, phone, address1, address2, city, state, pincode, notes,
-         subtotal, shipping, total, payment_method, payment_gateway, payment_reference, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'confirmed')`
+         subtotal, shipping, total, payment_method, payment_gateway, payment_reference,
+         status, payment_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','pending')`
     ).run(
       id,
       user?.id ?? null,
@@ -163,7 +172,7 @@ export async function createOrder(
 }
 
 /**
- * Tells the customer their order has been placed.
+ * Tells the customer their order has been received.
  *
  * The message lists what they ordered and what they paid, so that the
  * order in their inbox is the order they can check against their card.
@@ -172,6 +181,10 @@ export async function createOrder(
  * handed the details that were written, so that the message can be sent
  * at the moment the payment is confirmed — long after the order itself
  * was written.
+ *
+ * It says the order has been **received**, not that it has been
+ * confirmed. It has not: the order is pending, and it only becomes
+ * confirmed when somebody in the back office has checked it.
  */
 export async function notifyOrderPlaced(orderId: string): Promise<void> {
   const order = await getOrder(orderId);
@@ -191,8 +204,8 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
     userId: order.user_id ?? null,
     email,
     orderId,
-    kind: "order_confirmed",
-    title: `Order ${orderId} confirmed`,
+    kind: "order_received",
+    title: `Order ${orderId} received`,
     body: [
       `Thank you for your order, ${order.name.trim() || "there"}.`,
       "",
@@ -208,7 +221,7 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
       `Paid by: ${paymentMethodLabel(order.payment_method)}`,
       `Delivering to: ${order.address1}${order.address2 ? `, ${order.address2}` : ""}, ${order.city}, ${order.state} — ${order.pincode}`,
       "",
-      "We will write to you again when your order is on its way.",
+      "We are checking your order now. We will write to you again when it is confirmed and on its way.",
     ].join("\n"),
   });
 }
@@ -224,6 +237,10 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
  * Reopening a cancelled order takes the stock out again. It is refused
  * while the return is still waiting for a check, because the units are
  * somewhere in between.
+ *
+ * The move itself is checked before anything is written: an order only
+ * moves forward along its journey, or it is cancelled. Nothing moves the
+ * order backwards, and nothing but the back office moves it at all.
  */
 export async function applyOrderStatus(
   orderId: string,
@@ -258,6 +275,17 @@ export async function applyOrderStatus(
 
       const from = String(order.status ?? "");
       if (from === status) return;
+
+      // The move is checked before anything is written. An order that is
+      // already cancelled and is being cancelled again is refused here
+      // rather than being given the stock back a second time.
+      if (!isOrderStatus(from) || !canTransition(from, status)) {
+        throw new InventoryError(
+          `An order cannot go from ${ORDER_STATUS_LABEL[from as OrderStatus] ?? from} to ${
+            ORDER_STATUS_LABEL[status]
+          }.`
+        );
+      }
 
       const lines = (await db
         .prepare(
@@ -345,6 +373,15 @@ export async function applyOrderStatus(
         (await db.prepare(
           "UPDATE orders SET status = ?, delivered_at = COALESCE(delivered_at, datetime('now')) WHERE id = ?"
         ).run(status, orderId));
+
+        // An order paid for at the door is paid for once it has been
+        // delivered. It is the one moment the money changes hands, and
+        // it is the payment status that says so — the order's own
+        // status has nothing to do with the money.
+        (await db.prepare(
+          `UPDATE orders SET payment_status = 'paid'
+            WHERE id = ? AND payment_method = 'cod' AND payment_status = 'pending'`
+        ).run(orderId));
       } else {
         (await db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId));
       }
@@ -436,6 +473,7 @@ async function notifyOrderStatus(
 const ORDER_STATUS_NOTIFICATION: Partial<
   Record<OrderStatus, NotificationKind>
 > = {
+  confirmed: "order_confirmed",
   packed: "order_packed",
   shipped: "order_shipped",
   delivered: "order_delivered",
@@ -448,6 +486,8 @@ const ORDER_STATUS_NOTIFICATION: Partial<
 const ORDER_STATUS_MESSAGE: Partial<
   Record<OrderStatus, (order: { name: string; orderId: string }) => string>
 > = {
+  confirmed: ({ name, orderId }) =>
+    `Good news, ${name || "there"} — we have checked order ${orderId} and it is confirmed. We are getting it ready to go out, and you will hear from us again when it is on its way.`,
   packed: ({ name, orderId }) =>
     `Good news, ${name || "there"} — order ${orderId} has been packed and is getting ready to go out. You will hear from us again when it leaves us.`,
   shipped: ({ name, orderId }) =>
@@ -502,6 +542,7 @@ export async function getOrder(id: string): Promise<Order | null> {
     payment_gateway: strOrNull(row.payment_gateway),
     payment_reference: strOrNull(row.payment_reference),
     status: str(row.status),
+    payment_status: str(row.payment_status) || "pending",
     delivered_at: strOrNull(row.delivered_at),
     courier_partner: strOrNull(row.courier_partner),
     shipping_method: strOrNull(row.shipping_method),

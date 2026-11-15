@@ -322,6 +322,13 @@ export async function applyMigrations(db: Db): Promise<void> {
   add("orders", "payment_gateway", "payment_gateway TEXT");
   add("orders", "payment_reference", "payment_reference TEXT");
 
+  // Where the money is, as against where the parcel is.
+  //
+  // The two are separate on purpose: a payment that has been taken does
+  // not confirm the order, and an order can be called off before a
+  // rupee of it has been paid.
+  add("orders", "payment_status", "payment_status TEXT NOT NULL DEFAULT 'pending'");
+
   // What became of the notification the shop was sent about an enquiry.
   add("contact_messages", "phone", "phone TEXT");
   add("contact_messages", "email_status", "email_status TEXT");
@@ -385,9 +392,7 @@ export async function applyMigrations(db: Db): Promise<void> {
   }
 
   await applyReturnWindowPolicy(db);
-  // The refund summary on a request now uses the same words the back
-  // office uses, so there is one vocabulary across the shop. The rows
-  // that were written before it are moved over.
+  await separatePaymentStatus(db);
   await alignRefundStatuses(db);
   await separateNotificationEmailStatus(db);
 
@@ -399,6 +404,43 @@ export async function applyMigrations(db: Db): Promise<void> {
   await backfillBrands(db);
   await backfillSubcategories(db);
   await seedProductImages(db);
+}
+
+/**
+ * Works out where the money of the orders that already exist is.
+ *
+ * The payment reference is the gateway's own record of the money being
+ * taken, so an order that carries one was paid for. An order that does
+ * not was not — it is either cash on delivery or was never paid for.
+ *
+ * The order's own status is left exactly as it was. An order that was
+ * confirmed before this change is still confirmed, and one that was
+ * shipped is still shipped: the orders that already exist are not
+ * rewritten.
+ *
+ * It runs on every database open, so it only ever does this once — the
+ * `payment_status = 'pending'` in the statement is what stops it
+ * touching an order twice.
+ */
+async function separatePaymentStatus(db: Db): Promise<void> {
+  if (!(await tableExists(db, "orders"))) return;
+  if (!(await hasColumn(db, "orders", "payment_status"))) return;
+
+  await db
+    .prepare(
+      `UPDATE orders
+          SET payment_status = 'paid'
+        WHERE payment_reference IS NOT NULL
+          AND payment_reference != ''
+          AND payment_status = 'pending'`
+    )
+    .run();
+
+  // A new order is written as pending. The default is changed for the
+  // orders that are written without a status of their own.
+  if (db.dialect === "postgres") {
+    await db.exec("ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'pending'");
+  }
 }
 
 /**

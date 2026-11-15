@@ -22,7 +22,11 @@ export default async function AccountPage() {
     .filter((o) => o.status !== "cancelled")
     .reduce((sum, o) => sum + o.total, 0);
   const inFlight = orders.filter(
-    (o) => o.status === "confirmed" || o.status === "packed" || o.status === "shipped"
+    (o) =>
+      o.status === "pending" ||
+      o.status === "confirmed" ||
+      o.status === "packed" ||
+      o.status === "shipped"
   ).length;
 
   const tiles = [

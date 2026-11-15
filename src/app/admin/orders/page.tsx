@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL } from "@/lib/orders";
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import { Pagination } from "@/components/Pagination";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
@@ -42,6 +43,10 @@ export default async function AdminOrdersPage({
   const total = (await countOrders(query));
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
+  // How many orders are waiting to be checked. It is counted on its own
+  // so that the banner does not depend on the filter that is on.
+  const pendingCount = await countOrders({ q, status: "pending" });
+
   const pageLink = (n: number) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
@@ -50,6 +55,50 @@ export default async function AdminOrdersPage({
     const qs = p.toString();
     return `/admin/orders${qs ? `?${qs}` : ""}`;
   };
+
+  /**
+   * The link that shows the orders with one status, and how many there
+   * are. The count is the number of orders with that status and the
+   * search that is on, so that it is the count of what is being looked
+   * at.
+   */
+  const statusTab = async (value: string, label: string) => {
+    const count = await countOrders({
+      q,
+      status: value === "all" ? undefined : value,
+    });
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (value !== "all") p.set("status", value);
+    const qs = p.toString();
+    const active = status === value;
+    return (
+      <Link
+        key={value}
+        href={`/admin/orders${qs ? `?${qs}` : ""}`}
+        aria-current={active ? "page" : undefined}
+        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+          active
+            ? "border-brand bg-brand text-white"
+            : "border-gray-200 bg-white text-gray-600 hover:border-brand hover:text-brand"
+        }`}
+      >
+        {label}
+        <span
+          className={`tnum rounded-full px-1.5 py-0.5 text-[11px] ${
+            active ? "bg-white/20" : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {count}
+        </span>
+      </Link>
+    );
+  };
+
+  const tabs = await Promise.all([
+    statusTab("all", "All"),
+    ...ORDER_STATUSES.map((s) => statusTab(s, ORDER_STATUS_LABEL[s])),
+  ]);
 
   return (
     <div className="mx-auto max-w-[1600px]">
@@ -76,6 +125,24 @@ export default async function AdminOrdersPage({
         />
       </div>
 
+      {/* The statuses as tabs, each with the number of orders behind
+          it. The pending ones are the first thing on the list, because
+          they are the ones waiting on the back office. */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">{tabs}</div>
+
+      {pendingCount > 0 && status !== "pending" && (
+        <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+          {pendingCount} order{pendingCount === 1 ? " is" : "s are"} waiting to
+          be checked.{" "}
+          <Link
+            href={`/admin/orders${q ? `?q=${encodeURIComponent(q)}&status=pending` : "?status=pending"}`}
+            className="font-semibold underline"
+          >
+            See {pendingCount === 1 ? "it" : "them"}
+          </Link>
+        </p>
+      )}
+
       {orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
           <ShoppingBag className="h-9 w-9 text-gray-300" />
@@ -88,7 +155,7 @@ export default async function AdminOrdersPage({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full min-w-[900px] text-left text-[13.5px]">
+          <table className="w-full min-w-[1000px] text-left text-[13.5px]">
             <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
               <tr>
                 <th className="px-4 py-3 font-semibold">Order</th>
@@ -97,12 +164,20 @@ export default async function AdminOrdersPage({
                 <th className="px-4 py-3 font-semibold">Items</th>
                 <th className="px-4 py-3 font-semibold">Total</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold">Payment</th>
                 <th className="px-4 py-3 text-right font-semibold">Open</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {orders.map((o) => (
-                <tr key={o.id} className="bg-white">
+                <tr
+                  key={o.id}
+                  className={
+                    o.status === "pending"
+                      ? "bg-amber-50/40"
+                      : "bg-white"
+                  }
+                >
                   <td className="px-4 py-3">
                     <Link
                       href={`/admin/orders/${o.id}`}
@@ -129,12 +204,11 @@ export default async function AdminOrdersPage({
                     {canUpdate ? (
                       <OrderStatusSelect orderId={o.id} status={o.status} />
                     ) : (
-                      <span className="text-[12.5px] font-medium capitalize text-gray-600">
-                        {ORDER_STATUS_LABEL[
-                          o.status as keyof typeof ORDER_STATUS_LABEL
-                        ] ?? o.status}
-                      </span>
+                      <OrderStatusBadge status={o.status} size="sm" />
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <PaymentStatusBadge status={o.payment_status} size="sm" />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
