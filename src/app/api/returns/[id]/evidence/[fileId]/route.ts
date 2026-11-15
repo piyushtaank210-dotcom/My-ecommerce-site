@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { can } from "@/lib/roles";
-import { contentTypeFor, readEvidence } from "@/lib/evidence";
+import { contentTypeFor, readEvidenceStream } from "@/lib/evidence";
 
 type Row = Record<string, unknown>;
 const str = (v: unknown): string => String(v ?? "");
@@ -65,7 +65,7 @@ export async function GET(
     );
   }
 
-  const bytes = await readEvidence(
+  const bytes = await readEvidenceStream(
     id,
     row.stored_name ? str(row.stored_name) : null,
     row.stored_name ? null : str(row.path)
@@ -86,15 +86,19 @@ export async function GET(
   // that a header cannot carry are taken out of it.
   const safeName = original.replace(/[^\w.\- ]/g, "_").slice(0, 120);
 
-  return new NextResponse(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Length": String(bytes.length),
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${safeName}"`,
-      "Cache-Control": "private, no-store, max-age=0",
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; sandbox",
-    },
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": contentType,
+    "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${safeName}"`,
+    "Cache-Control": "private, no-store, max-age=0",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+  };
+  if (bytes.sizeBytes !== null) {
+    headers["Content-Length"] = String(bytes.sizeBytes);
+  }
+
+  // The file is passed along as it is read rather than being held in
+  // memory all at once, so a video of a damaged console does not have
+  // to be held whole to be watched.
+  return new NextResponse(bytes.stream, { status: 200, headers });
 }

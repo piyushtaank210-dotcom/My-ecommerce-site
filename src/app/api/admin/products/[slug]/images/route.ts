@@ -1,5 +1,3 @@
-import { unlink } from "node:fs/promises";
-import { join } from "node:path";
 import { fail, json, requireApiPermission } from "@/lib/api";
 import {
   addProductImage,
@@ -9,7 +7,8 @@ import {
   setMainProductImage,
   setProductImageAlt,
 } from "@/lib/admin";
-import { saveUpload, isOwnUpload } from "@/lib/uploads";
+import { deleteUpload, isOwnUpload, productImageFolder, saveUpload } from "@/lib/uploads";
+import { limitsFor } from "@/lib/upload-tickets";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -52,10 +51,18 @@ export async function POST(request: Request, { params }: Params) {
     .filter((f): f is File => f instanceof File && f.size > 0);
 
   if (!files.length) return fail("Choose at least one photograph.", 400);
+  if (files.length > limitsFor("product-images").maxFiles) {
+    return fail(
+      `Choose at most ${limitsFor("product-images").maxFiles} photographs at a time.`,
+      400
+    );
+  }
 
-  const replaceId = String(formData.get("replaceId") ?? "").trim();
+  let replaceId = String(formData.get("replaceId") ?? "").trim();
 
-  const dir = slug;
+  // The photographs live in the product's own folder, under the shop's
+  // own uploads — the same place they have always lived.
+  const dir = productImageFolder(slug);
 
   const added: string[] = [];
 
@@ -66,13 +73,16 @@ export async function POST(request: Request, { params }: Params) {
     const publicPath = saved.path;
     const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
 
+    // A replacement is carried out once, by the first file. The rest
+    // are added beside the photograph that replaced the old one.
     if (replaceId) {
-      const old = (await removeProductImage(slug, replaceId));
+      const old = await removeProductImage(slug, replaceId);
       // The file the old picture used is ours, so it goes too — but only
       // if it is this product's own.
       if (old.removed && old.path && isOwnUpload(old.path, slug)) {
-        await unlink(join(process.cwd(), "public", old.path)).catch(() => {});
+        await deleteUpload(old.path, slug);
       }
+      replaceId = "";
     }
 
     const image = (await addProductImage(slug, publicPath, alt || null));
@@ -141,7 +151,7 @@ export async function PATCH(request: Request, { params }: Params) {
     // carries the original's pictures — their paths are the original's — and
     // removing one from the copy must not take it off the original.
     if (result.path && isOwnUpload(result.path, slug)) {
-      await unlink(join(process.cwd(), "public", result.path)).catch(() => {});
+      await deleteUpload(result.path, slug);
     }
     return json({ images: (await listProductGallery(slug)) });
   }

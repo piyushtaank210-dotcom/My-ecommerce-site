@@ -7,12 +7,14 @@ import {
   ArrowRight,
   ImagePlus,
   Loader2,
+  RefreshCw,
   Star,
   Trash2,
   Upload,
 } from "lucide-react";
 import type { ProductImage } from "@/lib/types";
 import { toast } from "@/components/Toaster";
+import { uploadFiles } from "@/lib/upload-client";
 
 /**
  * The photographs of a product.
@@ -39,7 +41,13 @@ export function ProductImages({
   const [images, setImages] = useState<ProductImage[]>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ name: string; percent: number }[]>(
+    []
+  );
+  /** The photograph a new file is to take the place of, if any. */
+  const [replacing, setReplacing] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const replaceInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const canChange = Boolean(slug) && !disabled;
@@ -73,14 +81,53 @@ export function ProductImages({
 
   async function upload(files: FileList | null) {
     if (!files?.length || !slug) return;
-    const data = new FormData();
-    for (const file of Array.from(files)) data.append("files", file);
-    await send(
-      `/api/admin/products/${slug}/images`,
-      { method: "POST", body: data },
-      "The photograph could not be uploaded."
-    );
+    const picked = Array.from(files);
+    const replaceId = replacing;
     if (fileInput.current) fileInput.current.value = "";
+    if (replaceInput.current) replaceInput.current.value = "";
+    setReplacing(null);
+
+    setBusy(true);
+    setError(null);
+    setProgress(picked.map((file) => ({ name: file.name, percent: 0 })));
+
+    const outcome = await uploadFiles({
+      ticketUrl: "/api/admin/uploads",
+      commitUrl: "/api/admin/uploads",
+      files: picked,
+      payload: { target: "product-images", slug, replaceId: replaceId ?? "" },
+      appFields: replaceId ? { replaceId } : {},
+      onProgress: (index, percent) => {
+        setProgress((prev) =>
+          prev.map((p, i) => (i === index ? { ...p, percent } : p))
+        );
+      },
+    });
+
+    setProgress([]);
+
+    if (!outcome.ok) {
+      const message = outcome.error ?? "The photograph could not be uploaded.";
+      setError(message);
+      toast(message, "error");
+      setBusy(false);
+      return;
+    }
+
+    const gallery = (outcome.data as { images?: ProductImage[] })?.images;
+    if (gallery) setImages(gallery);
+    router.refresh();
+    setBusy(false);
+    if (replaceId) {
+      toast("The photograph was replaced.", "success");
+      return;
+    }
+    toast(
+      picked.length === 1
+        ? "The photograph was uploaded."
+        : `${picked.length} photographs were uploaded.`,
+      "success"
+    );
   }
 
   function move(id: string, by: number) {
@@ -234,10 +281,23 @@ export function ProductImages({
                   </span>
                   <button
                     type="button"
+                    onClick={() => {
+                      setReplacing(img.id);
+                      replaceInput.current?.click();
+                    }}
+                    disabled={busy || !canChange}
+                    aria-label={`Replace ${img.alt ?? "photograph"}`}
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-30"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Replace
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => remove(img.id)}
                     disabled={busy || !canChange}
                     aria-label={`Remove ${img.alt ?? "photograph"}`}
-                    className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -254,6 +314,26 @@ export function ProductImages({
         </p>
       )}
 
+      {progress.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {progress.map((p, i) => (
+            <li
+              key={`${p.name}-${i}`}
+              className="flex items-center gap-2 text-[11.5px] text-gray-500"
+            >
+              <span className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-200">
+                <span
+                  className="block h-full rounded-full bg-brand transition-all"
+                  style={{ width: `${p.percent}%` }}
+                />
+              </span>
+              <span className="truncate">{p.name}</span>
+              <span className="tnum">{p.percent}%</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <input
           ref={fileInput}
@@ -264,6 +344,15 @@ export function ProductImages({
           disabled={!canChange || busy}
           className="hidden"
           id="product-images"
+        />
+        <input
+          ref={replaceInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+          onChange={(e) => upload(e.target.files)}
+          disabled={!canChange || busy}
+          className="hidden"
+          id="product-image-replace"
         />
         <label
           htmlFor="product-images"

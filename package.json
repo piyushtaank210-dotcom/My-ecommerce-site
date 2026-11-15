@@ -51,6 +51,7 @@
     "shot": "node scripts/screenshot.mjs",
     "shot:at": "node scripts/shot-at.mjs",
     "check:return-actions": "node scripts/check-admin-return-actions.mjs",
+    "check:uploads": "node scripts/check-uploads.mjs",
     "check:return-replacement": "node scripts/check-admin-return-replacement.mjs",
     "check:returns:api": "node scripts/check-returns-api.mjs",
     "check:returns:pages": "node scripts/check-returns-pages.mjs",
@@ -75,6 +76,7 @@
     "check:resend:delivery": "node scripts/check-resend-delivery.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "^2.9.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.63.0",
     "next": "^16.4.3",

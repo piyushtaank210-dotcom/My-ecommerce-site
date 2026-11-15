@@ -19,6 +19,28 @@ const nextConfig: NextConfig = {
       : ".next",
   // node:sqlite is a Node built-in; keep it external to the server bundle.
   serverExternalPackages: ["node:sqlite"],
+  images: {
+    /**
+     * The photographs in the catalogue may live in the shop's own
+     * store rather than in the repository.
+     *
+     * A picture that is uploaded on a serverless deployment is kept in
+     * Vercel Blob, and its address is the store's own. The optimiser
+     * will only fetch an outside picture from a place it has been told
+     * about, so the store is named here.
+     *
+     * The private store is named as well. A customer's evidence is
+     * never served from it directly — it is fetched through a route
+     * that checks who is asking — but naming it means a picture that
+     * has been made public by mistake still renders.
+     */
+    remotePatterns: [
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
+      { protocol: "https", hostname: "*.private.blob.vercel-storage.com" },
+    ],
+    // The one quality the shop's pictures are cut to.
+    qualities: [75],
+  },
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },

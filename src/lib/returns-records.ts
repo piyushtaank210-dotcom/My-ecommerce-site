@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getDb, withTransaction } from "./db";
+import { MAX_PHOTOS, MAX_VIDEOS } from "./evidence";
 import {
   type EvidenceKind,
   type RefundStatus,
@@ -968,6 +969,29 @@ export async function addReturnEvidence(input: {
 
   if (!row) return { ok: false, message: "Request not found." };
   if (!input.files.length) return { ok: false, message: "No files were sent." };
+
+  // A request carries a set number of photographs and videos. More than
+  // that is refused, rather than quietly accepted and left for the back
+  // office to make sense of.
+  const counts = (await db
+    .prepare(
+      `SELECT
+         COUNT(*) FILTER (WHERE kind = 'photo') AS photos,
+         COUNT(*) FILTER (WHERE kind = 'video') AS videos
+        FROM return_images
+       WHERE return_id = ? AND superseded = 0`
+    )
+    .get(input.returnId)) as { photos?: number; videos?: number } | undefined;
+  const photos =
+    num(counts?.photos) + input.files.filter((f) => f.kind === "photo").length;
+  const videos =
+    num(counts?.videos) + input.files.filter((f) => f.kind === "video").length;
+  if (photos > MAX_PHOTOS || videos > MAX_VIDEOS) {
+    return {
+      ok: false,
+      message: `A request can carry up to ${MAX_PHOTOS} photographs and ${MAX_VIDEOS} videos.`,
+    };
+  }
 
   const current = (await db
     .prepare(

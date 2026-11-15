@@ -24,6 +24,7 @@ import {
   type EvidenceItem,
 } from "@/lib/return-policy";
 import { money } from "@/lib/format";
+import { uploadFiles } from "@/lib/upload-client";
 import type { Order, OrderItem } from "@/lib/types";
 
 type EnrichedOrderItem = OrderItem & {
@@ -228,72 +229,43 @@ export function ReturnRequestForm({
    *
    * The file goes on its own so that the customer can see each one
    * finish, and so that one large video does not hold up the rest.
+   *
+   * Where the file goes depends on where the shop is running: to the
+   * shop itself, or straight to the shop's store. The shop says which,
+   * and the file goes there either way.
    */
-  const uploadFile = (file: File, kind: "photo" | "video") => {
-    return new Promise<void>((resolve) => {
-      const form = new FormData();
-      form.append("files", file);
-      form.append("evidenceKind", evidenceKind);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/returns/evidence");
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const percent = Math.round((event.loaded / event.total) * 100);
+  const uploadFile = async (file: File) => {
+    const outcome = await uploadFiles({
+      ticketUrl: "/api/returns/uploads",
+      commitUrl: "/api/returns/uploads",
+      files: [file],
+      payload: { evidenceKind },
+      appFields: { evidenceKind },
+      onProgress: (_index, percent) => {
         setEvidence((prev) =>
           prev.map((e) =>
             e.file === file ? { ...e, progress: percent, status: "uploading" } : e
           )
         );
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          let id: string | null = null;
-          try {
-            const body = JSON.parse(xhr.responseText);
-            id = body?.uploads?.[0]?.id ?? null;
-          } catch {
-            id = null;
-          }
-          setEvidence((prev) =>
-            prev.map((e) =>
-              e.file === file
-                ? { ...e, id, progress: 100, status: id ? "done" : "error", error: id ? undefined : "The upload could not be read." }
-                : e
-            )
-          );
-          resolve();
-          return;
-        }
-        let message = "The file could not be sent.";
-        try {
-          message = JSON.parse(xhr.responseText)?.error ?? message;
-        } catch {
-          // The answer was not the one we expected.
-        }
-        setEvidence((prev) =>
-          prev.map((e) =>
-            e.file === file ? { ...e, status: "error", error: message } : e
-          )
-        );
-        resolve();
-      };
-
-      xhr.onerror = () => {
-        setEvidence((prev) =>
-          prev.map((e) =>
-            e.file === file
-              ? { ...e, status: "error", error: "The file could not be sent. Check your connection and try again." }
-              : e
-          )
-        );
-        resolve();
-      };
-
-      xhr.send(form);
+      },
     });
+
+    const id = outcome.ok ? (outcome.uploadIds[0] ?? null) : null;
+    setEvidence((prev) =>
+      prev.map((e) =>
+        e.file === file
+          ? {
+              ...e,
+              id,
+              progress: 100,
+              status: id ? "done" : "error",
+              error: id
+                ? undefined
+                : (outcome.error ?? "The upload could not be read."),
+            }
+          : e
+      )
+    );
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -363,7 +335,7 @@ export function ReturnRequestForm({
     // Each file is sent on its own, so the customer sees each one
     // finish rather than one bar for the lot.
     for (const item of accepted) {
-      await uploadFile(item.file, item.kind);
+      await uploadFile(item.file);
     }
   };
 

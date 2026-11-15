@@ -7,6 +7,7 @@ import {
   type ReturnType,
 } from "./returns";
 import { peekUploads, claimUploads } from "./return-uploads";
+import { MAX_PHOTOS, MAX_VIDEOS } from "./evidence";
 import { checkRequestAllowed, policyForReason } from "./return-policy";
 
 /**
@@ -204,6 +205,16 @@ export async function submitReturnRequest(
   const staged = await peekUploads(uploadIds, user?.id ?? order.user_id);
   const photos = staged.filter((e) => e.kind === "photo");
   const videos = staged.filter((e) => e.kind === "video");
+
+  // A request carries a set number of photographs and videos. More than
+  // that is refused here rather than left for the back office to make
+  // sense of.
+  if (photos.length > MAX_PHOTOS || videos.length > MAX_VIDEOS) {
+    return {
+      ok: false,
+      message: `A request can carry up to ${MAX_PHOTOS} photographs and ${MAX_VIDEOS} videos. Please send fewer.`,
+    };
+  }
 
   // The evidence the rules ask for. Where it has not been sent, the
   // customer is asked to say why — and the claim still goes forward,

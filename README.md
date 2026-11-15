@@ -79,6 +79,101 @@ Override them with `PF_ADMIN_EMAIL`, `PF_ADMIN_PASSWORD`, `PF_SUPPORT_EMAIL`, an
 
 ---
 
+## Where the shop keeps its files
+
+The shop keeps two kinds of file: the **photographs in the catalogue**, and
+the **evidence a customer sends** with a return or a replacement.
+
+On a machine, both are simply on the disk — a picture in `public/uploads/`,
+a piece of evidence in `private/returns/`. That is how the shop works in
+development, and nothing needs to be set.
+
+On a serverless deployment — and the shop is on Vercel — **the disk cannot
+be written to**. There is one copy of the code and it is the same copy for
+everybody; the only place a file can be written is a scratch directory that
+is thrown away when the request ends. A photograph written there is not
+written at all: the write fails, the request fails, and the person in front
+of the screen is told that *"the photograph could not be uploaded"*.
+
+So a deployment needs a **store**. Vercel Blob is the one that needs the
+least: a store in the dashboard, and the token it gives you.
+
+### The two stores
+
+| Variable | What it is | What is in it |
+|---|---|---|
+| `BLOB_READ_WRITE_TOKEN` | The token for a **public** store | The catalogue's photographs — everybody is meant to see them |
+| `EVIDENCE_BLOB_READ_WRITE_TOKEN` | The token for a **private** store | A customer's evidence — nobody's business but theirs and the shop's |
+
+To make them:
+
+1. In the project on Vercel: **Storage → Create Storage → Blob**.
+2. For the photographs, choose **Public**. Copy the token into
+   `BLOB_READ_WRITE_TOKEN`.
+3. Make a second store for the evidence and choose **Private**. Copy its
+   token into `EVIDENCE_BLOB_READ_WRITE_TOKEN`.
+
+Put them in **Settings → Environment Variables** for every environment,
+including Preview, and then **redeploy** — a variable added after the last
+build is not in the running site.
+
+> The evidence store must be **private**. A customer's photograph of a
+> damaged console is nobody's business but their own and the shop's. Without
+> a private store the evidence still works and is still only served through
+> the authorised route, but it sits in a store that anybody can read if they
+> ever get hold of its address — so make the private store.
+
+### How a file travels
+
+With a store configured, the shop does not take the file at all. The browser
+asks the shop where the file should go, the shop signs the upload and says
+where, and the browser sends the file straight to the store. The file never
+passes through the shop, so:
+
+- a video of a damaged console can be sent from a phone — a serverless
+  function refuses a request body larger than about 4.5 MB, so a video that
+  went through the shop would never arrive;
+- the shop is not the bottleneck, and a failed upload leaves nothing behind.
+
+The shop then checks that the file really arrived, reads its first bytes to
+work out what it really is, and only then writes the row for it.
+
+Without a store, the file goes to the shop as a form, which is how it has
+always worked on a machine.
+
+### The limits
+
+| | Photographs | Videos |
+|---|---|---|
+| A product's photographs | 8 MB each | — |
+| A customer's evidence | 5 MB each | 60 MB each |
+| A request carries | up to 6 photographs | up to 2 videos |
+
+The type of a file is decided by **reading its own bytes**, not by the name
+it arrived with and not by the type the browser claimed. A file that says it
+is a photograph and is not one is refused.
+
+### Asking the shop
+
+`GET /api/health` now answers the storage question as well:
+
+```json
+{ "ok": true, "database": "reachable", "storage": "blob",
+  "storageProblem": null, "evidenceStoreIsPrivate": true }
+```
+
+`storage` is `local` or `blob`. `storageProblem` says why files cannot be
+kept when they cannot — on a deployment with no store it says so plainly
+instead of letting every upload fail with a message that means nothing.
+
+To check the whole upload system end to end:
+
+```bash
+npm run check:uploads
+```
+
+---
+
 ## Taking payment
 
 The shop takes payment through **Razorpay's Standard Checkout** — UPI, cards, netbanking, wallets and No Cost EMI on Razorpay's own secure page — and cash on delivery.
@@ -620,8 +715,10 @@ is checked before anything is written, and the message says what is wrong:
 code, as a map of the two consoles with a full set of angles; the migration
 moves them in, so the back office can reorder and add to them like any
 other picture. The first photograph is the main one — the picture the cards,
-the search results and the catalogue table show. Uploads are written to
-`public/uploads/`, which is ignored by git.
+the search results and the catalogue table show. On a machine the uploads
+are written to `public/uploads/`, which is ignored by git; on a deployment
+they go to the shop's store instead — see **Where the shop keeps its
+files** above.
 
 **The sale price is the price.** A product with a sale price sells for it,
 everywhere: on the card, on the product page, in the basket and on the
@@ -1027,6 +1124,7 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `GET` `POST` | `/api/admin/products` | The catalogue (`?q=`, `?category=`, `?brand=`, `?stock=`, `?status=`, `?listed=`, `?sort=`, `?page=`, `?limit=`); `POST` creates a product (`{"name":"…","category":"consoles","price":54990,"mrp":64990}`) or runs a bulk action (`{"action":"publish","slugs":[…]}`), or one over everything matching (`{"action":"publish","scope":"all","filters":{"brand":"Sony"}}`) |
 | `GET` `PATCH` `DELETE` | `/api/admin/products/[slug]` | Read, edit, delist (`{"listed": false}`), move through the workflow (`{"status": "archived"}`), set a variant's stock (`{"variants":[{"id":"…::1tb-disc","stock":14}]}`) or delete a product |
 | `GET` `POST` `PATCH` | `/api/admin/products/[slug]/images` | The product's photographs; `POST` uploads them (a form, under `files`); `PATCH` reorders them, chooses the main one, describes or removes one |
+| `POST` | `/api/admin/uploads` | Where an uploaded file should go, and the shop's signing of it. `{"phase":"ticket","target":"product-images","slug":"…","files":[{"name":"a.jpg","type":"image/jpeg","size":1234}]}` asks where the photographs go; `{"phase":"commit","uploads":[…]}` tells the shop they have arrived. The store's own signing request — `{"type":"blob.generate-client-token",…}` — is answered here too |
 | `POST` | `/api/admin/products/[slug]/duplicate` | Copy a product and its variants; the copy is a draft |
 | `GET` | `/api/admin/orders` | Every order; `?q=`, `?status=`, `?page=`, `?limit=` |
 | `GET` `PATCH` | `/api/admin/orders/[id]` | Read an order, or move it along with `{"status": "shipped"}` |
@@ -1062,6 +1160,7 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `GET` `POST` | `/api/returns/[id]` | One request with its evidence and history; `POST` attaches more evidence to a request that is still open |
 | `GET` | `/api/returns/[id]/history` | Every status the request has been through, with the date and who made the change |
 | `POST` | `/api/returns/evidence` | Send evidence up, before the request is submitted (a form, under `files`); the file is checked by its own bytes, not by what the browser said it was |
+| `POST` | `/api/returns/uploads` | Where a customer's evidence should go, and the shop's signing of it — the same three steps as `/api/admin/uploads`, for the customer's own files |
 | `GET` | `/api/returns/[id]/evidence/[fileId]` | One piece of evidence — a photograph or a video. The back office or the customer who sent it, and nobody else |
 | `GET` | `/api/admin/returns` | Every request; `?q=`, `?status=`, `?type=`, `?refunds=1`, `?from=`, `?to=`, `?sort=`, `?page=`, `?limit=` |
 | `GET` `PATCH` | `/api/admin/returns/[id]` | One request with its evidence, its history, its refunds, its replacements and its inspections; `PATCH` moves it to another status |
@@ -1610,6 +1709,10 @@ src/
     product-import.ts   ← the columns, the checks, the preview and the import
     settings.ts         ← the store's own settings
     uploads.ts          ← saving an uploaded photograph
+    storage.ts          ← where the shop keeps its files: the disk, or the store
+    file-types.ts       ← what a file really is, read from its own bytes
+    upload-tickets.ts   ← what the shop will accept, and how much of it
+    upload-client.ts    ← sending a file to the shop, whichever way it travels
     sku.ts              ← SKU format and collision handling
     auth.ts             ← scrypt hashing, sessions, current user
     admin.ts            ← back-office queries: stats, orders, customers, enquiries

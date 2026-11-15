@@ -1,8 +1,9 @@
-import { mkdir, rename, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { getDb } from "./db";
-import { saveEvidence, EVIDENCE_ROOT } from "./evidence";
+import { saveEvidence, EVIDENCE_ROOT, evidenceKey } from "./evidence";
+import { deleteObject, evidenceAccess, listObjects, moveObject, usingBlob } from "./storage";
 import type { EvidenceKind } from "./return-status";
 
 /**
@@ -89,6 +90,97 @@ export async function stageUpload(input: {
       sizeBytes: saved.sizeBytes,
       originalName: input.file.name || null,
       sha256: saved.sha256,
+    },
+  };
+}
+
+/**
+ * Takes a staged file away.
+ *
+ * It is used when a batch of files could not be completed: the ones
+ * that did arrive are removed so that a request that was never made
+ * does not leave half of it behind.
+ */
+export async function deleteStagedUpload(
+  id: string,
+  userId: number | null
+): Promise<void> {
+  const db = getDb();
+  const row = (await db
+    .prepare(
+      `SELECT user_id, stored_name FROM return_uploads
+        WHERE id = ? AND return_id IS NULL`
+    )
+    .get(id)) as Row | undefined;
+
+  if (!row) return;
+  if (userId !== null && num(row.user_id) !== userId) return;
+
+  await deleteObject(
+    evidenceKey(`_staging/${id}`, str(row.stored_name)),
+    evidenceAccess()
+  );
+  await db.prepare("DELETE FROM return_uploads WHERE id = ?").run(id);
+}
+
+/**
+ * Records a file that has already been sent to the shop's store.
+ *
+ * This is the second half of an upload that went straight to the store:
+ * the file is there, and all that is left is to write down that it
+ * arrived and what it is.
+ */
+export async function recordStagedUpload(input: {
+  id: string;
+  userId: number | null;
+  storedName: string;
+  kind: "photo" | "video";
+  evidenceKind: EvidenceKind;
+  mimeType: string;
+  sizeBytes: number;
+  originalName: string | null;
+  sha256: string | null;
+}): Promise<
+  | { ok: true; upload: StagedUpload }
+  | { ok: false; reason: string }
+> {
+  const db = getDb();
+
+  const existing = await db
+    .prepare("SELECT id FROM return_uploads WHERE id = ?")
+    .get(input.id);
+  if (existing) {
+    return { ok: false, reason: "That file has already been sent." };
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO return_uploads
+         (id, user_id, stored_name, kind, evidence_kind, mime_type, size_bytes, original_name, sha256)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.id,
+      input.userId,
+      input.storedName,
+      input.kind,
+      input.evidenceKind,
+      input.mimeType,
+      input.sizeBytes,
+      input.originalName,
+      input.sha256
+    );
+
+  return {
+    ok: true,
+    upload: {
+      id: input.id,
+      kind: input.kind,
+      evidenceKind: input.evidenceKind,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      originalName: input.originalName,
+      sha256: input.sha256,
     },
   };
 }
@@ -188,20 +280,15 @@ export async function claimUploads(input: {
     const storedName = str(row.stored_name);
 
     // The file moves from the staging folder to the request's folder.
-    const from = join(STAGING_ROOT, uploadId, storedName);
-    const to = join(
-      process.cwd(),
-      "private",
-      "returns",
-      input.returnId.replace(/[^A-Za-z0-9._-]/g, "_"),
-      storedName
+    const moved = await moveObject(
+      evidenceKey(`_staging/${uploadId}`, storedName),
+      evidenceKey(input.returnId, storedName),
+      evidenceAccess()
     );
-    try {
-      await mkdir(join(to, ".."), { recursive: true });
-      await rename(from, to);
-    } catch {
-      // The file could not be moved. It is still claimed, and it is
-      // still fetched from the staging folder, so nothing is lost.
+    if (!moved) {
+      // The file could not be moved. It is still claimed, and the shop
+      // looks for it in the staging folder when it is served, so nothing
+      // is lost.
     }
 
     await db
@@ -255,11 +342,7 @@ export async function sweepStaleUploads(): Promise<number> {
     .all(cutoff)) as Row[];
 
   for (const row of rows) {
-    try {
-      await rm(join(STAGING_ROOT, str(row.id)), { recursive: true, force: true });
-    } catch {
-      // The file is already gone.
-    }
+    await removeStagedFolder(str(row.id));
   }
 
   if (rows.length) {
@@ -269,26 +352,79 @@ export async function sweepStaleUploads(): Promise<number> {
   }
 
   // A folder whose row has already gone is left behind by a run that
-  // was interrupted. It is swept by its age on disk, so a file a
-  // customer is sending right now is never taken from under them.
-  try {
-    const { readdir, stat } = await import("node:fs/promises");
-    const entries = await readdir(STAGING_ROOT, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      try {
-        const info = await stat(join(STAGING_ROOT, entry.name));
-        if (Date.now() - info.mtimeMs < STAGING_TTL_MS) continue;
-        await rm(join(STAGING_ROOT, entry.name), { recursive: true, force: true });
-      } catch {
-        // The folder is already gone.
-      }
-    }
-  } catch {
-    // The staging folder is not there, which is the same as being empty.
+  // was interrupted. It is swept by its age, so a file a customer is
+  // sending right now is never taken from under them.
+  for (const folder of await evidenceFolders("returns/_staging/")) {
+    await removeStagedFolder(folder.name);
   }
 
   return rows.length;
+}
+
+/**
+ * Removes everything a staged upload left behind.
+ *
+ * On the disk it is a folder under the staging area; in the shop's
+ * store it is the files under the same name.
+ */
+async function removeStagedFolder(uploadId: string): Promise<void> {
+  const folder = `returns/_staging/${uploadId}`;
+  for (const file of await listObjects(folder, evidenceAccess())) {
+    await deleteObject(file.key, evidenceAccess());
+  }
+  if (!usingBlob()) {
+    try {
+      await rm(join(STAGING_ROOT, uploadId), { recursive: true, force: true });
+    } catch {
+      // The folder is already gone.
+    }
+  }
+}
+
+/**
+ * The folders the evidence store holds, and when each was last touched.
+ *
+ * It is how the sweeps find evidence nobody claimed, and it works the
+ * same way on the disk and in the shop's store. The prefix says which
+ * part of the store to look at: `returns/` for the claims themselves,
+ * `returns/_staging/` for the files waiting to be attached to one.
+ */
+async function evidenceFolders(
+  prefix: string
+): Promise<{ name: string; touchedAt: number }[]> {
+  const root = prefix.replace(/^returns\//, "").replace(/\/+$/, "");
+
+  if (!usingBlob()) {
+    try {
+      const { readdir, stat } = await import("node:fs/promises");
+      const dir = join(EVIDENCE_ROOT, ...root.split("/").filter(Boolean));
+      const entries = await readdir(dir, { withFileTypes: true });
+      const out: { name: string; touchedAt: number }[] = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const info = await stat(join(dir, entry.name)).catch(() => null);
+        out.push({ name: entry.name, touchedAt: info?.mtimeMs ?? 0 });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  const files = await listObjects(prefix, evidenceAccess());
+  const folders = new Map<string, number>();
+  for (const file of files) {
+    const rest = file.key.slice(prefix.length);
+    const slash = rest.indexOf("/");
+    if (slash < 0) continue;
+    const name = rest.slice(0, slash);
+    const seen = folders.get(name) ?? 0;
+    if (file.uploadedAt > seen) folders.set(name, file.uploadedAt);
+  }
+  return [...folders.entries()].map(([name, touchedAt]) => ({
+    name,
+    touchedAt,
+  }));
 }
 
 /**
@@ -308,31 +444,29 @@ export async function sweepOrphanedEvidence(): Promise<number> {
   const live = new Set(claims.map((c) => str(c.id)));
 
   let removed = 0;
-  let entries: { name: string; isDirectory: () => boolean }[];
-  try {
-    const { readdir } = await import("node:fs/promises");
-    entries = await readdir(EVIDENCE_ROOT, { withFileTypes: true });
-  } catch {
-    return 0;
-  }
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const folder of await evidenceFolders("returns/")) {
     // The staging folder is swept by its own rule.
-    if (entry.name === "_staging") continue;
-    if (live.has(entry.name)) continue;
-    try {
-      // A folder that was touched recently may be one a customer is
-      // sending into right now, so it is left until it is old enough to
-      // be certain that nobody is using it.
-      const { stat } = await import("node:fs/promises");
-      const info = await stat(join(EVIDENCE_ROOT, entry.name));
-      if (Date.now() - info.mtimeMs < STAGING_TTL_MS) continue;
-      await rm(join(EVIDENCE_ROOT, entry.name), { recursive: true, force: true });
-      removed++;
-    } catch {
-      // The folder is already gone.
+    if (folder.name === "_staging") continue;
+    if (live.has(folder.name)) continue;
+    // A folder that was touched recently may be one a customer is
+    // sending into right now, so it is left until it is old enough to
+    // be certain that nobody is using it.
+    if (Date.now() - folder.touchedAt < STAGING_TTL_MS) continue;
+    for (const file of await listObjects(`returns/${folder.name}`, evidenceAccess())) {
+      await deleteObject(file.key, evidenceAccess());
     }
+    if (!usingBlob()) {
+      try {
+        await rm(join(EVIDENCE_ROOT, folder.name), {
+          recursive: true,
+          force: true,
+        });
+      } catch {
+        // The folder is already gone.
+      }
+    }
+    removed++;
   }
 
   return removed;

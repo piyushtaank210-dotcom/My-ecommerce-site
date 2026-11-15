@@ -14,6 +14,7 @@ import {
   addReturnEvidenceAction,
   type ReturnActionState,
 } from "@/lib/return-actions";
+import { uploadFiles } from "@/lib/upload-client";
 
 const initial: ReturnActionState = { ok: false };
 
@@ -56,73 +57,39 @@ export function AddEvidencePanel({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const uploadOne = (file: File, kind: "photo" | "video") =>
-    new Promise<void>((resolve) => {
-      const form = new FormData();
-      form.append("files", file);
-      form.append("evidenceKind", "other");
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/returns/evidence");
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const percent = Math.round((event.loaded / event.total) * 100);
+  const uploadOne = async (file: File) => {
+    const outcome = await uploadFiles({
+      ticketUrl: "/api/returns/uploads",
+      commitUrl: "/api/returns/uploads",
+      files: [file],
+      payload: { evidenceKind: "other" },
+      appFields: { evidenceKind: "other" },
+      onProgress: (_index, percent) => {
         setFiles((prev) =>
           prev.map((f) =>
             f.file === file ? { ...f, progress: percent, status: "uploading" } : f
           )
         );
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          let id: string | null = null;
-          try {
-            id = JSON.parse(xhr.responseText)?.uploads?.[0]?.id ?? null;
-          } catch {
-            id = null;
-          }
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.file === file
-                ? {
-                    ...f,
-                    id,
-                    progress: 100,
-                    status: id ? "done" : "error",
-                    error: id ? undefined : "The upload could not be read.",
-                  }
-                : f
-            )
-          );
-        } else {
-          let message = "The file could not be sent.";
-          try {
-            message = JSON.parse(xhr.responseText)?.error ?? message;
-          } catch {
-            // The answer was not the one we expected.
-          }
-          setFiles((prev) =>
-            prev.map((f) => (f.file === file ? { ...f, status: "error", error: message } : f))
-          );
-        }
-        resolve();
-      };
-
-      xhr.onerror = () => {
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.file === file
-              ? { ...f, status: "error", error: "The file could not be sent." }
-              : f
-          )
-        );
-        resolve();
-      };
-
-      xhr.send(form);
+      },
     });
+
+    const id = outcome.ok ? (outcome.uploadIds[0] ?? null) : null;
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.file === file
+          ? {
+              ...f,
+              id,
+              progress: 100,
+              status: id ? "done" : "error",
+              error: id
+                ? undefined
+                : (outcome.error ?? "The file could not be sent."),
+            }
+          : f
+      )
+    );
+  };
 
   const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -168,7 +135,7 @@ export function AddEvidencePanel({
 
     setFiles((prev) => [...prev, ...accepted]);
     for (const item of accepted) {
-      await uploadOne(item.file, item.kind);
+      await uploadOne(item.file);
     }
   };
 

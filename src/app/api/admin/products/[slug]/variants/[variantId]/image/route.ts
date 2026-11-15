@@ -1,6 +1,6 @@
 import { json, fail, requireApiPermission } from "@/lib/api";
 import { getVariant, updateVariant } from "@/lib/admin";
-import { saveUpload } from "@/lib/uploads";
+import { saveUpload, variantImageFolder } from "@/lib/uploads";
 
 type Params = { params: Promise<{ slug: string; variantId: string }> };
 
@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: Params) {
     return fail("Choose a photograph.", 400);
   }
 
-  const saved = await saveUpload(`${slug}/variants`, file);
+  const saved = await saveUpload(variantImageFolder(slug), file);
   if (!saved.ok) return fail(saved.reason, 415);
 
   const result = (await updateVariant(slug, variantId, { image: saved.path }, guard.user.id));

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { ProductImage, Variant } from "@/lib/types";
 import { toast } from "@/components/Toaster";
+import { uploadFiles } from "@/lib/upload-client";
 import {
   attributeNames,
   cleanAttributes,
@@ -252,26 +253,31 @@ export function VariantManager({
     if (!file || !editingId) return;
     setBusy(true);
     setError(null);
-    try {
-      const data = new FormData();
-      data.append("files", file);
-      const res = await fetch(
-        `/api/admin/products/${slug}/variants/${editingId}/image`,
-        { method: "POST", body: data }
-      );
-      const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(body?.error ?? "The photograph could not be uploaded.");
-        toast(body?.error ?? "The photograph could not be uploaded.", "error");
-        return;
-      }
-      setForm((prev) => ({ ...prev, image: body?.image ?? body?.variant?.image ?? "" }));
-      toast("Photograph uploaded.", "success");
-      router.refresh();
-    } finally {
+    if (fileInput.current) fileInput.current.value = "";
+
+    const outcome = await uploadFiles({
+      ticketUrl: "/api/admin/uploads",
+      commitUrl: "/api/admin/uploads",
+      files: [file],
+      payload: { target: "variant-image", slug, variantId: editingId },
+    });
+
+    if (!outcome.ok) {
+      const message = outcome.error ?? "The photograph could not be uploaded.";
+      setError(message);
+      toast(message, "error");
       setBusy(false);
-      if (fileInput.current) fileInput.current.value = "";
+      return;
     }
+
+    const body = outcome.data as { image?: string; variant?: { image?: string } };
+    setForm((prev) => ({
+      ...prev,
+      image: body?.image ?? body?.variant?.image ?? "",
+    }));
+    toast("Photograph uploaded.", "success");
+    router.refresh();
+    setBusy(false);
   }
 
   /* --------------------------------------------------------------- view */

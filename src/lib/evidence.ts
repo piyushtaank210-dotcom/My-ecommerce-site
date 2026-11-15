@@ -1,12 +1,21 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
+import {
+  evidenceAccess,
+  getObject,
+  getObjectStream,
+  headBytes,
+  putObject,
+  PRIVATE_FOLDER,
+} from "./storage";
+import { sniffFileType } from "./file-types";
 
 /**
  * The evidence a customer sends with a claim.
  *
- * Evidence is private. It is written outside the public folder and is
- * fetched through a route that checks who is asking: a member of the
+ * Evidence is private. It is kept outside the public folder — or, on a
+ * serverless deployment, in a store that only the shop can read — and
+ * is fetched through a route that checks who is asking: a member of the
  * back office, or the customer the claim belongs to. Nothing else can
  * read it, and no URL points at it directly.
  *
@@ -16,7 +25,7 @@ import { createHash, randomBytes } from "node:crypto";
  * a path.
  */
 
-/** Where the private evidence lives. */
+/** Where the private evidence lives, on a machine. */
 export const EVIDENCE_ROOT = join(process.cwd(), "private", "returns");
 
 /** How big a photograph may be. */
@@ -59,64 +68,7 @@ export const FILE_TYPE_MESSAGE =
  * photograph or a video the shop can play.
  */
 export function sniffEvidenceType(bytes: Uint8Array): string | null {
-  if (bytes.length < 12) return null;
-
-  // JPEG: FF D8 FF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return "image/jpeg";
-  }
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return "image/png";
-  }
-
-  // WebP: "RIFF" .... "WEBP"
-  if (
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return "image/webp";
-  }
-
-  // Matroska and WebM: 1A 45 DF A3
-  if (
-    bytes[0] === 0x1a &&
-    bytes[1] === 0x45 &&
-    bytes[2] === 0xdf &&
-    bytes[3] === 0xa3
-  ) {
-    return "video/webm";
-  }
-
-  // ISO base media, which is what MP4 and MOV are: "ftyp" at offset 4.
-  if (
-    bytes[4] === 0x66 &&
-    bytes[5] === 0x74 &&
-    bytes[6] === 0x79 &&
-    bytes[7] === 0x70
-  ) {
-    const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
-    if (brand.startsWith("qt")) return "video/quicktime";
-    return "video/mp4";
-  }
-
-  return null;
+  return sniffFileType(bytes);
 }
 
 /**
@@ -140,6 +92,16 @@ export type EvidenceError = {
   ok: false;
   reason: string;
 };
+
+/**
+ * The key a piece of evidence is kept under.
+ *
+ * The folder is the claim's own folder, and the name is the one the
+ * shop gave the file.
+ */
+export function evidenceKey(folder: string, storedName: string): string {
+  return `${PRIVATE_FOLDER}/${folder}/${storedName}`;
+}
 
 /**
  * Saves one file as evidence.
@@ -177,12 +139,16 @@ export async function saveEvidence(
     };
   }
 
-  // The claim's own folder, and a name of our own making inside it.
-  const dir = join(EVIDENCE_ROOT, ...safeFolder(inputFolder));
-  await mkdir(dir, { recursive: true });
-
   const storedName = `${Date.now()}-${randomBytes(8).toString("hex")}${ext}`;
-  await writeFile(join(dir, storedName), bytes);
+
+  const saved = await putObject({
+    key: evidenceKey(inputFolder, storedName),
+    body: bytes,
+    contentType: mimeType,
+    access: evidenceAccess(),
+  });
+
+  if (!saved.ok) return { ok: false, reason: saved.reason };
 
   return {
     ok: true,
@@ -240,37 +206,6 @@ export function evidenceFilePath(
 }
 
 /**
- * Reads a file from the private store.
- *
- * It returns nothing rather than an error when the file is not there:
- * a missing file is not a fault worth stopping for.
- *
- * The path is read through a function the bundler cannot follow, so the
- * whole project is not traced into the deployment for the sake of one
- * file.
- */
-export async function readEvidenceFile(
-  folder: string,
-  storedName: string
-): Promise<Buffer | null> {
-  const full = evidenceFilePath(folder, storedName);
-  if (!full) return null;
-  try {
-    return await readAt(full);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Reads a file at a path that is worked out at run time.
- *
- * The bundler cannot see where the path points, and so it does not drag
- * the whole project into the deployment looking for it.
- */
-const readAt = (path: string): Promise<Buffer> => readFile(path);
-
-/**
  * The legacy path of a piece of evidence.
  *
  * Evidence used to be written into the public folder, and those files
@@ -284,6 +219,59 @@ export function legacyEvidencePath(path: string): string | null {
   const full = resolve(join(root, path.replace(/^\/+/, "")));
   if (!full.startsWith(root + sep)) return null;
   return full;
+}
+
+/**
+ * Reads a file from the private store.
+ *
+ * It returns nothing rather than an error when the file is not there:
+ * a missing file is not a fault worth stopping for.
+ */
+export async function readEvidenceFile(
+  folder: string,
+  storedName: string
+): Promise<Buffer | null> {
+  if (safeSegment(storedName) !== storedName) return null;
+  return getObject(evidenceKey(safeFolder(folder).join("/"), storedName), evidenceAccess());
+}
+
+/**
+ * Reads a piece of evidence as a stream.
+ *
+ * A video is a large thing to be fetched, and the shop does not hold it
+ * in memory to hand it over: it is passed along as it is read.
+ */
+export async function readEvidenceStream(
+  folder: string,
+  storedName: string | null,
+  legacyPath: string | null
+): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  sizeBytes: number | null;
+} | null> {
+  if (storedName) {
+    if (safeSegment(storedName) !== storedName) return null;
+    const found = await getObjectStream(
+      evidenceKey(safeFolder(folder).join("/"), storedName),
+      evidenceAccess()
+    );
+    if (found) return found;
+  }
+  if (legacyPath) {
+    const full = legacyEvidencePath(legacyPath);
+    if (!full) return null;
+    try {
+      const { createReadStream } = await import("node:fs");
+      const { stat } = await import("node:fs/promises");
+      const { Readable } = await import("node:stream");
+      const info = await stat(full);
+      const web = Readable.toWeb(createReadStream(full)) as ReadableStream<Uint8Array>;
+      return { stream: web, sizeBytes: info.size };
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 /**
@@ -306,12 +294,31 @@ export async function readEvidence(
     const full = legacyEvidencePath(legacyPath);
     if (!full) return null;
     try {
+      const { readFile } = await import("node:fs/promises");
       return await readFile(full);
     } catch {
       return null;
     }
   }
   return null;
+}
+
+/**
+ * The first few bytes of a piece of evidence.
+ *
+ * It is how the shop checks what a file really is when the browser has
+ * sent it on its own, straight to the store: the name it arrived with
+ * says nothing, but the bytes do.
+ */
+export async function readEvidenceBytes(
+  folder: string,
+  storedName: string
+): Promise<Uint8Array | null> {
+  if (safeSegment(storedName) !== storedName) return null;
+  return headBytes(
+    evidenceKey(safeFolder(folder).join("/"), storedName),
+    evidenceAccess()
+  );
 }
 
 /**

@@ -1,5 +1,3 @@
-import { unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { getDb, parseJson, withTransaction } from "./db";
 import { parseRole, type Role } from "./roles";
 import type { ProductStatus } from "./product-status";
@@ -9,7 +7,7 @@ import {
   recordOpeningBalance,
 } from "./inventory";
 import { worstStockLevel, type StockLevel } from "./stock";
-import { isOwnUpload } from "./uploads";
+import { deleteUpload, isOwnUpload } from "./uploads";
 import { normalizeSku, skuFromSlug, uniqueSku } from "./sku";
 import {
   cleanAttributes,
@@ -1461,18 +1459,18 @@ export async function productReferences(slug: string): Promise<ProductReferences
  *
  * Only photographs the back office uploaded are deleted. One that came with
  * the catalogue lives in public/products and stays where it is.
+ *
+ * The file may be on the disk or in the shop's store, and the store
+ * keeps it under an address rather than a path, so the removal is left
+ * to the one place that knows where the shop keeps its files.
  */
-function removeUploadedFiles(paths: string[], slug: string) {
+async function removeUploadedFiles(paths: string[], slug: string) {
   for (const path of paths) {
     // Only the product's own photographs go. A copy carries the original's
     // pictures — their paths are the original's — and deleting the copy
     // must not take them off the shelf.
     if (!isOwnUpload(path, slug)) continue;
-    try {
-      unlinkSync(join(process.cwd(), "public", path));
-    } catch {
-      // A file that has already gone is not a problem.
-    }
+    await deleteUpload(path, slug);
   }
 }
 
@@ -1516,7 +1514,7 @@ export async function deleteProduct(
   const info = (await db.prepare("DELETE FROM products WHERE slug = ?").run(slug));
   if (!info.changes) return { deleted: false, reason: "That product no longer exists." };
 
-  removeUploadedFiles(uploads, slug);
+  await removeUploadedFiles(uploads, slug);
   return { deleted: true };
 }
 

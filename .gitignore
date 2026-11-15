@@ -52,6 +52,10 @@ public/uploads/*
 !public/uploads/**/*.avif
 public/products/*.svg
 
+# A customer's evidence must never be a file the web server can serve.
+# The shop keeps it under private/; this is a second line of defence.
+public/returns/
+
 # The private evidence store.
 #
 # A customer's photographs and videos are evidence of their claim. They
