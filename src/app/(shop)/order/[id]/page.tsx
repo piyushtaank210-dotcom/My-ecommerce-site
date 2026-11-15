@@ -26,7 +26,7 @@ import { isStaff } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { courierTrackingUrl } from "@/lib/order-dispatch-options";
-import { OrderStatusBadge } from "@/components/OrderStatusBadge";
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import {
   cancellationEligibility,
   getCancellationForOrder,
@@ -403,9 +403,12 @@ export default async function OrderPage({
               <CreditCard className="h-4 w-4 text-brand" />
               Payment
             </h2>
-            <p className="text-[13px] text-gray-600">
-              {paymentMethodLabel(order.payment_method)}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[13px] text-gray-600">
+                {paymentMethodLabel(order.payment_method)}
+              </p>
+              <PaymentStatusBadge status={order.payment_status} size="sm" />
+            </div>
             <p className="mt-1 text-[12.5px] capitalize text-gray-500">
               Placed {formatDate(order.created_at)}
             </p>

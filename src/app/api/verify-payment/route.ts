@@ -4,7 +4,8 @@ import { fail, json } from "@/lib/api";
 import { clearCart } from "@/lib/cart";
 import { GATEWAY_NAME } from "@/lib/checkout";
 import { getDb } from "@/lib/db";
-import { gatewayIsConfigured } from "@/lib/gateway-config";import {
+import { gatewayIsConfigured } from "@/lib/gateway-config";
+import {
   claimPaymentAndMarkOrderPaid,
   findPayment,
 } from "@/lib/gateway-records";
