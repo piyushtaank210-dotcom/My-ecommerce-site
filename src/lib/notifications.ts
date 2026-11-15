@@ -44,6 +44,7 @@ export const NOTIFICATION_KINDS = [
   "cancelled",
   // The messages about an order itself.
   "order_confirmed",
+  "order_tracking",
   "order_packed",
   "order_shipped",
   "order_delivered",

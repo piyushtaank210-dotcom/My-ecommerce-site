@@ -325,47 +325,67 @@ try {
   // ─────────────────────────────────────────────────────────────
   section("8. The gateway");
 
-  check(
-    "the gateway is not configured on this shop",
-    !gatewayIsConfigured(),
-    gatewayIsConfigured() ? "it is configured" : ""
-  );
+  /*
+    The shop's own credentials are put aside for this section.
 
-  const noGateway = await refundThroughGateway({
-    paymentId: "pay_TEST12345",
-    amount: price,
-    receipt: "RFD-TEST",
-  });
-  check(
-    "without credentials the gateway is not called",
-    !noGateway.ok
-  );
-  check(
-    "and it says the refund has to be paid by hand",
-    /by hand/i.test(noGateway.reason ?? "")
-  );
+    The paths this section checks are the ones where the gateway is *not*
+    set up, so the keys are taken away while they are checked. It also
+    means that the real gateway is never called by this script — a
+    refund is money, and a check is not the place to send any.
+  */
+  const savedKeyId = process.env.RAZORPAY_KEY_ID;
+  const savedKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  process.env.RAZORPAY_KEY_ID = "";
+  process.env.RAZORPAY_KEY_SECRET = "";
 
-  const noPayment = await refundThroughGateway({
-    paymentId: "",
-    amount: price,
-    receipt: "RFD-TEST",
-  });
-  check(
-    "without a payment reference the gateway is not called",
-    !noPayment.ok
-  );
-  check(
-    "and it says why",
-    /payment reference/i.test(noPayment.reason ?? ""),
-    noPayment.reason ?? ""
-  );
+  try {
+    check(
+      "the gateway is not configured on this shop",
+      !gatewayIsConfigured(),
+      gatewayIsConfigured() ? "it is configured" : ""
+    );
 
-  // The shop knows whether the gateway is set up, and the panel only
-  // offers it when it can actually work.
-  check(
-    "the shop knows the gateway is not set up",
-    !gatewayIsConfigured()
-  );
+    const noGateway = await refundThroughGateway({
+      paymentId: "pay_TEST12345",
+      amount: price,
+      receipt: "RFD-TEST",
+    });
+    check(
+      "without credentials the gateway is not called",
+      !noGateway.ok
+    );
+    check(
+      "and it says the refund has to be paid by hand",
+      /by hand/i.test(noGateway.reason ?? "")
+    );
+
+    const noPayment = await refundThroughGateway({
+      paymentId: "",
+      amount: price,
+      receipt: "RFD-TEST",
+    });
+    check(
+      "without a payment reference the gateway is not called",
+      !noPayment.ok
+    );
+    check(
+      "and it says why",
+      /payment reference/i.test(noPayment.reason ?? ""),
+      noPayment.reason ?? ""
+    );
+
+    // The shop knows whether the gateway is set up, and the panel only
+    // offers it when it can actually work.
+    check(
+      "the shop knows the gateway is not set up",
+      !gatewayIsConfigured()
+    );
+  } finally {
+    if (savedKeyId !== undefined) process.env.RAZORPAY_KEY_ID = savedKeyId;
+    if (savedKeySecret !== undefined) {
+      process.env.RAZORPAY_KEY_SECRET = savedKeySecret;
+    }
+  }
 
   check(
     "only a processed gateway refund is complete",

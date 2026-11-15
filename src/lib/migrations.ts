@@ -8,7 +8,7 @@ import {
   RETURN_WINDOW_POLICY_MARKER,
   RETURN_WINDOW_SETTING,
 } from "./return-policy.ts";
-import { returnsSchemaSql } from "./schema.ts";
+import { returnsSchemaSql, orderDispatchSchemaSql } from "./schema.ts";
 import type { Db } from "./db.ts";
 
 /**
@@ -139,6 +139,10 @@ export async function applyMigrations(db: Db): Promise<void> {
     db.dialect === "postgres" ? "DEFAULT shop_now()" : "DEFAULT (datetime('now'))";
   await db.exec(returnsSchemaSql(identity, now));
   await db.exec(gatewaySchemaSql(identity, now));
+  // The table the order's dispatch and refund added. It is created only
+  // if it is not already there, so this is safe to run on every database
+  // open.
+  await db.exec(orderDispatchSchemaSql(identity, now));
 
   const add = (table: string, column: string, ddl: string): void => {
     // PostgreSQL can add a column without being told whether it is
@@ -340,6 +344,32 @@ export async function applyMigrations(db: Db): Promise<void> {
   // went out in. Both are worth having before there is a complaint.
   add("order_items", "serial_number", "serial_number TEXT");
   add("order_items", "pre_dispatch_photos", "pre_dispatch_photos TEXT");
+
+  // The dispatch. Who is carrying the order, how it is going, and the
+  // number it can be tracked by — written together, when the order is
+  // confirmed, and shown to the customer from then on.
+  add("orders", "courier_partner", "courier_partner TEXT");
+  add("orders", "shipping_method", "shipping_method TEXT");
+  // The shipping method when the shop names one of its own rather than
+  // picking one of the three the back office offers.
+  add("orders", "custom_shipping_method", "custom_shipping_method TEXT");
+  add("orders", "tracking_id", "tracking_id TEXT");
+  add("orders", "shipping_confirmed_at", "shipping_confirmed_at TEXT");
+
+  // Why an order was cancelled, and when it was. The reason is kept both
+  // as the sentence the back office wrote and as one of its own codes,
+  // so that the reasons can be counted without reading them.
+  add("orders", "cancellation_reason", "cancellation_reason TEXT");
+  add("orders", "cancellation_reason_code", "cancellation_reason_code TEXT");
+  add("orders", "cancelled_at", "cancelled_at TEXT");
+
+  // The refund against a cancelled order. The gateway's own reference
+  // for it, how much went back, where it has got to, and when.
+  add("orders", "refund_id", "refund_id TEXT");
+  add("orders", "refund_amount", "refund_amount INTEGER");
+  add("orders", "refund_status", "refund_status TEXT NOT NULL DEFAULT 'none'");
+  add("orders", "refunded_at", "refunded_at TEXT");
+  add("orders", "refund_error", "refund_error TEXT");
 
   // The statements are run together, one after the other.
   for (const statement of statements) {

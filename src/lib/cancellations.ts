@@ -230,7 +230,11 @@ export async function approveCancellation(
   const order = (await getOrder(request.order_id));
   if (!order) return { ok: false, message: "That order no longer exists." };
 
-  const result = (await applyOrderStatus(request.order_id, "cancelled", staffUser.id));
+  const result = (await applyOrderStatus(request.order_id, "cancelled", staffUser.id, {
+    // The reason the customer gave is the reason the order was called
+    // off, and it is kept on the order as well as on the request.
+    cancellation: { reason: request.reason, reasonCode: "customer_requested" },
+  }));
   if (!result.ok) {
     return { ok: false, message: result.message ?? "The order could not be cancelled." };
   }

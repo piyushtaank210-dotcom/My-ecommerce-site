@@ -35,6 +35,11 @@ import {
   gatewayKeySecret,
 } from "./gateway-config";
 
+// The check scripts ask the gateway module whether the shop has been
+// given its keys, so that a refund is never tested against the real
+// gateway by mistake. It is the same question this module asks itself.
+export { gatewayIsConfigured };
+
 export type GatewayRefundResult = {
   ok: boolean;
   /** The gateway's own reference for the refund. */
@@ -61,6 +66,14 @@ export type GatewayRefundRequest = {
   receipt: string;
   /** A note the gateway keeps with the refund. */
   notes?: Record<string, string>;
+  /**
+   * A key that says "this is the same refund as last time".
+   *
+   * It is sent as the gateway's own idempotency key, so that a request
+   * that was retried after the network wobbled is answered with the
+   * refund that was already made rather than a second one.
+   */
+  idempotencyKey?: string;
 };
 
 /**
@@ -119,6 +132,12 @@ export async function refundThroughGateway(
         headers: {
           Authorization: authorization(),
           "Content-Type": "application/json",
+          // The gateway is told that a repeated request is the same
+          // request, so that a retry after the network wobbled cannot
+          // send the money back twice.
+          ...(request.idempotencyKey
+            ? { "Idempotency-Key": request.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify({
           // The gateway's API is written in paise. The shop keeps its
@@ -222,4 +241,88 @@ export async function checkGatewayRefund(
  */
 export function gatewayStatusIsComplete(status: string | undefined): boolean {
   return (status ?? "").toLowerCase() === "processed";
+}
+
+/**
+ * A refund the gateway has already made against a payment.
+ */
+export type GatewayRefundRecord = {
+  /** The gateway's own reference for the refund. */
+  id: string;
+  /** The gateway's reference for the payment it was made against. */
+  paymentId: string | null;
+  /** The shop's own receipt for the refund. */
+  receipt: string | null;
+  /** How much went back, in paise. */
+  amount: number;
+  /** The gateway's own status for it. */
+  status: string;
+};
+
+/**
+ * The refunds the gateway has already made against a payment.
+ *
+ * It is the safety net under the shop's own record of a refund. A
+ * request can be interrupted between the gateway accepting the refund and
+ * the shop hearing about it, and the shop would then have no refund id
+ * while the money had already gone back. Asking the gateway what it has
+ * already done against the payment answers that, and stops a retry from
+ * sending the money back a second time.
+ *
+ * It answers with the reason it could not ask, rather than throwing:
+ * the caller decides whether that is a reason to stop.
+ */
+export async function listGatewayRefunds(
+  paymentId: string
+): Promise<{ ok: true; refunds: GatewayRefundRecord[] } | { ok: false; reason: string }> {
+  if (!paymentId) {
+    return { ok: false, reason: "This order carries no gateway payment reference." };
+  }
+  if (!gatewayIsConfigured()) {
+    return { ok: false, reason: "The shop has not been given gateway credentials." };
+  }
+
+  try {
+    const url = `${gatewayApiBase()}/v1/refunds?payment_id=${encodeURIComponent(paymentId)}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: authorization() },
+    });
+
+    const body = (await response.json().catch(() => ({}))) as {
+      items?: {
+        id?: string;
+        payment_id?: string;
+        receipt?: string;
+        amount?: number;
+        status?: string;
+      }[];
+      error?: { description?: string };
+    };
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: body.error?.description ?? `The gateway did not answer (${response.status}).`,
+      };
+    }
+
+    const refunds = (body.items ?? []).map((r) => ({
+      id: String(r.id ?? ""),
+      paymentId: r.payment_id ? String(r.payment_id) : null,
+      receipt: r.receipt ? String(r.receipt) : null,
+      amount: Number(r.amount ?? 0),
+      status: String(r.status ?? "pending"),
+    }));
+
+    return { ok: true, refunds };
+  } catch (err) {
+    return {
+      ok: false,
+      reason:
+        err instanceof Error
+          ? `The gateway could not be reached: ${err.message}`
+          : "The gateway could not be reached.",
+    };
+  }
 }

@@ -10,6 +10,7 @@ import {
   Truck,
   RotateCcw,
   Clock,
+  ExternalLink,
 } from "lucide-react";
 import {
   getReturnRequestsForOrder,
@@ -24,6 +25,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { isStaff } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
+import { courierTrackingUrl } from "@/lib/order-dispatch-options";
+import { OrderStatusBadge } from "@/components/OrderStatusBadge";
 import {
   cancellationEligibility,
   getCancellationForOrder,
@@ -78,6 +81,17 @@ export default async function OrderPage({
   // decides whether it can be asked for at all.
   const cancellation = (await getCancellationForOrder(order.id));
   const cancelEligibility = cancellationEligibility(order);
+
+  // The dispatch, once the shop has written it down. The customer sees
+  // the same courier, method and tracking number the back office does.
+  const hasShipping = Boolean(order.courier_partner && order.tracking_id);
+  const trackingUrl = courierTrackingUrl(order.courier_partner);
+  const shippingMethod =
+    order.shipping_method === "other"
+      ? order.custom_shipping_method
+      : order.shipping_method
+        ? order.shipping_method.charAt(0).toUpperCase() + order.shipping_method.slice(1)
+        : null;
 
   return (
     <div className="container-x py-10">
@@ -173,6 +187,59 @@ export default async function OrderPage({
           </p>
         )}
 
+        {/* The dispatch. The customer can follow their parcel from here,
+            with the same courier and tracking number the back office
+            has. */}
+        {hasShipping && (
+          <section className="mt-8 rounded-xl border border-brand/20 bg-brand-tint/30 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-[14px] font-bold text-ink">
+                <Truck className="h-4 w-4 text-brand" />
+                Your parcel is on its way
+              </h2>
+              <OrderStatusBadge status={order.status} size="sm" />
+            </div>
+
+            <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-[12px] text-gray-500">Courier partner</dt>
+                <dd className="mt-0.5 text-[13.5px] font-semibold text-ink">
+                  {order.courier_partner}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[12px] text-gray-500">Shipping method</dt>
+                <dd className="mt-0.5 text-[13.5px] font-semibold text-ink">
+                  {shippingMethod || "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[12px] text-gray-500">Tracking / AWB number</dt>
+                <dd className="tnum mt-0.5 break-all text-[13.5px] font-semibold text-ink">
+                  {order.tracking_id}
+                </dd>
+              </div>
+            </dl>
+
+            {trackingUrl ? (
+              <a
+                href={trackingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-outline btn-sm mt-4"
+              >
+                Track your order
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            ) : (
+              <p className="mt-4 text-[12.5px] text-gray-600">
+                You can follow your parcel on {order.courier_partner}&apos;s own
+                tracking page with the number above.
+              </p>
+            )}
+          </section>
+        )}
+
         {/* Items */}
         <section className="mt-10 rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="mb-4 text-[15px] font-bold text-ink">
@@ -203,7 +270,7 @@ export default async function OrderPage({
                     <span className="min-w-0 flex-1">
                       <Link
                         href={`/product/${item.product_slug}`}
-                        className="block truncate text-[13.5px] font-semibold text-ink hover:text-brand"
+                        className="block line-clamp-2 text-[13.5px] font-semibold text-ink hover:text-brand"
                       >
                         {item.name}
                       </Link>

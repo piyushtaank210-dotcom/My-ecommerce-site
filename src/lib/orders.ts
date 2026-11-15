@@ -229,14 +229,30 @@ export async function applyOrderStatus(
   orderId: string,
   status: OrderStatus,
   userId: number | null = null,
-  options: { notify?: boolean } = {}
+  options: {
+    notify?: boolean;
+    /**
+     * Why the order is being cancelled.
+     *
+     * It is written in the same transaction that moves the order and
+     * gives the stock back, so that an order cannot be cancelled without
+     * the reason for it, and cannot carry a reason for a cancellation
+     * that did not happen.
+     */
+    cancellation?: { reason: string; reasonCode: string };
+  } = {}
 ): Promise<{ ok: boolean; message?: string }> {
   const db = getDb();
 
   try {
     (await withTransaction(async (db) => {
+      // The row is locked for the length of the transaction, so that two
+      // requests cannot both take the same order forward at the same
+      // time. On the database the shop runs, the lock is what stops a
+      // double-tapped cancel button from giving the stock back twice.
+      const lock = db.dialect === "postgres" ? " FOR UPDATE" : "";
       const order = (await db
-        .prepare("SELECT id, status FROM orders WHERE id = ?")
+        .prepare(`SELECT id, status FROM orders WHERE id = ?${lock}`)
         .get(orderId)) as { id?: string; status?: string } | undefined;
       if (!order) throw new InventoryError("That order no longer exists.");
 
@@ -280,6 +296,23 @@ export async function applyOrderStatus(
             userId
           ));
         }
+
+        // The reason, and the moment it happened, are part of the
+        // cancellation itself — they are written with it, not after it.
+        if (options.cancellation) {
+          (await db.prepare(
+            `UPDATE orders
+                SET cancellation_reason = ?,
+                    cancellation_reason_code = ?,
+                    cancelled_at = ?
+              WHERE id = ?`
+          ).run(
+            options.cancellation.reason,
+            options.cancellation.reasonCode,
+            new Date().toISOString(),
+            orderId
+          ));
+        }
       } else if (from === "cancelled") {
         // Reopening the order puts the stock back on the shelf, so it has
         // to come off the shelf again.
@@ -314,6 +347,20 @@ export async function applyOrderStatus(
         ).run(status, orderId));
       } else {
         (await db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId));
+      }
+
+      // An order that is opened again was never cancelled, so the
+      // cancellation it carried is cleared with it. The refund is left
+      // alone: the money really did go back, whatever the order does
+      // next.
+      if (from === "cancelled") {
+        (await db.prepare(
+          `UPDATE orders
+              SET cancellation_reason = NULL,
+                  cancellation_reason_code = NULL,
+                  cancelled_at = NULL
+            WHERE id = ?`
+        ).run(orderId));
       }
     }));
 
@@ -456,6 +503,19 @@ export async function getOrder(id: string): Promise<Order | null> {
     payment_reference: strOrNull(row.payment_reference),
     status: str(row.status),
     delivered_at: strOrNull(row.delivered_at),
+    courier_partner: strOrNull(row.courier_partner),
+    shipping_method: strOrNull(row.shipping_method),
+    custom_shipping_method: strOrNull(row.custom_shipping_method),
+    tracking_id: strOrNull(row.tracking_id),
+    shipping_confirmed_at: strOrNull(row.shipping_confirmed_at),
+    cancellation_reason: strOrNull(row.cancellation_reason),
+    cancellation_reason_code: strOrNull(row.cancellation_reason_code),
+    cancelled_at: strOrNull(row.cancelled_at),
+    refund_id: strOrNull(row.refund_id),
+    refund_amount: row.refund_amount === null ? null : num(row.refund_amount),
+    refund_status: str(row.refund_status) || "none",
+    refunded_at: strOrNull(row.refunded_at),
+    refund_error: strOrNull(row.refund_error),
     items,
   };
 }

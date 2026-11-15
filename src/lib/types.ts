@@ -244,6 +244,31 @@ export type Order = {
   payment_reference: string | null;
   status: string;
   delivered_at?: string | null;
+  /**
+   * The dispatch: who is carrying the order, how it is going, and the
+   * number it can be tracked by.
+   */
+  courier_partner: string | null;
+  /** `surface`, `air` or `other`. */
+  shipping_method: string | null;
+  /** The shop's own shipping method, when it named one of its own. */
+  custom_shipping_method: string | null;
+  tracking_id: string | null;
+  shipping_confirmed_at: string | null;
+  /** Why the order was cancelled, in the words the back office wrote. */
+  cancellation_reason: string | null;
+  /** The same reason as one of the back office's own codes. */
+  cancellation_reason_code: string | null;
+  cancelled_at: string | null;
+  /** The gateway's own reference for the refund. */
+  refund_id: string | null;
+  /** How much went back, in rupees. */
+  refund_amount: number | null;
+  /** `none`, `pending`, `processed` or `failed`. */
+  refund_status: string;
+  refunded_at: string | null;
+  /** Why the last refund attempt did not work. */
+  refund_error: string | null;
   items: OrderItem[];
 };
 

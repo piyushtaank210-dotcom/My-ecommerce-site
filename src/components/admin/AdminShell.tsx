@@ -127,10 +127,10 @@ export function AdminShell({
         width={155}
         height={30}
         priority
-        className="h-7 w-auto object-contain"
+        className="h-6 w-auto object-contain sm:h-7"
       />
       <span
-        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+        className={`hidden rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider sm:inline-flex ${
           dark ? "bg-ink text-white/80" : "bg-white/10 text-white/80"
         }`}
       >
@@ -203,10 +203,11 @@ export function AdminShell({
             <div className="ml-auto flex items-center gap-3">
               <Link
                 href="/"
+                aria-label="View store"
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-ink"
               >
                 <ExternalLink className="h-4 w-4" />
-                View store
+                <span className="hidden sm:inline">View store</span>
               </Link>
             </div>
           </div>

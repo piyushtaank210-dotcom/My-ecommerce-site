@@ -295,6 +295,51 @@ CREATE INDEX IF NOT EXISTS idx_refund_events_refund ON return_refund_events(refu
 }
 
 /**
+ * The table the dispatch and refund of an order added.
+ *
+ * It is kept apart from the main schema so that a migration can create
+ * it on a database written before it existed, without running the whole
+ * schema over again. Every statement in here is written so that running
+ * it twice changes nothing.
+ */
+export function orderDispatchSchemaSql(identity: string, now: string): string {
+  return `
+-- A refund against an order.
+--
+-- The order keeps a summary of the refund so that the order's own page
+-- can be drawn without a join. The refund itself is a record, on its own
+-- row: which payment it is against, the shop's own receipt for it, how
+-- much went back, and what the gateway said.
+--
+-- There is one refund per order. The unique key on the order id is what
+-- enforces that — a second refund for the same order cannot be written,
+-- so a double-tapped button or two requests arriving together cannot
+-- send the money back twice.
+CREATE TABLE IF NOT EXISTS order_refunds (
+  id           TEXT PRIMARY KEY,
+  order_id     TEXT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+  gateway      TEXT NOT NULL DEFAULT 'razorpay',
+  -- The gateway's reference for the payment being refunded.
+  payment_id   TEXT,
+  -- The shop's own receipt for this refund. It is what the gateway is
+  -- given, so that a retry is recognisable as the same refund.
+  receipt      TEXT NOT NULL UNIQUE,
+  -- How much is going back, in rupees.
+  amount       INTEGER NOT NULL,
+  -- none | pending | processed | failed
+  status       TEXT NOT NULL DEFAULT 'pending',
+  -- The gateway's own reference for the refund, once it has one.
+  refund_id    TEXT,
+  -- Why the last attempt did not work, when it did not.
+  error        TEXT,
+  created_at   TEXT NOT NULL ${now},
+  updated_at   TEXT NOT NULL ${now},
+  refunded_at  TEXT
+);
+`;
+}
+
+/**
  * The schema, built for one database or the other.
  */
 export function schemaSql(dialect: Dialect = "postgres"): string {
@@ -507,8 +552,32 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_gateway TEXT,
   payment_reference TEXT,
   status         TEXT NOT NULL DEFAULT 'confirmed',
-  delivered_at   TEXT
+  delivered_at   TEXT,
+  -- The dispatch: who is carrying the order, how it is going, and the
+  -- number it can be tracked by. They are written together, when the
+  -- order is confirmed, and they are what the customer is shown.
+  courier_partner      TEXT,
+  shipping_method      TEXT,
+  -- The shipping method when the shop picks one of its own, rather than
+  -- one of the three the back office offers.
+  custom_shipping_method TEXT,
+  tracking_id           TEXT,
+  shipping_confirmed_at TEXT,
+  -- Why the order was cancelled, and when it was.
+  cancellation_reason TEXT,
+  -- The reason as one of the back office's own codes, so the reason can
+  -- be counted without reading the sentence.
+  cancellation_reason_code TEXT,
+  cancelled_at TEXT,
+  -- The refund. The gateway's own reference for it, how much went back,
+  -- where it has got to, and when it was asked for.
+  refund_id      TEXT,
+  refund_amount  INTEGER,
+  refund_status  TEXT NOT NULL DEFAULT 'none',
+  refunded_at    TEXT,
+  refund_error   TEXT
 );
+
 
 /**
  * The gateway's own order — the thing the customer actually pays against.
@@ -854,6 +923,7 @@ CREATE TABLE IF NOT EXISTS return_events (
 );
 
 ${returnsSchemaSql(identity, now)}
+${orderDispatchSchemaSql(identity, now)}
 CREATE INDEX IF NOT EXISTS idx_products_category    ON products(category_slug);
 CREATE INDEX IF NOT EXISTS idx_products_listed      ON products(listed);
 CREATE INDEX IF NOT EXISTS idx_products_status      ON products(status);

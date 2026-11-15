@@ -429,7 +429,7 @@ account.
 |---|---|
 | `/admin` | Revenue, orders, customers, open enquiries, low stock, best sellers, orders by status |
 | `/admin/orders` | Every order, searchable, with the status changed in place |
-| `/admin/orders/[id]` | One order in full, with a link to the customer's view |
+| `/admin/orders/[id]` | One order in full: the items, the dispatch, the payment, the address, the actions the back office can take, and a link to the customer's view |
 | `/admin/returns` | Every return, replacement and refund request — the whole request list with its counters, filters, and a link to each case. The refund and replacement records are views of this page, and the shop's return policy is set here |
 | `/admin/returns/[id]` | One request in full: the claim, the evidence, the customer, the audit log, and every action the back office can take |
 | `/admin/returns?view=refunds` | The refund records — every refund with its id, order, request, customer, original payment method, amount, status, date and transaction reference, and the lines it was worked out from |
@@ -442,6 +442,72 @@ account.
 | `/admin/users` | Every account, with its role, order count and spend; roles changed and accounts removed |
 | `/admin/products` | The whole catalogue — listed, delisted, draft and archived — with a SKU column, brand / stock / status / listing filters, sorting, counts beside every filter, bulk selection, and per-row archive, duplicate and delete actions |
 | `/admin/products/[slug]` | One product: the editor, its photographs, and its **Variations** — the attributes it varies by and the options that come out of them |
+
+### Dispatch, cancellation and refunds
+
+An order is confirmed, cancelled and refunded from its own page in the back
+office. The decisions are made on the server — the page asks, and what comes
+back is what the database says afterwards.
+
+**Confirming an order** opens a form below the actions. All three of its
+details are required:
+
+| | |
+|---|---|
+| Courier partner | The courier's name — Delhivery, Blue Dart, DTDC, Xpressbees, India Post, and so on |
+| Shipping method | Surface, Air, or Other — and with Other, what the parcel is actually going by |
+| Tracking ID / AWB | The shipment's own tracking number |
+
+The details and the status are written together, in one transaction, so an
+order can never be confirmed without the courier it went with. The customer
+is told, and the courier, the method and the tracking number appear on their
+own order page, with a link to the courier's own tracking page where the shop
+knows the courier — never a made-up address.
+
+**Cancelling an order** asks why, and the reason is kept with it:
+
+| Reason | |
+|---|---|
+| `customer_requested` | The customer asked for it |
+| `out_of_stock` | The product is not there |
+| `payment_issue` | Something is wrong with the payment |
+| `incorrect_address` | The address will not do |
+| `courier_issue` | Something is wrong with the delivery |
+| `other` | Anything else, with the shop's own sentence |
+
+The reason and the moment it happened are written in the same transaction that
+cancels the order and gives the stock back. An order that is already cancelled
+is refused, and a line that has already had its stock returned is not returned
+a second time — the stock comes back exactly once.
+
+**Refunding a cancelled order** goes through Razorpay, by the same gateway the
+money came in by and against Razorpay's own reference for the payment. The key
+secret never leaves the server: the credentials are read by
+`src/lib/refund-gateway.ts`, and all that comes back is Razorpay's own refund
+id and the status it reported.
+
+The money is sent **once**. A refund is claimed by a row with a unique key on
+the order before any of it is sent, and Razorpay is asked what it has already
+done against the payment — so a double-tapped button, a second tab, or a
+request that was interrupted between Razorpay accepting the refund and the shop
+hearing about it cannot send the money back twice. A refund Razorpay refuses
+leaves the order cancelled, records the reason, and can be tried again.
+
+The status shown is **Razorpay's**, not the shop's opinion. A refund Razorpay
+calls `pending` has not reached the customer yet, and the shop says so.
+
+| Status | |
+|---|---|
+| `none` | Nothing has been sent |
+| `pending` | Razorpay has accepted it; it takes 5–7 working days to arrive |
+| `processed` | Razorpay has confirmed the money has gone back |
+| `failed` | The attempt did not work; the reason is on the order and it can be retried |
+
+The endpoints behind the page are `POST /api/admin/orders/[id]/ship`,
+`POST /api/admin/orders/[id]/cancel`, `POST /api/admin/orders/[id]/refund`
+and `POST /api/admin/orders/[id]/refund/status`. The older
+`PATCH /api/admin/orders/[id]` can no longer cancel an order without a
+reason either.
 
 ### SKUs, status and archiving
 
@@ -1231,6 +1297,41 @@ that the status and listing filters narrow the catalogue, that archiving
 hides a product and restoring brings it back, and that a product with order
 history cannot be deleted.
 
+The order page has two of its own:
+
+```bash
+npm run check:order-dispatch
+```
+
+It walks the dispatch and the money against the shop's own database: an
+order cannot be confirmed without a courier, a method and a tracking
+number; the details are saved and still there when the order is read
+again; an order cannot be cancelled without a reason; cancelling gives
+the stock back, and gives it back exactly once; a refund is refused until
+the order has been cancelled; the refund goes to the gateway against the
+payment the order was paid with; a second refund is refused and the money
+is not sent twice; and a refund the gateway refuses leaves the order
+cancelled and can be tried again. The gateway is a mock, so the shop's own
+LIVE keys are never used and no money is ever sent.
+
+```bash
+npm run check:order-actions
+```
+
+It opens an order in a browser and does what an administrator does: the
+Confirm Order button is there and the Refund button is greyed out; the
+arrow beside it opens the Cancel Order menu; Confirm Order opens the
+shipping form, which cannot be sent without all three details; the details
+are saved and shown on the order and on the customer's own page; cancelling
+asks for a reason and turns the Refund button on; and the refund dialog
+says what it is about before anything is sent. It also calls the endpoints
+directly — an incomplete shipment, a cancellation without a reason and a
+refund for an order with no gateway payment are all refused — and checks
+that nothing runs off the side of the page at 320, 375, 768 or 1024 pixels.
+
+Both need the dev server on port 3000 for the browser half; the dispatch
+check stands on its own.
+
 The catalogue has a test of its own:
 
 ```bash
@@ -1394,6 +1495,8 @@ scripts/
   check-admin.mjs       ← back-office smoke test
   check-catalogue.mjs   ← catalogue test
   check-inventory.mjs   ← stock and order test
+  check-order-dispatch.mjs ← confirming, cancelling and refunding an order
+  check-order-actions.mjs ← the order actions in a real browser
   check-variations.mjs  ← variations and purchasing test
   check-taxonomy.mjs    ← categories, subcategories, brands and specifications test
   check-import.mjs      ← import, export, validation and dashboard test
@@ -1445,9 +1548,13 @@ src/
     pending-order.ts    ← the token that lets a browser put away its own unpaid order
     refund-gateway.ts   ← sending a refund back through the gateway
     admin-actions.ts    ← back-office server actions
+    admin-order-actions.ts ← confirming, cancelling and refunding an order
     account-actions.ts  ← customer-panel server actions
     contact.ts          ← contact-page enquiries
     order-status.ts     ← order statuses (kept apart from the database)
+    order-dispatch.ts   ← the dispatch of an order, and the money that goes back
+    order-dispatch-options.ts ← the choices and the couriers' tracking pages (no database)
+    order-action-state.ts ← what an order action answers with (no database)
     message-status.ts   ← enquiry statuses (kept apart from the database)
 ```
 

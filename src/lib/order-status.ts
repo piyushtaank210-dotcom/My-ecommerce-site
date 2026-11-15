@@ -42,3 +42,48 @@ export function isOrderStatus(value: unknown): value is OrderStatus {
     (ORDER_STATUSES as readonly string[]).includes(value)
   );
 }
+
+/**
+ * How each status is coloured.
+ *
+ * The colours are the ones the shop already uses — the site's own blue
+ * for an order that is on its way, green for one that has arrived, red
+ * for one that has been called off — so that a status reads the same
+ * way everywhere it is shown.
+ */
+export const ORDER_STATUS_TONE: Record<OrderStatus, string> = {
+  confirmed: "border-blue-200 bg-blue-50 text-blue-700",
+  packed: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  shipped: "border-violet-200 bg-violet-50 text-violet-700",
+  delivered: "border-green-200 bg-green-50 text-green-700",
+  cancelled: "border-red-200 bg-red-50 text-red-700",
+};
+
+/**
+ * The step after the one the order is at.
+ *
+ * It is what the back office is offered next: an order that has been
+ * confirmed can be packed, a packed one shipped, and a shipped one
+ * delivered.
+ */
+export const NEXT_ORDER_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
+  confirmed: "packed",
+  packed: "shipped",
+  shipped: "delivered",
+};
+
+/**
+ * The label the badge shows.
+ *
+ * An order that was written for the gateway but has not been paid for
+ * yet is *pending*, even though the order itself is already confirmed —
+ * it is waiting for the money, and saying so is more useful than saying
+ * it is confirmed.
+ */
+export function orderStatusLabel(
+  status: string,
+  options: { awaitingPayment?: boolean } = {}
+): string {
+  if (options.awaitingPayment && status !== "cancelled") return "Pending";
+  return ORDER_STATUS_LABEL[status as OrderStatus] ?? status;
+}

@@ -1,6 +1,7 @@
 import { getOrder, applyOrderStatus } from "@/lib/orders";
 import { fail, json, requireApiPermission } from "@/lib/api";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/orders";
+import { cancelOrderWithReason } from "@/lib/order-dispatch";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,11 @@ export async function GET(_request: Request, { params }: Params) {
  *
  * The stock follows the order: cancelling gives the units back when they
  * never left, and holds them for a check when they did.
+ *
+ * Cancelling is the one move that needs more than a status. It needs a
+ * reason, and the reason is kept with the order — so it is asked for
+ * here as well, and an order cannot be cancelled through this endpoint
+ * without one.
  */
 export async function PATCH(request: Request, { params }: Params) {
   const guard = await requireApiPermission("orders.update");
@@ -28,15 +34,32 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const { id } = await params;
 
-  let body: { status?: string };
+  let body: {
+    status?: string;
+    reasonCode?: string;
+    reasonDetail?: string;
+  };
   try {
-    body = (await request.json()) as { status?: string };
+    body = (await request.json()) as typeof body;
   } catch {
     return fail("Send a JSON body.", 400);
   }
 
   if (!body.status || !(ORDER_STATUSES as readonly string[]).includes(body.status)) {
     return fail("Pick a valid status.", 400);
+  }
+
+  if (body.status === "cancelled") {
+    const result = await cancelOrderWithReason({
+      orderId: id,
+      reasonCode: body.reasonCode,
+      reasonDetail: body.reasonDetail,
+      userId: guard.user.id,
+    });
+    if (!result.ok) {
+      return fail(result.message, 400, result.field ? { field: result.field } : undefined);
+    }
+    return json(result.order);
   }
 
   const result = (await applyOrderStatus(id, body.status as OrderStatus, guard.user.id));
