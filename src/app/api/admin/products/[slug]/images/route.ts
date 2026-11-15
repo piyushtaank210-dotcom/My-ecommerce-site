@@ -7,7 +7,7 @@ import {
   setMainProductImage,
   setProductImageAlt,
 } from "@/lib/admin";
-import { deleteUpload, isOwnUpload, productImageFolder, saveUpload } from "@/lib/uploads";
+import { deleteUploadIfUnreferenced, productImageFolder, saveUpload } from "@/lib/uploads";
 import { limitsFor } from "@/lib/upload-tickets";
 
 type Params = { params: Promise<{ slug: string }> };
@@ -73,20 +73,23 @@ export async function POST(request: Request, { params }: Params) {
     const publicPath = saved.path;
     const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
 
+    // The new photograph is added first, so that the product is never
+    // left without one — not even for the moment it takes to write the
+    // row down.
+    const image = await addProductImage(slug, publicPath, alt || null);
+    if (image) added.push(image.id);
+
     // A replacement is carried out once, by the first file. The rest
     // are added beside the photograph that replaced the old one.
     if (replaceId) {
       const old = await removeProductImage(slug, replaceId);
-      // The file the old picture used is ours, so it goes too — but only
-      // if it is this product's own.
-      if (old.removed && old.path && isOwnUpload(old.path, slug)) {
-        await deleteUpload(old.path, slug);
+      // The file the old picture used is ours, so it goes too — but
+      // only if it is this product's own and nothing else wants it.
+      if (old.removed && old.path) {
+        await deleteUploadIfUnreferenced(old.path, slug);
       }
       replaceId = "";
     }
-
-    const image = (await addProductImage(slug, publicPath, alt || null));
-    if (image) added.push(image.id);
   }
 
   return json({ images: (await listProductGallery(slug)), added });
@@ -150,8 +153,10 @@ export async function PATCH(request: Request, { params }: Params) {
     // Only the product's own photographs are deleted from disk. A copy
     // carries the original's pictures — their paths are the original's — and
     // removing one from the copy must not take it off the original.
-    if (result.path && isOwnUpload(result.path, slug)) {
-      await deleteUpload(result.path, slug);
+    // The file the photograph used is ours, so it goes too — but only
+    // if it is this product's own and nothing else wants it.
+    if (result.path) {
+      await deleteUploadIfUnreferenced(result.path, slug);
     }
     return json({ images: (await listProductGallery(slug)) });
   }

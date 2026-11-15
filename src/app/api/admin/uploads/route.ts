@@ -9,8 +9,7 @@ import {
 } from "@/lib/admin";
 import { getDb } from "@/lib/db";
 import {
-  deleteUpload,
-  isOwnUpload,
+  deleteUploadIfUnreferenced,
   productImageFolder,
   safeSegment,
   uploadName,
@@ -18,6 +17,7 @@ import {
 } from "@/lib/uploads";
 import { extensionFor, sniffFileType } from "@/lib/file-types";
 import {
+  canSignClientUploads,
   headBytes,
   headObject,
   publicStoreToken,
@@ -173,7 +173,7 @@ async function ticket(
 
   // On a machine the shop keeps the file itself, so the browser sends
   // it straight to the route that writes the row down.
-  if (!usingBlob()) {
+  if (!usingBlob() || !canSignClientUploads("public")) {
     return json({
       mode: "app",
       endpoint: endpointFor(target, slug, variantId),
@@ -395,20 +395,23 @@ async function commit(
       .trim()
       .slice(0, 200);
 
+    // The new photograph is added first, so that the product is never
+    // left without one — not even for the moment it takes to write the
+    // row down.
+    const image = await addProductImage(slug, url, alt || null);
+    if (image) added.push(image.id);
+
     if (replaceId) {
       const old = await removeProductImage(slug, replaceId);
       // The file the old picture used is ours, so it goes too — but
-      // only if it is this product's own.
-      if (old.removed && old.path && isOwnUpload(old.path, slug)) {
-        await deleteUpload(old.path, slug);
+      // only if it is this product's own and nothing else wants it.
+      if (old.removed && old.path) {
+        await deleteUploadIfUnreferenced(old.path, slug);
       }
       // A replacement is carried out once, by the first file. The rest
       // are added beside the photograph that replaced the old one.
       replaceId = "";
     }
-
-    const image = await addProductImage(slug, url, alt || null);
-    if (image) added.push(image.id);
   }
 
   if (target === "variant-image") {

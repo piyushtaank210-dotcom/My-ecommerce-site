@@ -55,17 +55,46 @@ export const PRIVATE_FOLDER = "returns";
  * `STORAGE_DRIVER` says it outright when it is set — "local" or
  * "blob" — which is what a deployment wants when it has to be told
  * rather than worked out. Without it, the shop uses the store when
- * there is a token for one and the disk when there is not.
+ * there are credentials for one and the disk when there are not.
+ *
+ * A store is used when there is either
+ *
+ *   - a read-write token for it — `BLOB_READ_WRITE_TOKEN`, and
+ *     `EVIDENCE_BLOB_READ_WRITE_TOKEN` for the evidence store; or
+ *   - the short-lived credentials Vercel issues to a connected project
+ *     — `BLOB_STORE_ID` (and `EVIDENCE_BLOB_STORE_ID`) with
+ *     `VERCEL_OIDC_TOKEN`.
+ *
+ * Both are read-write. The token is the one that is used when it is
+ * there, because a token names the store it belongs to; the
+ * short-lived credentials are paired with the store's id instead.
  */
 export function storageDriver(): StorageDriver {
   const told = (process.env.STORAGE_DRIVER ?? "").trim().toLowerCase();
   if (told === "local" || told === "blob") return told;
-  return process.env.BLOB_READ_WRITE_TOKEN?.trim() ? "blob" : "local";
+  if (publicStoreToken()) return "blob";
+  if (storeIdFor("public") && oidcToken()) return "blob";
+  return "local";
 }
 
 /** Whether the shop is keeping its files in the store. */
 export function usingBlob(): boolean {
   return storageDriver() === "blob";
+}
+
+/**
+ * A value that is really a value.
+ *
+ * A variable Vercel marks as sensitive comes back from
+ * `vercel env pull` as the word "[SENSITIVE]" rather than the secret
+ * itself. It is not a credential, and the shop must not treat it as
+ * one — otherwise it would try to use it and be refused.
+ */
+function realValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("[SENSITIVE]")) return undefined;
+  return trimmed;
 }
 
 /**
@@ -75,7 +104,7 @@ export function usingBlob(): boolean {
  * read.
  */
 export function publicStoreToken(): string | undefined {
-  return process.env.BLOB_READ_WRITE_TOKEN?.trim() || undefined;
+  return realValue(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
 /**
@@ -83,24 +112,62 @@ export function publicStoreToken(): string | undefined {
  *
  * Evidence is private, so it belongs in a store that is private as
  * well. A shop that has made a private store for it says so with
- * `EVIDENCE_BLOB_READ_WRITE_TOKEN`; without one, the shop falls back
- * to the pictures' store, which means the evidence is in a store
- * anybody can read — so `evidenceIsPrivate()` says no, and the shop
- * says so too, rather than quietly serving a customer's photograph of
- * a damaged product to the whole internet.
+ * `EVIDENCE_BLOB_READ_WRITE_TOKEN`.
+ *
+ * It does not fall back to the pictures' token: a token names the store
+ * it belongs to, so using the pictures' token here would put a
+ * customer's photograph of a damaged console into the store that
+ * everybody can read.
  */
 export function evidenceStoreToken(): string | undefined {
-  return (
-    process.env.EVIDENCE_BLOB_READ_WRITE_TOKEN?.trim() ||
-    publicStoreToken()
-  );
+  return realValue(process.env.EVIDENCE_BLOB_READ_WRITE_TOKEN);
 }
 
-/** Whether the evidence store is one that only the shop can read. */
+/**
+ * The id of the store that holds the shop's pictures.
+ */
+export function publicStoreId(): string | undefined {
+  return realValue(process.env.BLOB_STORE_ID);
+}
+
+/**
+ * The id of the store that holds a customer's evidence.
+ */
+export function evidenceStoreId(): string | undefined {
+  return realValue(process.env.EVIDENCE_BLOB_STORE_ID);
+}
+
+/**
+ * The short-lived credentials Vercel issues to a connected project.
+ */
+export function oidcToken(): string | undefined {
+  return realValue(process.env.VERCEL_OIDC_TOKEN);
+}
+
+/**
+ * The store a kind of file belongs in.
+ */
+function storeIdFor(access: ObjectAccess): string | undefined {
+  return access === "public" ? publicStoreId() : evidenceStoreId();
+}
+
+/**
+ * Whether the evidence store is one that only the shop can read.
+ *
+ * It is private when it is a store of its own — named either by its
+ * own token or by its own id — and different from the pictures' store.
+ */
 export function evidenceIsPrivate(): boolean {
-  const own = process.env.EVIDENCE_BLOB_READ_WRITE_TOKEN?.trim();
-  if (!own) return false;
-  return own !== publicStoreToken();
+  const ownToken = evidenceStoreToken();
+  const ownId = evidenceStoreId();
+
+  if (ownToken) {
+    return ownToken !== publicStoreToken() || ownId !== publicStoreId();
+  }
+  if (ownId) {
+    return ownId !== publicStoreId();
+  }
+  return false;
 }
 
 /**
@@ -114,13 +181,28 @@ export function evidenceIsPrivate(): boolean {
  * the shop's own making that nobody can guess.
  *
  * A shop that means its evidence to be private makes a private store
- * for it and says so with `EVIDENCE_BLOB_READ_WRITE_TOKEN`.
+ * for it and says so with `EVIDENCE_BLOB_READ_WRITE_TOKEN` and
+ * `EVIDENCE_BLOB_STORE_ID`.
  */
 export function evidenceAccess(): ObjectAccess {
   // On the disk the evidence is always private: it lives under private/,
   // where the web server cannot reach it.
   if (!usingBlob()) return "private";
   return evidenceIsPrivate() ? "private" : "public";
+}
+
+/**
+ * Whether the shop can sign an upload for the browser.
+ *
+ * The browser sends a file straight to the store when the shop signs
+ * the upload for it, and signing needs a read-write token — the
+ * short-lived credentials are not enough for it. A shop with only the
+ * short-lived credentials has the file sent to the shop instead, which
+ * the shop then puts in the store itself.
+ */
+export function canSignClientUploads(access: ObjectAccess): boolean {
+  if (access === "public") return Boolean(publicStoreToken());
+  return Boolean(evidenceStoreToken());
 }
 
 /**
@@ -146,10 +228,27 @@ export function storageUnavailableReason(): string | null {
     }
     return null;
   }
-  if (!publicStoreToken()) {
-    return "BLOB_READ_WRITE_TOKEN is not set, so there is no store to keep files in.";
+  if (!hasStoreCredentials("public")) {
+    return (
+      "BLOB_READ_WRITE_TOKEN is not set, so there is no store to keep files in."
+    );
   }
   return null;
+}
+
+/**
+ * Whether the shop has credentials it can reach the store with.
+ *
+ * Either a read-write token, or the store's id paired with the
+ * short-lived credentials Vercel issues to a connected project.
+ */
+function hasStoreCredentials(access: ObjectAccess): boolean {
+  if (access === "public") {
+    if (publicStoreToken()) return true;
+    return Boolean(publicStoreId() && oidcToken());
+  }
+  if (evidenceStoreToken()) return true;
+  return Boolean(evidenceStoreId() && oidcToken());
 }
 
 /**
@@ -231,14 +330,34 @@ function localPublicUrl(key: string): string {
 }
 
 /**
- * The token a store call should use.
+ * The credentials a store call is made with.
  *
- * The pictures and the evidence are in different stores when the shop
- * has made a private one, and each call is made with the token of the
- * store it belongs to.
+ * A read-write token names the store it belongs to, so it is used on
+ * its own when it is there. The short-lived credentials Vercel issues
+ * name no store, so they are paired with the store's id.
+ *
+ * The evidence store is never reached with the pictures' credentials:
+ * a customer's evidence belongs in the store the shop made for it.
  */
-function tokenFor(access: ObjectAccess): string | undefined {
-  return access === "public" ? publicStoreToken() : evidenceStoreToken();
+function credentialsFor(access: ObjectAccess): {
+  token?: string;
+  storeId?: string;
+  oidcToken?: string;
+} {
+  const token =
+    access === "public" ? publicStoreToken() : evidenceStoreToken();
+  if (token) return { token };
+
+  const storeId = storeIdFor(access);
+  const oidc = oidcToken();
+  if (storeId && oidc) return { storeId, oidcToken: oidc };
+
+  // Nothing of its own: the pictures' token is the last resort, and
+  // only for the pictures themselves.
+  if (access === "public" && publicStoreToken()) {
+    return { token: publicStoreToken() };
+  }
+  return {};
 }
 
 /** The result of a write. */
@@ -294,7 +413,7 @@ export async function putObject(input: {
     const blob = await put(input.key, input.body, {
       access: input.access,
       contentType: input.contentType,
-      token: tokenFor(input.access),
+      ...credentialsFor(input.access),
       addRandomSuffix: false,
       allowOverwrite: true,
     });
@@ -348,7 +467,7 @@ export async function headObject(
 
   try {
     const { head } = await import("@vercel/blob");
-    const result = await head(key, { token: tokenFor(access) });
+    const result = await head(key, { ...credentialsFor(access) });
     return {
       sizeBytes: result.size,
       contentType: result.contentType ?? null,
@@ -410,7 +529,7 @@ export async function getObjectStream(
     const { get } = await import("@vercel/blob");
     const result = await get(key, {
       access,
-      token: tokenFor(access),
+      ...credentialsFor(access),
     });
     if (!result || result.statusCode !== 200 || !result.stream) return null;
     return {
@@ -457,7 +576,7 @@ export async function headBytes(
     const { get } = await import("@vercel/blob");
     const result = await get(key, {
       access,
-      token: tokenFor(access),
+      ...credentialsFor(access),
       headers: { range: `bytes=0-${length - 1}` },
     });
     if (!result || !result.stream) return null;
@@ -504,7 +623,7 @@ export async function deleteObject(
   }
   try {
     const { del } = await import("@vercel/blob");
-    await del(key, { token: tokenFor(access) });
+    await del(key, { ...credentialsFor(access) });
   } catch {
     // The file is already gone.
   }
@@ -537,10 +656,10 @@ export async function moveObject(
     const { copy, del } = await import("@vercel/blob");
     await copy(fromKey, toKey, {
       access,
-      token: tokenFor(access),
+      ...credentialsFor(access),
       allowOverwrite: true,
     });
-    await del(fromKey, { token: tokenFor(access) }).catch(() => {});
+    await del(fromKey, { ...credentialsFor(access) }).catch(() => {});
     return true;
   } catch {
     return false;
@@ -589,7 +708,7 @@ export async function listObjects(
         prefix,
         limit: 1000,
         cursor,
-        token: tokenFor(access),
+        ...credentialsFor(access),
       });
       for (const blob of page.blobs) {
         out.push({

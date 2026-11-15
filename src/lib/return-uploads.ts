@@ -355,6 +355,7 @@ export async function sweepStaleUploads(): Promise<number> {
   // was interrupted. It is swept by its age, so a file a customer is
   // sending right now is never taken from under them.
   for (const folder of await evidenceFolders("returns/_staging/")) {
+    if (Date.now() - folder.touchedAt < STAGING_TTL_MS) continue;
     await removeStagedFolder(folder.name);
   }
 

@@ -7,7 +7,7 @@ import {
   recordOpeningBalance,
 } from "./inventory";
 import { worstStockLevel, type StockLevel } from "./stock";
-import { deleteUpload, isOwnUpload } from "./uploads";
+import { deleteUploadIfUnreferenced } from "./uploads";
 import { normalizeSku, skuFromSlug, uniqueSku } from "./sku";
 import {
   cleanAttributes,
@@ -1466,11 +1466,11 @@ export async function productReferences(slug: string): Promise<ProductReferences
  */
 async function removeUploadedFiles(paths: string[], slug: string) {
   for (const path of paths) {
-    // Only the product's own photographs go. A copy carries the original's
-    // pictures — their paths are the original's — and deleting the copy
-    // must not take them off the shelf.
-    if (!isOwnUpload(path, slug)) continue;
-    await deleteUpload(path, slug);
+    // Only the product's own photographs go, and only once nothing
+    // else is using them. A copy carries the original's pictures —
+    // their paths are the original's — and deleting the copy must not
+    // take them off the shelf.
+    await deleteUploadIfUnreferenced(path, slug);
   }
 }
 

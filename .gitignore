@@ -64,6 +64,10 @@ public/returns/
 # has not signed in and been let in. Nothing in here is ever committed.
 private/
 
+# The file `vercel env pull` writes. It holds live credentials, so it
+# never goes into the repository.
+vercel-env.local
+
 # Debug & Execution Logs
 npm-debug.log*
 yarn-debug.log*

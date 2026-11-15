@@ -6,6 +6,7 @@ import { EVIDENCE_KINDS, type EvidenceKind } from "@/lib/return-status";
 import { EVIDENCE_TYPES, FILE_TYPE_MESSAGE, readEvidenceBytes } from "@/lib/evidence";
 import { sniffFileType } from "@/lib/file-types";
 import {
+  canSignClientUploads,
   evidenceAccess,
   evidenceStoreToken,
   headObject,
@@ -101,7 +102,7 @@ async function ticket(body: Record<string, unknown>) {
   }
 
   // On a machine the file goes to the shop, which keeps it.
-  if (!usingBlob()) {
+  if (!usingBlob() || !canSignClientUploads("private")) {
     return json({ mode: "app", endpoint: "/api/returns/evidence" });
   }
 

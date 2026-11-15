@@ -103,7 +103,9 @@ least: a store in the dashboard, and the token it gives you.
 | Variable | What it is | What is in it |
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | The token for a **public** store | The catalogue's photographs — everybody is meant to see them |
+| `BLOB_STORE_ID` | Which store that is | Vercel writes this when it connects the store |
 | `EVIDENCE_BLOB_READ_WRITE_TOKEN` | The token for a **private** store | A customer's evidence — nobody's business but theirs and the shop's |
+| `EVIDENCE_BLOB_STORE_ID` | Which store that is | Vercel writes this when it connects the store |
 
 To make them:
 
@@ -171,6 +173,18 @@ To check the whole upload system end to end:
 ```bash
 npm run check:uploads
 ```
+
+That one runs against the shop on your own machine, with the files on the
+disk. There are three more:
+
+| | |
+|---|---|
+| `npm run check:blob` | The shop's own storage layer, against the real store. It needs the credentials pulled with `vercel env pull` |
+| `npm run check:live-uploads` | The live shop's product photographs, on the running site |
+| `npm run check:live-evidence` | The live shop's customer evidence, on the running site |
+
+The last two sign in as the shop's own administrator and clean up
+everything they create.
 
 ---
 

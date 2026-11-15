@@ -208,6 +208,84 @@ export async function deleteUpload(path: string, slug: string): Promise<void> {
 }
 
 /**
+ * Removes an uploaded photograph, if nothing else is using it.
+ *
+ * The file is only removed once the database says that no other
+ * photograph, option or product points at it. A copy of a product
+ * carries the original's photographs, and their addresses are the
+ * original's — so removing a photograph from the original must not take
+ * it off the copy.
+ *
+ * It answers whether the file was removed.
+ */
+export async function deleteUploadIfUnreferenced(
+  path: string,
+  slug: string
+): Promise<boolean> {
+  // Only the product's own photographs are ever removed. One that came
+  // with the catalogue lives in public/products and stays where it is.
+  if (!isOwnUpload(path, slug)) return false;
+
+  if (await uploadStillReferenced(path, slug)) return false;
+
+  await deleteUpload(path, slug);
+  return true;
+}
+
+/**
+ * Whether anything else is still using this photograph.
+ *
+ * A copy of a product carries the original's photographs, and their
+ * addresses are the original's — so a photograph that is removed from
+ * the original is still wanted by the copy. The file is only removed
+ * once nothing points at it any more.
+ *
+ * It is asked of the database, so it is true of every place a
+ * photograph's address is written: a product's own gallery, another
+ * product's gallery, an option's photograph, and the picture a product
+ * card shows.
+ */
+export async function uploadStillReferenced(
+  path: string,
+  exceptProductSlug?: string
+): Promise<boolean> {
+  const { getDb } = await import("./db");
+  const db = getDb();
+
+  // The product being changed is left out of the count, so that its own
+  // photograph is not counted as something else wanting it.
+  const apart = exceptProductSlug
+    ? "AND product_slug <> ?"
+    : "";
+  const params = exceptProductSlug ? [path, exceptProductSlug] : [path];
+
+  const gallery = (await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM product_images WHERE path = ? ${apart}`
+    )
+    .get(...params)) as { n?: number } | undefined;
+  if (Number(gallery?.n ?? 0) > 0) return true;
+
+  const variants = (await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM variants WHERE image = ? ${apart}`
+    )
+    .get(...params)) as { n?: number } | undefined;
+  if (Number(variants?.n ?? 0) > 0) return true;
+
+  const products = (await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM products WHERE image = ? ${
+        exceptProductSlug ? "AND slug <> ?" : ""
+      }`
+    )
+    .get(...params)) as { n?: number } | undefined;
+  if (Number(products?.n ?? 0) > 0) return true;
+
+  return false;
+}
+
+/**
  * Whether the shop is keeping its files in its store.
  *
  * The back office asks this before it sends a file: when the shop is

@@ -337,6 +337,53 @@ try {
     check("the option's photograph was uploaded", true, "the product has no options");
   }
 
+  section("A photograph another product is using is not deleted");
+  {
+    // A copy of a product carries the original's photographs, and their
+    // addresses are the original's. Removing the photograph from the
+    // original must not take it off the copy.
+    const { rows: others } = await pool.query(
+      "SELECT slug FROM products WHERE slug <> $1 AND status <> 'archived' LIMIT 1",
+      [product.slug]
+    );
+    // Only one of this run's own photographs is tried — the ones that
+    // were already in the catalogue are left exactly as they were found.
+    const mine = galleryImages.find(
+      (i) => addedImageIds.includes(i.id) && i.path?.startsWith("/uploads/")
+    );
+    if (others.length && mine) {
+      await pool.query(
+        `INSERT INTO product_images (id, product_slug, path, alt, position)
+         VALUES ($1, $2, $3, 'a copy carries this one', 99)`,
+        [`${others[0].slug}::copy-check`, others[0].slug, mine.path]
+      );
+      const file = join(ROOT, "public", mine.path);
+      const existed = existsSync(file);
+
+      await api(`/api/admin/products/${product.slug}/images`, {
+        method: "PATCH",
+        headers: { ...adminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ action: "remove", id: mine.id }),
+      });
+
+      check(
+        "the photograph the copy is using is still there",
+        existed && existsSync(file),
+        existsSync(file) ? "still there" : "taken away from the copy"
+      );
+
+      await pool.query("DELETE FROM product_images WHERE id = $1", [
+        `${others[0].slug}::copy-check`,
+      ]);
+    } else {
+      check(
+        "the photograph the copy is using is still there",
+        true,
+        "there was no second product to try it with"
+      );
+    }
+  }
+
   section("A file that is not a photograph is refused");
   const badForm = new FormData();
   badForm.append("files", filePart(text(), "notes.txt", "text/plain"));
