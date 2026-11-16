@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { PRODUCT_COLUMNS } from "@/lib/product-import";
 import { ImportPanel } from "@/components/admin/ImportPanel";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
 
 export const metadata = { title: "Import & export" };
 
@@ -21,16 +22,14 @@ export default async function AdminImportPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1200px]">
-      <header className="mb-6">
-        <h1 className="text-[26px] font-bold text-ink">Import &amp; export</h1>
-        <p className="mt-1.5 text-[13.5px] text-gray-500">
-          Take the catalogue out as a spreadsheet, change it, and bring it
-          back — one product at a time, or a whole new range at once.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Catalogue"
+        title="Import and export"
+        description="Take the catalogue out as a spreadsheet, change it, and bring it back — one product at a time, or a whole new range at once."
+      />
 
       <ImportPanel columns={columns} canManage={canManage} />
-    </div>
+    </>
   );
 }

@@ -13,7 +13,7 @@ import { can } from "@/lib/roles";
 import { discountPct, money } from "@/lib/format";
 import { effectiveStock, productStockLevel, stockLevel } from "@/lib/stock";
 import type { SortKey } from "@/lib/types";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { ProductListingToggle } from "@/components/admin/ProductListingToggle";
@@ -27,6 +27,10 @@ import {
   SelectAllMatching,
 } from "@/components/admin/ProductBulk";
 import { PRODUCT_STATUSES, PRODUCT_STATUS_LABEL } from "@/lib/product-status";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
+import { Badge } from "@/components/admin/ui/Badge";
+import { ProductStatusBadge } from "@/components/admin/ui/StatusBadge";
 
 export const metadata = { title: "Catalogue" };
 
@@ -151,36 +155,40 @@ export default async function AdminProductsPage({
   const to = (page - 1) * PER_PAGE + products.length;
 
   return (
-    <div className="mx-auto max-w-[1600px]">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[26px] font-bold text-ink">Catalogue</h1>
-          <p className="mt-1.5 text-[13.5px] text-gray-500">
-            {isFiltered ? (
-              <>
-                <span className="tnum font-medium text-ink">
-                  {total} of {catalogueTotal}
-                </span>{" "}
-                products match
-              </>
-            ) : (
-              <>
-                <span className="tnum font-medium text-ink">{catalogueTotal}</span>{" "}
-                product{catalogueTotal === 1 ? "" : "s"}
-              </>
-            )}
-            {" — drafts and archived ones stay here, off the shop floor."}
-          </p>
-        </div>
-        {canManage && (
-          <Link href="/admin/products/new" className="btn btn-primary btn-sm">
-            <Plus className="h-4 w-4" />
-            Add product
-          </Link>
-        )}
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Catalogue"
+        title="Every product in the store"
+        description={
+          isFiltered ? (
+            <>
+              <span className="tnum font-semibold text-ink">
+                {total} of {catalogueTotal}
+              </span>{" "}
+              products match the filters below.{" "}
+              <Link href="/admin/products" className="admin-links">
+                Clear them
+              </Link>
+            </>
+          ) : (
+            <>
+              <span className="tnum font-semibold text-ink">{catalogueTotal}</span>{" "}
+              product{catalogueTotal === 1 ? "" : "s"} in the catalogue. Drafts
+              and archived ones stay here, off the shop floor.
+            </>
+          )
+        }
+        actions={
+          canManage && (
+            <Link href="/admin/products/new" className="btn btn-primary btn-sm">
+              <Plus className="h-4 w-4" />
+              Add product
+            </Link>
+          )
+        }
+      />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar">
         <PanelSearch placeholder="Search name, brand or SKU" />
         <PanelFilter
           name="category"
@@ -256,34 +264,27 @@ export default async function AdminProductsPage({
 
       {products.length === 0 ? (
         total === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-            <PackageSearch className="h-9 w-9 text-gray-300" />
-            <h2 className="mt-4 text-[16px] font-semibold text-ink">
-              Nothing matches those filters
-            </h2>
-            <p className="mt-1.5 text-[13px] text-gray-500">
-              The catalogue holds {catalogueTotal} product
-              {catalogueTotal === 1 ? "" : "s"} in all.
-            </p>
-            <Link href="/admin/products" className="btn btn-outline btn-sm mt-5">
-              Clear filters
-            </Link>
-          </div>
+          <EmptyState
+            icon={PackageSearch}
+            title="Nothing matches those filters"
+            description={`The catalogue holds ${catalogueTotal} product${catalogueTotal === 1 ? "" : "s"} in all.`}
+            action={
+              <Link href="/admin/products" className="btn btn-outline btn-sm">
+                Clear filters
+              </Link>
+            }
+          />
         ) : (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-            <PackageSearch className="h-9 w-9 text-gray-300" />
-            <h2 className="mt-4 text-[16px] font-semibold text-ink">
-              That page is past the end of the list
-            </h2>
-            <p className="mt-1.5 text-[13px] text-gray-500">
-              There {total === 1 ? "is" : "are"} {total} product
-              {total === 1 ? "" : "s"} to show, on {totalPages} page
-              {totalPages === 1 ? "" : "s"}.
-            </p>
-            <Link href={pageLink(1)} className="btn btn-outline btn-sm mt-5">
-              Back to the first page
-            </Link>
-          </div>
+          <EmptyState
+            icon={PackageSearch}
+            title="That page is past the end of the list"
+            description={`There ${total === 1 ? "is" : "are"} ${total} product${total === 1 ? "" : "s"} to show, on ${totalPages} page${totalPages === 1 ? "" : "s"}.`}
+            action={
+              <Link href={pageLink(1)} className="btn btn-outline btn-sm">
+                Back to the first page
+              </Link>
+            }
+          />
         )
       ) : (
         <BulkProvider
@@ -293,46 +294,37 @@ export default async function AdminProductsPage({
         >
           {canManage && <BulkToolbar />}
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-gray-500">
-            <span className="tnum">
-              Showing {from}–{to} of {total} product{total === 1 ? "" : "s"}
-            </span>
-            {canManage && <SelectAllMatching />}
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-            <table className="w-full table-fixed min-w-[1110px] text-left text-[13.5px]">
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-table--fixed" style={{ minWidth: 950 }}>
               {/* Fixed widths so the table fits a normal screen without the
                   middle columns being pushed under the actions. */}
               <colgroup>
                 {canManage && <col className="w-9" />}
-                <col className="w-[240px]" />
-                <col className="w-[170px]" />
-                <col className="w-[125px]" />
-                <col className="w-[104px]" />
-                <col className="w-[115px]" />
-                <col className="w-[150px]" />
-                <col className="w-[165px]" />
+                <col className="w-[25%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-[7%]" />
+                <col className="w-[11%]" />
+                <col className="w-[13%]" />
+                <col className="w-[130px]" />
               </colgroup>
-              <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
+              <thead>
                 <tr>
                   {canManage && (
                     <th className="w-10 px-2 py-3">
                       <BulkSelectAll />
                     </th>
                   )}
-                  <th className="px-4 py-3 font-semibold">Product</th>
-                  <th className="px-4 py-3 font-semibold">SKU</th>
-                  <th className="px-4 py-3 font-semibold">Price</th>
-                  <th className="px-4 py-3 font-semibold">Stock</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Variants</th>
-                  <th className="sticky right-0 border-l border-gray-200 bg-gray-50 px-4 py-3 text-right font-semibold">
-                    Actions
-                  </th>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th className="admin-th-num">Price</th>
+                  <th className="admin-th-num">Stock</th>
+                  <th>Status</th>
+                  <th>Variants</th>
+                  <th className="admin-sticky-actions admin-th-num">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {products.map((p) => {
                   const off = discountPct(p.mrp, p.price);
                   // A product with options sells through them, so the
@@ -340,15 +332,15 @@ export default async function AdminProductsPage({
                   const units = effectiveStock(p);
                   const level = productStockLevel(p);
                   return (
-                    <tr key={p.slug} className="bg-white">
+                    <tr key={p.slug}>
                       {canManage && (
                         <td className="px-2 py-3">
                           <BulkCheckbox slug={p.slug} />
                         </td>
                       )}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-gray-50">
+                      <td>
+                        <div className="admin-cell-product">
+                          <span className="admin-thumb">
                             {p.image && (
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img
@@ -361,17 +353,17 @@ export default async function AdminProductsPage({
                           <span className="min-w-0">
                             <span
                               title={p.name}
-                              className="block truncate font-semibold text-ink"
+                              className="admin-cell-title"
                             >
                               {p.name}
                             </span>
-                            <span className="block truncate text-[12px] text-gray-500">
+                            <span className="admin-cell-sub">
                               {p.brand ?? "—"} · {p.category_slug ?? "uncategorised"}
                             </span>
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <span
                           title={p.sku ?? undefined}
                           className="tnum block truncate text-[11.5px] text-gray-600"
@@ -379,12 +371,12 @@ export default async function AdminProductsPage({
                           {p.sku ?? "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="tnum block font-semibold text-ink">
+                      <td className="admin-td-num">
+                        <span className="block font-semibold text-ink">
                           {money(p.price)}
                         </span>
                         {p.mrp > p.price && (
-                          <span className="mt-1 flex items-center gap-1.5 whitespace-nowrap text-[12px]">
+                          <span className="mt-1 flex items-center justify-end gap-1.5 whitespace-nowrap text-[12px]">
                             <span className="price-strike tnum">
                               {money(p.mrp)}
                             </span>
@@ -394,7 +386,7 @@ export default async function AdminProductsPage({
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="admin-td-num">
                         <span
                           title={
                             p.variants.length
@@ -418,7 +410,7 @@ export default async function AdminProductsPage({
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         {/* Both halves of the visibility rule live together:
                             a product is on sale when it is published *and*
                             still listed. */}
@@ -434,13 +426,18 @@ export default async function AdminProductsPage({
                             />
                           </div>
                         ) : (
-                          <span className="text-[12px] font-semibold text-gray-600">
-                            {PRODUCT_STATUS_LABEL[p.status]}
-                            {p.listed ? " · Listed" : " · Delisted"}
+                          <span className="flex flex-col items-start gap-1.5">
+                            <ProductStatusBadge
+                              status={p.status}
+                              label={PRODUCT_STATUS_LABEL[p.status]}
+                            />
+                            <Badge tone="neutral">
+                              {p.listed ? "Listed" : "Delisted"}
+                            </Badge>
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-[12.5px] text-gray-500">
+                      <td className="text-[12.5px] text-gray-500">
                         {p.variants.length === 0 ? (
                           "—"
                         ) : (
@@ -472,12 +469,12 @@ export default async function AdminProductsPage({
                           </ul>
                         )}
                       </td>
-                      <td className="sticky right-0 border-l border-gray-200 bg-white px-4 py-3">
-                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      <td className="admin-sticky-actions admin-td-actions">
+                        <div className="admin-row-actions">
                           {canManage && (
                             <Link
                               href={`/admin/products/${p.slug}`}
-                              className="text-[13px] font-medium text-brand hover:underline"
+                              className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-brand transition-colors hover:bg-brand-tint"
                             >
                               Edit
                             </Link>
@@ -498,10 +495,21 @@ export default async function AdminProductsPage({
               </tbody>
             </table>
           </div>
+
+          <div className="admin-table-foot">
+            <span className="tnum">
+              Showing {from}–{to} of {total} product{total === 1 ? "" : "s"}
+              {canManage && (
+                <>
+                  {" · "}
+                  <SelectAllMatching />
+                </>
+              )}
+            </span>
+            <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
+          </div>
         </BulkProvider>
       )}
-
-      <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
-    </div>
+    </>
   );
 }

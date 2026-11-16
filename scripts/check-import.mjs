@@ -14,16 +14,16 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
-const support = tokenForRole(db, "support");
+
+const admin = await tokenForRole("admin");
+const support = await tokenForRole("support");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -108,7 +108,7 @@ let exported = "";
   exported = res.body;
 
   const header = exported.split("\r\n")[0].split(",");
-  check("it has a row for every product", rows(exported).length === 9, `${rows(exported).length} rows`);
+  check("it has a row for every product", rows(exported).length === 10, `${rows(exported).length} rows`);
   check("it carries the address and the name", header.includes("slug") && header.includes("name"));
   check("it carries the price", header.includes("price") && header.includes("mrp"));
   check("it carries the specifications", header.includes("specs"));
@@ -679,7 +679,7 @@ console.log("\n→ the dashboard counts the catalogue properly");
   );
 
   // The best sellers come from the orders that were not cancelled.
-  const sold = db
+  const sold = await db
     .prepare(
       `SELECT oi.product_slug AS slug, SUM(oi.quantity) AS units
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
@@ -696,8 +696,10 @@ console.log("\n→ the dashboard counts the catalogue properly");
   );
   check(
     "and it is counted in units",
-    sold.length === 0 || top.units === sold[0].units,
-    `${top?.units}`
+    // PostgreSQL sums come back as a string, so the two are compared as
+    // numbers rather than as the two kinds of value they happen to be.
+    sold.length === 0 || top.units === Number(sold[0].units),
+    `${top?.units} against ${sold[0]?.units}`
   );
   check(
     "the best sellers carry the address of the product",
@@ -719,7 +721,7 @@ console.log("\n→ putting the store back as it was found");
     !left.json.rows.some((p) => p.slug.startsWith("zz-import-")),
     `${left.json.total} products`
   );
-  check("the catalogue is back to nine", left.json.total === 9, `${left.json.total}`);
+  check("the catalogue is back to ten", left.json.total === 10, `${left.json.total}`);
   check(
     "and the catalogue's own products are untouched",
     left.json.rows.every(
@@ -727,7 +729,7 @@ console.log("\n→ putting the store back as it was found");
     )
   );
 
-  db.close();
+  await closeDb();
 }
 
 console.log(

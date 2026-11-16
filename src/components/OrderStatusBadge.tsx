@@ -9,6 +9,10 @@ import {
   PAYMENT_STATUS_TONE,
   type PaymentStatus,
 } from "@/lib/order-status";
+import {
+  ORDER_STATUS_TONE as ADMIN_ORDER_TONE,
+  PAYMENT_STATUS_TONE as ADMIN_PAYMENT_TONE,
+} from "@/lib/status-tone";
 
 /**
  * An order's status, as a badge.
@@ -18,21 +22,42 @@ import {
  * one that has arrived, red for one that has been called off. The same
  * badge is used by the back office and by the customer, so that an
  * order reads the same way wherever it is seen.
+ *
+ * The back office asks for `variant="admin"`, which keeps the words and
+ * the meaning but draws the badge in the back office's own smaller
+ * palette — so that a colour there means one thing only.
  */
 export function OrderStatusBadge({
   status,
   size = "md",
+  variant = "default",
 }: {
   status: string;
   size?: "sm" | "md";
+  variant?: "default" | "admin";
 }) {
   const known = (Object.keys(ORDER_STATUS_LABEL) as OrderStatus[]).includes(
     status as OrderStatus
   );
+  const label = orderStatusLabel(status);
+
+  if (variant === "admin") {
+    return (
+      <span
+        data-status-badge={status}
+        className={`admin-badge admin-badge--${ADMIN_ORDER_TONE[status] ?? "neutral"}`}
+      >
+        {status === "pending" && (
+          <span className="admin-badge-dot" aria-hidden="true" />
+        )}
+        {label}
+      </span>
+    );
+  }
+
   const tone = known
     ? ORDER_STATUS_TONE[status as OrderStatus]
     : "border-gray-200 bg-gray-50 text-gray-600";
-  const label = orderStatusLabel(status);
 
   return (
     <span
@@ -66,19 +91,33 @@ export function OrderStatusBadge({
 export function PaymentStatusBadge({
   status,
   size = "md",
+  variant = "default",
 }: {
   status: string;
   size?: "sm" | "md";
+  variant?: "default" | "admin";
 }) {
   const known = (Object.keys(PAYMENT_STATUS_LABEL) as PaymentStatus[]).includes(
     status as PaymentStatus
   );
-  const tone = known
-    ? PAYMENT_STATUS_TONE[status as PaymentStatus]
-    : "border-gray-200 bg-gray-50 text-gray-600";
   const label = known
     ? PAYMENT_STATUS_LABEL[status as PaymentStatus]
     : status;
+
+  if (variant === "admin") {
+    return (
+      <span
+        data-payment-badge={status}
+        className={`admin-badge admin-badge--${ADMIN_PAYMENT_TONE[status] ?? "neutral"}`}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  const tone = known
+    ? PAYMENT_STATUS_TONE[status as PaymentStatus]
+    : "border-gray-200 bg-gray-50 text-gray-600";
 
   return (
     <span

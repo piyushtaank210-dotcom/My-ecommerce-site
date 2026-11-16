@@ -6,11 +6,14 @@ import {
   REPLACEMENT_STATUS_LABEL,
 } from "@/lib/return-status";
 import { formatDate } from "@/lib/format";
-import { StatCard } from "@/components/admin/StatCard";
+import { StatCard } from "@/components/admin/ui/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { PanelDateRange } from "@/components/admin/PanelDateRange";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
+import { Badge } from "@/components/admin/ui/Badge";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
+import { REPLACEMENT_TONE } from "@/lib/status-tone";
 
 const PER_PAGE = 25;
 
@@ -70,7 +73,7 @@ export async function ReplacementRecordsView({
 
   return (
     <div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="admin-stat-row">
         <StatCard
           label="Shipments on file"
           value={String(all.length)}
@@ -98,7 +101,7 @@ export async function ReplacementRecordsView({
         />
       </div>
 
-      <div className="mt-5 mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar mt-5">
         <PanelSearch placeholder="Search shipment, request, order, customer or tracking" />
         <PanelFilter
           name="status"
@@ -116,19 +119,15 @@ export async function ReplacementRecordsView({
       </div>
 
       {replacements.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-          <Truck className="h-9 w-9 text-gray-300" />
-          <h2 className="mt-4 text-[16px] font-semibold text-ink">
-            No replacements match
-          </h2>
-          <p className="mt-1 text-[13px] text-gray-500">
-            Try another search, or clear the filters.
-          </p>
-        </div>
+        <EmptyState
+          icon={Truck}
+          title="No replacements match"
+          description="Try another search, or clear the filters."
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full min-w-[1100px] text-left text-[13.5px]">
-            <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
+        <div className="admin-table-wrap">
+          <table className="admin-table" style={{ minWidth: 1100 }}>
+            <thead>
               <tr>
                 <th className="px-3 py-3 font-semibold">Shipment</th>
                 <th className="px-3 py-3 font-semibold">Request / Order</th>
@@ -142,7 +141,7 @@ export async function ReplacementRecordsView({
                 <th className="px-3 py-3 text-right font-semibold">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {replacements.map((r) => (
                 <tr key={r.id} className="bg-white hover:bg-gray-50/70">
                   <td className="px-3 py-3">
@@ -201,15 +200,15 @@ export async function ReplacementRecordsView({
                     )}
                   </td>
                   <td className="px-3 py-3">
-                    <span className="inline-block whitespace-nowrap rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-gray-700">
+                    <Badge tone={REPLACEMENT_TONE[r.delivery_status] ?? "neutral"}>
                       {REPLACEMENT_STATUS_LABEL[r.delivery_status] ??
                         r.delivery_status}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-3 py-3 text-right">
                     <Link
                       href={`/admin/returns/${r.return_id}`}
-                      className="btn btn-outline btn-xs inline-flex items-center gap-1"
+                      className="admin-links"
                     >
                       Manage
                       <ArrowRight className="h-3 w-3" />

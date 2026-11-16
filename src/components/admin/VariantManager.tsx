@@ -285,17 +285,21 @@ export function VariantManager({
   const formOpen = creating || editingId !== null;
 
   return (
-    <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-        <Boxes className="h-4 w-4 text-brand" />
-        Variations
-      </h2>
-      <p className="mb-5 text-[12.5px] text-gray-500">
-        What this product varies by, and the options that come out of it. Each
-        option is stocked on its own and has its own code, price and
-        photograph.
-      </p>
-
+    <section className="admin-panel">
+      <div className="admin-panel-head">
+        <div className="min-w-0">
+          <h2 className="admin-panel-title">
+            <Boxes className="h-4 w-4 text-brand" />
+            Variations
+          </h2>
+          <p className="admin-panel-sub">
+            What this product varies by, and the options that come out of it.
+            Each option is stocked on its own and has its own code, price and
+            photograph.
+          </p>
+        </div>
+      </div>
+      <div className="admin-panel-body">
       {/* What it varies by */}
       <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
         <h3 className="text-[13.5px] font-bold text-ink">
@@ -376,8 +380,8 @@ export function VariantManager({
       </div>
 
       {/* The options */}
-      <div className="mt-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-6">
+        <div className="admin-section-head">
           <h3 className="text-[13.5px] font-bold text-ink">
             The options ({variants.length})
           </h3>
@@ -394,20 +398,34 @@ export function VariantManager({
             This product has no options. It is stocked as itself.
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-[13px]">
-              <thead className="border-b border-gray-200 text-[11.5px] uppercase tracking-wider text-gray-500">
+          <div className="admin-table-wrap mt-3">
+            {/* The options table. Its width is fixed so that a long code
+                cannot push the columns past the edge of the panel, and
+                the actions are left in the flow rather than pinned to
+                the edge — a pinned column over a scrolling table sits
+                on top of the one beside it. */}
+            <table className="admin-table admin-table--fixed" style={{ minWidth: 640 }}>
+              <colgroup>
+                <col className="w-[24%]" />
+                <col className="w-[16%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+                <col className="w-[11%]" />
+                <col className="w-[11%]" />
+                <col className="w-[92px]" />
+              </colgroup>
+              <thead>
                 <tr>
-                  <th className="px-3 py-2 font-semibold">Option</th>
-                  <th className="px-3 py-2 font-semibold">Code</th>
-                  <th className="px-3 py-2 font-semibold">Price</th>
-                  <th className="px-3 py-2 font-semibold">MRP</th>
-                  <th className="px-3 py-2 font-semibold">Stock</th>
-                  <th className="px-3 py-2 font-semibold">Barcode</th>
-                  <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                  <th>Option</th>
+                  <th>Code</th>
+                  <th className="admin-th-num">Price</th>
+                  <th className="admin-th-num">MRP</th>
+                  <th className="admin-th-num">Stock</th>
+                  <th>Barcode</th>
+                  <th className="admin-th-num">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {variants.map((v) => {
                   const level =
                     v.stock <= 0
@@ -416,8 +434,8 @@ export function VariantManager({
                         ? "Low stock"
                         : "In stock";
                   return (
-                    <tr key={v.id} className="bg-white">
-                      <td className="px-3 py-2.5">
+                    <tr key={v.id}>
+                      <td>
                         <span className="flex items-center gap-2">
                           {v.image && (
                             /* eslint-disable-next-line @next/next/no-img-element */
@@ -441,22 +459,22 @@ export function VariantManager({
                           </span>
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <span className="tnum text-[12px] text-gray-600">
                           {v.sku ?? "—"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <span className="tnum font-semibold text-ink">
                           {v.price.toLocaleString("en-IN")}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <span className="tnum text-gray-500">
                           {v.mrp.toLocaleString("en-IN")}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <span
                           className={`tnum font-semibold ${
                             v.stock <= 0
@@ -472,28 +490,28 @@ export function VariantManager({
                           {level}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <span className="tnum text-[12px] text-gray-600">
                           {v.barcode ?? "—"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="admin-td-actions">
                         {canManage && (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="admin-row-actions">
                             {confirming === v.id ? (
                               <>
                                 <button
                                   type="button"
                                   onClick={() => remove(v)}
                                   disabled={busy}
-                                  className="text-[12.5px] font-semibold text-red-600 hover:underline"
+                                  className="btn btn-danger btn-sm disabled:opacity-60"
                                 >
                                   Yes, remove
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setConfirming(null)}
-                                  className="text-[12.5px] text-gray-500 hover:underline"
+                                  className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-gray-500 transition-colors hover:bg-gray-100"
                                 >
                                   No
                                 </button>
@@ -505,7 +523,7 @@ export function VariantManager({
                                   onClick={() => startEditing(v)}
                                   disabled={busy}
                                   aria-label={`Edit ${v.name}`}
-                                  className="text-[12.5px] font-medium text-brand hover:underline"
+                                  className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-brand transition-colors hover:bg-brand-tint"
                                 >
                                   <Pencil className="mr-1 inline h-3 w-3" />
                                   Edit
@@ -515,10 +533,10 @@ export function VariantManager({
                                   onClick={() => setConfirming(v.id)}
                                   disabled={busy}
                                   aria-label={`Remove ${v.name}`}
-                                  className="text-[12.5px] font-medium text-gray-400 hover:text-red-600"
+                                  title={`Remove ${v.name}`}
+                                  className="admin-icon-btn admin-icon-btn--bad"
                                 >
-                                  <Trash2 className="mr-1 inline h-3 w-3" />
-                                  Remove
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                               </>
                             )}
@@ -535,22 +553,28 @@ export function VariantManager({
 
         {/* The form */}
         {formOpen && canManage && (
-          <div className="mt-4 rounded-lg border border-brand/40 bg-brand-tint/40 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h4 className="text-[13.5px] font-bold text-ink">
-                {editingId ? "Change this option" : "Add an option"}
-              </h4>
+          <div className="admin-panel mt-5">
+            <div className="admin-panel-head">
+              <div className="min-w-0">
+                <h4 className="admin-panel-title">
+                  {editingId ? "Change this option" : "Add an option"}
+                </h4>
+                <p className="admin-panel-sub">
+                  The values that make this option different from the others,
+                  and what it costs and how many there are.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={closeForm}
                 aria-label="Close"
-                className="grid h-7 w-7 place-items-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-ink"
+                className="admin-icon-btn"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="admin-panel-body space-y-4">
               {names.length > 0 && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {names.map((name) => (
@@ -776,8 +800,8 @@ export function VariantManager({
               </div>
 
               {error && (
-                <p role="alert" className="text-[12.5px] font-medium text-red-600">
-                  {error}
+                <p role="alert" className="admin-notice admin-notice--bad">
+                  <span>{error}</span>
                 </p>
               )}
 
@@ -802,6 +826,7 @@ export function VariantManager({
             </div>
           </div>
         )}
+      </div>
       </div>
     </section>
   );

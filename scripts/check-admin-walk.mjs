@@ -115,13 +115,18 @@ try {
           el => el.getAttribute('href') === ${JSON.stringify(href)}
         );
         if (!a) return { state: 'NOT_FOUND' };
+        // The sidebar scrolls on its own, so a link near the bottom of a
+        // short window is below the fold. It is brought into view first —
+        // otherwise the point being measured is off the screen and there
+        // is nothing at it to report.
+        a.scrollIntoView({ block: 'center' });
         const r = a.getBoundingClientRect();
         // What is actually on top at the link's centre?
         const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         a.click();
         return {
           state: 'CLICKED',
-          covered: top !== a && !a.contains(top) ? top.tagName + '.' + String(top.className).slice(0, 40) : null,
+          covered: top && top !== a && !a.contains(top) ? top.tagName + '.' + String(top.className).slice(0, 40) : null,
         };
       })()`);
 

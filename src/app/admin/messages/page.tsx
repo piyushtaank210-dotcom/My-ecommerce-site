@@ -5,11 +5,14 @@ import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { CONTACT_SUBJECTS } from "@/lib/contact";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { MessageStatusSelect } from "@/components/admin/MessageStatusSelect";
 import { EnquiryEmailStatus } from "@/components/admin/EnquiryEmailStatus";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
+import { Badge } from "@/components/admin/ui/Badge";
 
 export const metadata = { title: "Enquiries" };
 
@@ -64,15 +67,14 @@ export default async function AdminMessagesPage({
   };
 
   return (
-    <div className="mx-auto max-w-[1100px]">
-      <header className="mb-6">
-        <h1 className="text-[26px] font-bold text-ink">Enquiries</h1>
-        <p className="mt-1.5 text-[13.5px] text-gray-500">
-          {total} message{total === 1 ? "" : "s"} from the contact page.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Sales"
+        title="Enquiries"
+        description={`${total} message${total === 1 ? "" : "s"} from the contact page. Answer the new ones first.`}
+      />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar">
         <PanelSearch placeholder="Search name, email, body or order" />
         <PanelFilter
           name="status"
@@ -101,78 +103,84 @@ export default async function AdminMessagesPage({
       </div>
 
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-          <MessageSquare className="h-9 w-9 text-gray-300" />
-          <h2 className="mt-4 text-[16px] font-semibold text-ink">
-            No messages match
-          </h2>
-          <Link href="/admin/messages" className="btn btn-outline btn-sm mt-5">
-            Clear filters
-          </Link>
-        </div>
+        <EmptyState
+          icon={MessageSquare}
+          title="No messages match"
+          description="Nothing here matches the search and the filters. Clear them and the whole list comes back."
+          action={
+            <Link href="/admin/messages" className="btn btn-outline btn-sm">
+              Clear filters
+            </Link>
+          }
+        />
       ) : (
-        <div className="space-y-3">
-          {messages.map((m) => (
-            <article
-              key={m.id}
-              className="rounded-xl border border-gray-200 bg-white p-5"
-            >
-              <header className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
+        <>
+          <div className="space-y-3">
+            {messages.map((m) => (
+              <article key={m.id} className="admin-panel">
+                <div className="admin-panel-head">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="neutral">
+                        {SUBJECT_LABEL[m.subject] ?? m.subject}
+                      </Badge>
+                      {m.order_id && (
+                        <Link
+                          href={`/admin/orders/${m.order_id}`}
+                          className="tnum rounded-full bg-brand-tint px-2.5 py-0.5 text-[11.5px] font-semibold text-brand hover:underline"
+                        >
+                          {m.order_id}
+                        </Link>
+                      )}
+                      {m.status === "new" && (
+                        <Badge tone="warn">New</Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[14px] font-semibold text-ink">
+                      {m.name}
+                    </p>
+                    <p className="text-[12.5px] text-gray-500">
+                      {m.email} · {formatDate(m.created_at)}
+                    </p>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-gray-600">
-                      {SUBJECT_LABEL[m.subject] ?? m.subject}
-                    </span>
-                    {m.order_id && (
-                      <Link
-                        href={`/admin/orders/${m.order_id}`}
-                        className="tnum rounded-full bg-brand-tint px-2.5 py-0.5 text-[11.5px] font-semibold text-brand hover:underline"
-                      >
-                        {m.order_id}
-                      </Link>
-                    )}
-                    {m.status === "new" && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-700">
-                        New
-                      </span>
+                    <EnquiryEmailStatus
+                      messageId={m.id}
+                      status={m.email_status}
+                      sentAt={m.email_sent_at}
+                    />
+                    {canHandle && (
+                      <MessageStatusSelect messageId={m.id} status={m.status} />
                     )}
                   </div>
-                  <p className="mt-2 text-[14px] font-semibold text-ink">
-                    {m.name}
-                  </p>
-                  <p className="text-[12.5px] text-gray-500">
-                    {m.email} · {formatDate(m.created_at)}
-                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <EnquiryEmailStatus
-                    messageId={m.id}
-                    status={m.email_status}
-                    sentAt={m.email_sent_at}
-                  />
-                  {canHandle && (
-                    <MessageStatusSelect messageId={m.id} status={m.status} />
+                <div className="admin-panel-body">
+                  <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-gray-600">
+                    {m.message}
+                  </p>
+
+                  {m.handled_by_name && (
+                    <p className="mt-3 border-t border-gray-100 pt-2.5 text-[12px] text-gray-400">
+                      Handled by {m.handled_by_name}
+                      {m.handled_at ? ` on ${formatDate(m.handled_at)}` : ""}
+                    </p>
                   )}
                 </div>
-              </header>
+              </article>
+            ))}
+          </div>
 
-              <p className="mt-3 whitespace-pre-line text-[13.5px] leading-relaxed text-gray-600">
-                {m.message}
-              </p>
-
-              {m.handled_by_name && (
-                <p className="mt-3 border-t border-gray-100 pt-2.5 text-[12px] text-gray-400">
-                  Handled by {m.handled_by_name}
-                  {m.handled_at ? ` on ${formatDate(m.handled_at)}` : ""}
-                </p>
-              )}
-            </article>
-          ))}
-        </div>
+          <div className="admin-table-foot">
+            <span className="tnum">
+              Showing {(page - 1) * PER_PAGE + 1}–
+              {(page - 1) * PER_PAGE + messages.length} of {total}
+            </span>
+            <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
+          </div>
+        </>
       )}
-
-      <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
-    </div>
+    </>
   );
 }

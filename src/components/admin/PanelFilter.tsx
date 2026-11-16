@@ -45,7 +45,7 @@ export function PanelFilter({
       value={current}
       onChange={onChange}
       aria-label={label}
-      className="h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium text-ink"
+      className="admin-filter"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

@@ -1,15 +1,17 @@
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, Inbox } from "lucide-react";
 import { countOrders, listOrders } from "@/lib/admin";
 import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL } from "@/lib/orders";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { OrderStatusSelect } from "@/components/admin/OrderStatusSelect";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
 
 export const metadata = { title: "Orders" };
 
@@ -77,20 +79,10 @@ export default async function AdminOrdersPage({
         key={value}
         href={`/admin/orders${qs ? `?${qs}` : ""}`}
         aria-current={active ? "page" : undefined}
-        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-          active
-            ? "border-brand bg-brand text-white"
-            : "border-gray-200 bg-white text-gray-600 hover:border-brand hover:text-brand"
-        }`}
+        className="admin-tab"
       >
         {label}
-        <span
-          className={`tnum rounded-full px-1.5 py-0.5 text-[11px] ${
-            active ? "bg-white/20" : "bg-gray-100 text-gray-600"
-          }`}
-        >
-          {count}
-        </span>
+        <span className="admin-tab-count">{count}</span>
       </Link>
     );
   };
@@ -101,15 +93,37 @@ export default async function AdminOrdersPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-[1600px]">
-      <header className="mb-6">
-        <h1 className="text-[26px] font-bold text-ink">Orders</h1>
-        <p className="mt-1.5 text-[13.5px] text-gray-500">
-          {total} order{total === 1 ? "" : "s"} — newest first.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Sales"
+        title="Orders"
+        description={`${total} order${total === 1 ? "" : "s"} — newest first.`}
+      />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      {/* The statuses as tabs, each with the number of orders behind
+          it. The pending ones are the first thing on the list, because
+          they are the ones waiting on the back office. */}
+      <nav className="admin-tabs mb-5" aria-label="Orders by status">
+        {tabs}
+      </nav>
+
+      {pendingCount > 0 && status !== "pending" && (
+        <p className="admin-notice admin-notice--warn mb-5">
+          <Inbox className="admin-notice-icon h-4 w-4" />
+          <span>
+            {pendingCount} order{pendingCount === 1 ? " is" : "s are"} waiting to
+            be checked.{" "}
+            <Link
+              href={`/admin/orders${q ? `?q=${encodeURIComponent(q)}&status=pending` : "?status=pending"}`}
+              className="font-semibold underline"
+            >
+              See {pendingCount === 1 ? "it" : "them"}
+            </Link>
+          </span>
+        </p>
+      )}
+
+      <div className="admin-toolbar">
         <PanelSearch placeholder="Search order, name, email or phone" />
         <PanelFilter
           name="status"
@@ -125,107 +139,89 @@ export default async function AdminOrdersPage({
         />
       </div>
 
-      {/* The statuses as tabs, each with the number of orders behind
-          it. The pending ones are the first thing on the list, because
-          they are the ones waiting on the back office. */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">{tabs}</div>
-
-      {pendingCount > 0 && status !== "pending" && (
-        <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-          {pendingCount} order{pendingCount === 1 ? " is" : "s are"} waiting to
-          be checked.{" "}
-          <Link
-            href={`/admin/orders${q ? `?q=${encodeURIComponent(q)}&status=pending` : "?status=pending"}`}
-            className="font-semibold underline"
-          >
-            See {pendingCount === 1 ? "it" : "them"}
-          </Link>
-        </p>
-      )}
-
       {orders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-          <ShoppingBag className="h-9 w-9 text-gray-300" />
-          <h2 className="mt-4 text-[16px] font-semibold text-ink">
-            No orders match
-          </h2>
-          <Link href="/admin/orders" className="btn btn-outline btn-sm mt-5">
-            Clear filters
-          </Link>
-        </div>
+        <EmptyState
+          icon={ShoppingBag}
+          title="No orders match"
+          description="Nothing here matches the search and the filters. Clear them and the whole list comes back."
+          action={
+            <Link href="/admin/orders" className="btn btn-outline btn-sm">
+              Clear filters
+            </Link>
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full min-w-[1000px] text-left text-[13.5px]">
-            <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Order</th>
-                <th className="px-4 py-3 font-semibold">Customer</th>
-                <th className="px-4 py-3 font-semibold">Delivery</th>
-                <th className="px-4 py-3 font-semibold">Items</th>
-                <th className="px-4 py-3 font-semibold">Total</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Payment</th>
-                <th className="px-4 py-3 text-right font-semibold">Open</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {orders.map((o) => (
-                <tr
-                  key={o.id}
-                  className={
-                    o.status === "pending"
-                      ? "bg-amber-50/40"
-                      : "bg-white"
-                  }
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/orders/${o.id}`}
-                      className="tnum font-semibold text-brand hover:underline"
-                    >
-                      {o.id}
-                    </Link>
-                    <p className="text-[12px] text-gray-500">
-                      {formatDate(o.created_at)}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink">{o.name}</p>
-                    <p className="text-[12px] text-gray-500">{o.email}</p>
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-gray-500">
-                    {o.city}, {o.state}
-                  </td>
-                  <td className="tnum px-4 py-3 text-gray-500">{o.item_count}</td>
-                  <td className="tnum px-4 py-3 font-semibold text-ink">
-                    {money(o.total)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {canUpdate ? (
-                      <OrderStatusSelect orderId={o.id} status={o.status} />
-                    ) : (
-                      <OrderStatusBadge status={o.status} size="sm" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PaymentStatusBadge status={o.payment_status} size="sm" />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/admin/orders/${o.id}`}
-                      className="text-[13px] font-medium text-brand hover:underline"
-                    >
-                      Open
-                    </Link>
-                  </td>
+        <>
+          <div className="admin-table-wrap">
+            <table className="admin-table" style={{ minWidth: 940 }}>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Customer</th>
+                  <th>Delivery</th>
+                  <th className="admin-th-num">Items</th>
+                  <th className="admin-th-num">Total</th>
+                  <th>Status</th>
+                  <th>Payment</th>
+                  <th className="admin-th-num">Open</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id} data-hl={o.status === "pending" ? "warn" : undefined}>
+                    <td>
+                      <Link
+                        href={`/admin/orders/${o.id}`}
+                        className="tnum text-[13px] font-semibold text-brand hover:underline"
+                      >
+                        {o.id}
+                      </Link>
+                      <span className="admin-cell-sub">{formatDate(o.created_at)}</span>
+                    </td>
+                    <td>
+                      <span className="admin-cell-title">{o.name}</span>
+                      <span className="admin-cell-sub">{o.email}</span>
+                    </td>
+                    <td className="text-[12.5px] text-gray-500">
+                      {o.city}, {o.state}
+                    </td>
+                    <td className="admin-td-num text-gray-500">{o.item_count}</td>
+                    <td className="admin-td-num font-semibold text-ink">
+                      {money(o.total)}
+                    </td>
+                    <td>
+                      {canUpdate ? (
+                        <OrderStatusSelect orderId={o.id} status={o.status} />
+                      ) : (
+                        <OrderStatusBadge status={o.status} variant="admin" />
+                      )}
+                    </td>
+                    <td>
+                      <PaymentStatusBadge status={o.payment_status} variant="admin" />
+                    </td>
+                    <td className="admin-td-actions">
+                      <Link
+                        href={`/admin/orders/${o.id}`}
+                        className="text-[13px] font-medium text-brand hover:underline"
+                      >
+                        Open
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
-    </div>
+          <div className="admin-table-foot">
+            <span className="tnum">
+              Showing {(page - 1) * PER_PAGE + 1}–
+              {(page - 1) * PER_PAGE + orders.length} of {total}
+            </span>
+            <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
+          </div>
+        </>
+      )}
+    </>
   );
 }

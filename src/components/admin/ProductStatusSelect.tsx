@@ -50,7 +50,7 @@ export function ProductStatusSelect({
       disabled={disabled || pending}
       aria-label={`Status for ${slug}`}
       onChange={(e) => change(e.target.value)}
-      className="h-8 cursor-pointer rounded-lg border border-gray-200 bg-white px-2 text-[12px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-50"
+      className="admin-select-sm"
     >
       {PRODUCT_STATUSES.map((s) => (
         <option key={s} value={s}>

@@ -48,11 +48,8 @@ export function ProductListingToggle({
       disabled={pending}
       aria-pressed={isListed}
       title={isListed ? "Delist this product" : "Put this product back in the shop"}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-semibold transition-colors disabled:opacity-60 ${
-        isListed
-          ? "border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-600"
-          : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-      }`}
+      className="admin-toggle"
+      data-on={isListed ? "true" : "false"}
     >
       {pending ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />

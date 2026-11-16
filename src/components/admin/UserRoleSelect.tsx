@@ -39,7 +39,7 @@ export function UserRoleSelect({
         disabled={disabled}
         aria-label={`Role for account ${userId}`}
         onChange={() => formRef.current?.requestSubmit()}
-        className="h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        className="admin-select-sm"
       >
         {ROLES.map((r) => (
           <option key={r} value={r}>

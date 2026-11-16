@@ -43,10 +43,10 @@ export function PanelSearch({
         e.preventDefault();
         submit(value);
       }}
-      className="relative w-full sm:w-72"
+      className="admin-search"
       role="search"
     >
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <Search className="admin-search-icon h-4 w-4" />
       <input
         type="search"
         name={param}
@@ -54,7 +54,6 @@ export function PanelSearch({
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="input h-9 pl-9 pr-8 text-[13px] [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button
@@ -64,7 +63,7 @@ export function PanelSearch({
             submit("");
           }}
           aria-label="Clear the search"
-          className="absolute right-2.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink"
+          className="admin-search-clear"
         >
           <X className="h-3.5 w-3.5" />
         </button>

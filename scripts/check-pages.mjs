@@ -13,22 +13,15 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { randomBytes } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import { launchChrome } from "./lib/browser.mjs";
+import { tokenForRole } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const user = db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
-if (!user) throw new Error("no admin account to sign in as");
-const token = randomBytes(32).toString("hex");
-db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(
-  token,
-  user.id,
-  new Date(Date.now() + 3600_000).toISOString()
-);
+// The session is made in the shop's own database, which is the one the
+// back office looks at.
+const token = await tokenForRole("admin");
 
 const { chrome, cdp } = await launchChrome({
   port: 9336,
@@ -106,7 +99,6 @@ for (const path of pages) {
 }
 
 chrome.kill();
-db.close();
 
 console.log(
   failures === 0

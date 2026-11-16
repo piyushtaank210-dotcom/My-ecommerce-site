@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   MapPin,
   CreditCard,
   Package,
@@ -13,7 +12,7 @@ import {
   User,
   CalendarClock,
 } from "lucide-react";
-import { getReturnRequestsForOrder, RETURN_STATUS_LABEL, RETURN_STATUS_TONE } from "@/lib/returns";
+import { getReturnRequestsForOrder } from "@/lib/returns";
 import { getOrder } from "@/lib/orders";
 import { requirePermission } from "@/lib/guard";
 import { can } from "@/lib/roles";
@@ -27,6 +26,11 @@ import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBa
 import { OrderActionBar } from "@/components/admin/OrderActionBar";
 import { OrderStatusSteps } from "@/components/admin/OrderStatusSteps";
 import { OrderCancellationPanel } from "@/components/admin/OrderCancellationPanel";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { Panel } from "@/components/admin/ui/Panel";
+import { ReturnStatusBadge } from "@/components/admin/ui/StatusBadge";
+import { Badge } from "@/components/admin/ui/Badge";
+import { REFUND_TONE } from "@/lib/status-tone";
 
 export const metadata = { title: "Order" };
 
@@ -58,56 +62,41 @@ export default async function AdminOrderDetailPage({
         : null;
 
   return (
-    <div className="mx-auto max-w-[1280px]">
-      {/* ---------------------------------------------------------- header */}
-      <header className="mb-6">
-        <Link
-          href="/admin/orders"
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-500 transition-colors hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Orders
-        </Link>
-
-        <div className="mt-2.5 flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="tnum text-[26px] font-bold leading-tight text-ink">
-              Order {order.id}
-            </h1>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-gray-500">
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarClock className="h-3.5 w-3.5" />
-                Placed {formatDate(order.created_at)}
-              </span>
-              <span className="text-gray-300" aria-hidden="true">
-                /
-              </span>
-              <Link
-                href={`/admin/users?q=${encodeURIComponent(customer?.email ?? order.email)}`}
-                className="inline-flex items-center gap-1.5 font-medium text-brand hover:underline"
-              >
-                <User className="h-3.5 w-3.5" />
-                {customer?.name || order.name}
-              </Link>
-            </p>
-          </div>
-
-          {/* The order's own status, and the payment's — two separate
-              things, shown separately. */}
+    <>
+      <PageHeader
+        back={{ href: "/admin/orders", label: "Orders" }}
+        eyebrow="Sales"
+        title={`Order ${order.id}`}
+        meta={
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Placed {formatDate(order.created_at)}
+            </span>
+            <Link
+              href={`/admin/users?q=${encodeURIComponent(customer?.email ?? order.email)}`}
+              className="inline-flex items-center gap-1.5 font-semibold text-brand hover:underline"
+            >
+              <User className="h-3.5 w-3.5" />
+              {customer?.name || order.name}
+            </Link>
+          </>
+        }
+        actions={
           <div className="flex flex-wrap items-center gap-2">
-            <OrderStatusBadge status={order.status} />
-            <PaymentStatusBadge status={order.payment_status} />
+            <OrderStatusBadge status={order.status} variant="admin" />
+            <PaymentStatusBadge status={order.payment_status} variant="admin" />
           </div>
-        </div>
-      </header>
+        }
+      />
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+      <div className="admin-split">
         {/* ------------------------------------------------------ the order */}
-        <div className="space-y-5">
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <h2 className="border-b border-gray-200 px-5 py-4 text-[15px] font-bold text-ink">
-              Items ({order.items.length})
-            </h2>
+        <div className="flex min-w-0 flex-col gap-5">
+          <Panel
+            title={`Items (${order.items.length})`}
+            bodyClass="admin-panel-body--flush"
+          >
             <ul className="divide-y divide-gray-200">
               {order.items.map((item, i) => (
                 <li
@@ -187,7 +176,7 @@ export default async function AdminOrderDetailPage({
                 </dd>
               </div>
             </dl>
-          </section>
+          </Panel>
 
           {/* --------------------------------------------------- the actions */}
           {canUpdate ? (
@@ -203,125 +192,114 @@ export default async function AdminOrderDetailPage({
               refundStatus={order.refund_status}
             />
           ) : (
-            <section className="rounded-xl border border-gray-200 bg-white px-5 py-4">
+            <Panel>
               <p className="text-[13px] text-gray-500">
                 Your role does not allow the order to be changed.
               </p>
-            </section>
+            </Panel>
           )}
 
           {canUpdate && <OrderStatusSteps orderId={order.id} status={order.status} />}
         </div>
 
         {/* ---------------------------------------------------- the sidebar */}
-        <div className="space-y-5">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* The dispatch. */}
           {hasShipping && (
-            <section className="rounded-xl border border-gray-200 bg-white">
-              <h2 className="flex items-center gap-2 border-b border-gray-200 px-5 py-3.5 text-[14px] font-bold text-ink">
-                <Truck className="h-4 w-4 text-brand" />
-                Shipping information
-              </h2>
-              <dl className="divide-y divide-gray-100">
-                <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Courier partner</dt>
-                  <dd className="text-right text-[13px] font-semibold text-ink">
-                    {order.courier_partner}
-                  </dd>
+            <Panel
+              title={
+                <>
+                  <Truck className="h-4 w-4 text-brand" />
+                  Shipping information
+                </>
+              }
+              bodyClass="admin-panel-body--tight"
+            >
+              <dl className="admin-facts">
+                <div className="admin-fact">
+                  <dt>Courier partner</dt>
+                  <dd>{order.courier_partner}</dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Shipping method</dt>
-                  <dd className="text-right text-[13px] font-semibold text-ink">
-                    {shippingMethod || "—"}
-                  </dd>
+                <div className="admin-fact">
+                  <dt>Shipping method</dt>
+                  <dd>{shippingMethod || "—"}</dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Tracking / AWB</dt>
-                  <dd className="tnum min-w-0 break-all text-right text-[13px] font-semibold text-ink">
-                    {order.tracking_id}
-                  </dd>
+                <div className="admin-fact">
+                  <dt>Tracking / AWB</dt>
+                  <dd className="tnum min-w-0 break-all">{order.tracking_id}</dd>
                 </div>
                 {order.shipping_confirmed_at && (
-                  <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                    <dt className="text-[12.5px] text-gray-500">Confirmed on</dt>
-                    <dd className="text-right text-[13px] font-semibold text-ink">
-                      {formatDate(order.shipping_confirmed_at)}
-                    </dd>
+                  <div className="admin-fact">
+                    <dt>Confirmed on</dt>
+                    <dd>{formatDate(order.shipping_confirmed_at)}</dd>
                   </div>
                 )}
               </dl>
               {trackingUrl && (
-                <div className="border-t border-gray-200 px-5 py-3.5">
+                <div className="mt-3 border-t border-gray-100 pt-3">
                   <a
                     href={trackingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand hover:underline"
+                    className="admin-links"
                   >
                     Track with {order.courier_partner}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
               )}
-            </section>
+            </Panel>
           )}
 
           {/* The cancellation. */}
           {cancelled && (
-            <section className="rounded-xl border border-red-200 bg-red-50/40">
-              <h2 className="flex items-center gap-2 border-b border-red-200 px-5 py-3.5 text-[14px] font-bold text-ink">
-                <XCircle className="h-4 w-4 text-red-600" />
-                Cancellation
-              </h2>
-              <dl className="divide-y divide-red-100">
-                <div className="px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Reason</dt>
-                  <dd className="mt-1 text-[13px] font-medium text-ink">
-                    {order.cancellation_reason || "Not recorded."}
-                  </dd>
+            <Panel
+              tone="bad"
+              title={
+                <>
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  Cancellation
+                </>
+              }
+              bodyClass="admin-panel-body--tight"
+            >
+              <dl className="admin-facts">
+                <div className="admin-fact">
+                  <dt>Reason</dt>
+                  <dd className="text-left">{order.cancellation_reason || "Not recorded."}</dd>
                 </div>
                 {order.cancelled_at && (
-                  <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                    <dt className="text-[12.5px] text-gray-500">Cancelled on</dt>
-                    <dd className="text-right text-[13px] font-semibold text-ink">
-                      {formatDate(order.cancelled_at)}
-                    </dd>
+                  <div className="admin-fact">
+                    <dt>Cancelled on</dt>
+                    <dd>{formatDate(order.cancelled_at)}</dd>
                   </div>
                 )}
               </dl>
-            </section>
+            </Panel>
           )}
 
           {/* The refund. */}
           {(refund || order.refund_status !== "none") && (
-            <section className="rounded-xl border border-gray-200 bg-white">
-              <h2 className="flex items-center gap-2 border-b border-gray-200 px-5 py-3.5 text-[14px] font-bold text-ink">
-                <Undo2 className="h-4 w-4 text-brand" />
-                Refund
-              </h2>
-              <dl className="divide-y divide-gray-100">
-                <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Amount</dt>
-                  <dd className="tnum text-right text-[13px] font-semibold text-ink">
-                    {order.refund_amount !== null
-                      ? money(order.refund_amount)
-                      : "—"}
+            <Panel
+              title={
+                <>
+                  <Undo2 className="h-4 w-4 text-brand" />
+                  Refund
+                </>
+              }
+              bodyClass="admin-panel-body--tight"
+            >
+              <dl className="admin-facts">
+                <div className="admin-fact">
+                  <dt>Amount</dt>
+                  <dd className="tnum">
+                    {order.refund_amount !== null ? money(order.refund_amount) : "—"}
                   </dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                  <dt className="text-[12.5px] text-gray-500">Status</dt>
-                  <dd className="text-right">
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                        order.refund_status === "processed"
-                          ? "border-green-200 bg-green-50 text-green-700"
-                          : order.refund_status === "pending"
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : order.refund_status === "failed"
-                              ? "border-red-200 bg-red-50 text-red-700"
-                              : "border-gray-200 bg-gray-50 text-gray-600"
-                      }`}
-                    >
+                <div className="admin-fact">
+                  <dt>Status</dt>
+                  <dd>
+                    <Badge tone={REFUND_TONE[order.refund_status] ?? "neutral"}>
                       {order.refund_status === "processed"
                         ? "Paid back"
                         : order.refund_status === "pending"
@@ -329,41 +307,37 @@ export default async function AdminOrderDetailPage({
                           : order.refund_status === "failed"
                             ? "Failed"
                             : "Not started"}
-                    </span>
+                    </Badge>
                   </dd>
                 </div>
                 {order.refund_id && (
-                  <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                    <dt className="text-[12.5px] text-gray-500">Razorpay refund ID</dt>
-                    <dd className="tnum min-w-0 break-all text-right text-[12.5px] font-semibold text-ink">
+                  <div className="admin-fact">
+                    <dt>Razorpay refund ID</dt>
+                    <dd className="tnum min-w-0 break-all text-[12px]">
                       {order.refund_id}
                     </dd>
                   </div>
                 )}
                 {order.refunded_at && (
-                  <div className="flex items-baseline justify-between gap-3 px-5 py-3">
-                    <dt className="text-[12.5px] text-gray-500">Paid back on</dt>
-                    <dd className="text-right text-[13px] font-semibold text-ink">
-                      {formatDate(order.refunded_at)}
-                    </dd>
-                  </div>
-                )}
-                {order.refund_error && (
-                  <div className="px-5 py-3">
-                    <dt className="text-[12.5px] text-gray-500">Last error</dt>
-                    <dd className="mt-1 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-700">
-                      {order.refund_error}
-                    </dd>
+                  <div className="admin-fact">
+                    <dt>Paid back on</dt>
+                    <dd>{formatDate(order.refunded_at)}</dd>
                   </div>
                 )}
               </dl>
+              {order.refund_error && (
+                <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-700">
+                  <span className="block font-semibold">Last error</span>
+                  {order.refund_error}
+                </p>
+              )}
               {order.refund_status === "pending" && (
-                <p className="border-t border-gray-200 px-5 py-3 text-[12px] text-gray-500">
+                <p className="mt-3 border-t border-gray-100 pt-3 text-[12px] text-gray-500">
                   The payment provider has accepted the refund. It has not
                   reached the customer yet — it takes 5–7 working days.
                 </p>
               )}
-            </section>
+            </Panel>
           )}
 
           {/* A cancellation the customer asked for. */}
@@ -376,11 +350,14 @@ export default async function AdminOrderDetailPage({
           )}
 
           {/* The address. */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
-              <MapPin className="h-4 w-4 text-brand" />
-              Delivery address
-            </h2>
+          <Panel
+            title={
+              <>
+                <MapPin className="h-4 w-4 text-brand" />
+                Delivery address
+              </>
+            }
+          >
             <address className="text-[13px] not-italic leading-relaxed text-gray-500">
               <span className="block font-semibold text-ink">{order.name}</span>
               {order.address1}
@@ -395,19 +372,22 @@ export default async function AdminOrderDetailPage({
               <br />
               <span className="tnum">{order.phone}</span>
             </address>
-          </section>
+          </Panel>
 
           {/* The payment. */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
-              <CreditCard className="h-4 w-4 text-brand" />
-              Payment
-            </h2>
+          <Panel
+            title={
+              <>
+                <CreditCard className="h-4 w-4 text-brand" />
+                Payment
+              </>
+            }
+          >
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[13px] text-gray-600">
                 {paymentMethodLabel(order.payment_method)}
               </p>
-              <PaymentStatusBadge status={order.payment_status} size="sm" />
+              <PaymentStatusBadge status={order.payment_status} variant="admin" />
             </div>
             {order.payment_gateway && (
               <p className="mt-1.5 text-[12.5px] text-gray-500">
@@ -436,35 +416,32 @@ export default async function AdminOrderDetailPage({
                 {order.notes}
               </p>
             )}
-          </section>
+          </Panel>
 
           {/* Returns and replacements. */}
           {returns.length > 0 && (
-            <section className="rounded-xl border border-gray-200 bg-white p-5">
-              <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
-                <RotateCcw className="h-4 w-4 text-brand" />
-                Returns &amp; Replacements ({returns.length})
-              </h2>
+            <Panel
+              title={
+                <>
+                  <RotateCcw className="h-4 w-4 text-brand" />
+                  Returns &amp; Replacements ({returns.length})
+                </>
+              }
+            >
               <div className="space-y-3">
                 {returns.map((ret) => (
                   <div
                     key={ret.id}
                     className="rounded-lg border border-gray-200 p-3 text-[13px]"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <Link
                         href={`/admin/returns/${ret.id}`}
                         className="tnum font-bold text-brand hover:underline"
                       >
                         {ret.id}
                       </Link>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize ${
-                          RETURN_STATUS_TONE[ret.status] ?? "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {RETURN_STATUS_LABEL[ret.status]}
-                      </span>
+                      <ReturnStatusBadge status={ret.status} />
                     </div>
                     <p className="mt-1 text-[12px] text-gray-500">
                       {ret.type === "replacement" ? "Replacement" : "Return & Refund"} ·{" "}
@@ -479,7 +456,7 @@ export default async function AdminOrderDetailPage({
                   </div>
                 ))}
               </div>
-            </section>
+            </Panel>
           )}
 
           <Link
@@ -491,6 +468,6 @@ export default async function AdminOrderDetailPage({
           </Link>
         </div>
       </div>
-    </div>
+    </>
   );
 }

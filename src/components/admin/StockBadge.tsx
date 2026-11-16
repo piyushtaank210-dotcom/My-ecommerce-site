@@ -1,4 +1,6 @@
-import { STOCK_LEVEL_LABEL, STOCK_LEVEL_TONE, type StockLevel } from "@/lib/stock";
+import { STOCK_LEVEL_LABEL, type StockLevel } from "@/lib/stock";
+import { Badge } from "./ui/Badge";
+import { STOCK_LEVEL_TONE } from "@/lib/status-tone";
 
 /** The pill a stock level is shown in. */
 export function StockBadge({
@@ -9,10 +11,8 @@ export function StockBadge({
   className?: string;
 }) {
   return (
-    <span
-      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${STOCK_LEVEL_TONE[level]} ${className}`}
-    >
+    <Badge tone={STOCK_LEVEL_TONE[level] ?? "neutral"} className={className}>
       {STOCK_LEVEL_LABEL[level]}
-    </span>
+    </Badge>
   );
 }

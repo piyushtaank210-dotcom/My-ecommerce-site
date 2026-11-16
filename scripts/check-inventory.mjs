@@ -18,31 +18,47 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
 import {
   clickByText,
   launchChrome,
   setInput,
+  waitFor,
 } from "./lib/browser.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PORT = 9333;
 
+/**
+ * Picks the cash-on-delivery method on the checkout.
+ *
+ * The card path opens Razorpay's own checkout on their site, which a
+ * browser cannot drive. The money at the door is a method the shop takes,
+ * so an order is placed that way; the payment itself is exercised by the
+ * payment check, which has a gateway to pay through.
+ */
+const pickCashOnDelivery = `(() => {
+  const el = document.querySelector('input[name="paymentMethod"][value="cod"]');
+  if (!el) return 'NOT_FOUND';
+  el.click();
+  return 'CLICKED';
+})()`;
+
 /** The product the order test buys. It has no options of its own. */
 const PRODUCT = "dualsense-charging-station";
 /** A product that is stocked by its options, each counted separately. */
 const WITH_OPTIONS = "dualsense-white";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
+
+const admin = await tokenForRole("admin");
 
 /** The stock the product started the run with, so it can be put back. */
-const ORIGINAL_STOCK = db
-  .prepare("SELECT stock FROM products WHERE slug = ?")
-  .get(PRODUCT)?.stock;
+const ORIGINAL_STOCK = (
+  await db.prepare("SELECT stock FROM products WHERE slug = ?").get(PRODUCT)
+)?.stock;
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -141,7 +157,7 @@ console.log("\n→ the inventory page and its API");
     `status ${anon.status}`
   );
 
-  const support = tokenForRole(db, "support");
+  const support = await tokenForRole("support");
   const asSupport = await api("/api/admin/inventory", { cookie: support });
   check("support can see the stock", asSupport.status === 200);
   const supportAdjust = await api("/api/admin/inventory/adjust", {
@@ -434,6 +450,10 @@ async function placeOrder() {
     await cdp.evaluate(setInput("state", "Maharashtra"));
     await cdp.evaluate(setInput("pincode", "411045"));
     await sleep(300);
+    // The money is taken at the door for this order. The other way round
+    // is taken by the payment check, which has a gateway to pay through.
+    await cdp.evaluate(pickCashOnDelivery);
+    await sleep(250);
     await cdp.evaluate(clickByText("Place order"));
     for (let i = 0; i < 12; i++) {
       await sleep(500);
@@ -514,9 +534,11 @@ try {
     }
 
     console.log("\n→ cancelling gives the stock back");
+    // A cancellation says why — the reason is kept with the order — so
+    // the request carries one.
     const cancelled = await api(`/api/admin/orders/${orderId}`, {
       method: "PATCH",
-      body: { status: "cancelled" },
+      body: { status: "cancelled", reasonCode: "customer_requested" },
     });
     check("the order can be cancelled", cancelled.status === 200, `status ${cancelled.status}`);
 
@@ -571,7 +593,7 @@ try {
     });
     await api(`/api/admin/orders/${orderId}`, {
       method: "PATCH",
-      body: { status: "cancelled" },
+      body: { status: "cancelled", reasonCode: "customer_requested" },
     });
     const afterReturn = await bucket(PRODUCT);
     check(
@@ -632,7 +654,7 @@ console.log("\n→ putting the store back as it was found");
       `${now.stock}`
     );
   }
-  db.close();
+  await closeDb();
 }
 
 console.log(

@@ -81,8 +81,8 @@ try {
 
   const page = await cdp.evaluate(`(() => {
     const h1 = document.querySelector('h1');
-    const cards = [...document.querySelectorAll('.rounded-xl.border')].map(c => {
-      const l = c.querySelector('p');
+    const cards = [...document.querySelectorAll('.admin-stat')].map(c => {
+      const l = c.querySelector('.admin-stat-label');
       return l ? l.textContent.trim() : '';
     });
     const heads = [...document.querySelectorAll('thead th')].map(t => t.textContent.trim());

@@ -161,21 +161,23 @@ export function OrderActionBar({
 
   return (
     <>
-      <section className="rounded-xl border border-gray-200 bg-white">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3.5">
-          <h2 className="text-[14px] font-bold text-ink">Order actions</h2>
-          {!cancelled && (
-            <span className="text-[12px] text-gray-500">
-              {pending
-                ? "This order is waiting to be checked. Confirm it with its shipping details."
-                : hasShipping
-                  ? "The shipping details below can be changed."
-                  : "Save the shipping details before the order is confirmed."}
-            </span>
-          )}
-        </header>
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">Order actions</h2>
+            <p className="admin-panel-sub">
+              {!cancelled
+                ? pending
+                  ? "This order is waiting to be checked. Confirm it with its shipping details."
+                  : hasShipping
+                    ? "The shipping details below can be changed."
+                    : "Save the shipping details before the order is confirmed."
+                : "This order was cancelled."}
+            </p>
+          </div>
+        </div>
 
-        <div className="px-5 py-4">
+        <div className="admin-panel-body">
           <div className="flex flex-wrap items-center gap-3">
             {cancelled ? (
               <p className="flex items-center gap-2 text-[13px] font-medium text-red-700">
@@ -598,7 +600,7 @@ function CancelModal({
           <button
             type="submit"
             disabled={pending}
-            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+            className="btn btn-danger disabled:opacity-60"
           >
             {pending ? (
               <>

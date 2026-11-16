@@ -58,12 +58,17 @@ export function OrderStatusSteps({
   const next = NEXT_ORDER_STATUS[current];
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white">
-      <header className="border-b border-gray-200 px-5 py-3.5">
-        <h2 className="text-[14px] font-bold text-ink">Order status</h2>
-      </header>
+    <section className="admin-panel">
+      <div className="admin-panel-head admin-panel-head--plain">
+        <div className="min-w-0">
+          <h2 className="admin-panel-title">Order status</h2>
+          <p className="admin-panel-sub">
+            Where the parcel has got to, and what it moves on to next.
+          </p>
+        </div>
+      </div>
 
-      <div className="px-5 py-4">
+      <div className="admin-panel-body">
         <ol className="flex flex-wrap items-center gap-2">
           {steps.map((step, index) => {
             const done = index < at;

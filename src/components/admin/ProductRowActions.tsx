@@ -59,14 +59,14 @@ export function ProductRowActions({
   }
 
   return (
-    <span className="inline-flex items-center justify-end gap-1">
+    <span className="admin-row-actions">
       <button
         type="button"
         onClick={() => run("duplicate")}
         disabled={pending}
         title="Make a copy as a draft"
         aria-label={`Duplicate ${name}`}
-        className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-brand-tint hover:text-brand disabled:opacity-60"
+        className="admin-icon-btn admin-icon-btn--brand"
       >
         {pending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -82,7 +82,7 @@ export function ProductRowActions({
           disabled={pending}
           title="Put this product back on sale"
           aria-label={`Restore ${name}`}
-          className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-green-50 hover:text-green-700 disabled:opacity-60"
+          className="admin-icon-btn admin-icon-btn--good"
         >
           {pending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -97,7 +97,7 @@ export function ProductRowActions({
           disabled={pending}
           title="Take this product off sale, keeping its data and history"
           aria-label={`Archive ${name}`}
-          className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60"
+          className="admin-icon-btn admin-icon-btn--warn"
         >
           {pending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -114,7 +114,7 @@ export function ProductRowActions({
               type="button"
               onClick={() => run("delete")}
               disabled={pending}
-              className="rounded-lg bg-red-600 px-2 py-1 text-[12px] font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              className="btn btn-danger btn-sm disabled:opacity-60"
             >
               {pending ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -125,7 +125,7 @@ export function ProductRowActions({
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded-lg px-2 py-1 text-[12px] font-medium text-gray-500 hover:bg-gray-100"
+              className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-100"
             >
               Cancel
             </button>
@@ -136,7 +136,7 @@ export function ProductRowActions({
             onClick={() => setConfirming(true)}
             title="Delete this product for good"
             aria-label={`Delete ${name}`}
-            className="grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="admin-icon-btn admin-icon-btn--bad"
           >
             <Trash2 className="h-4 w-4" />
           </button>

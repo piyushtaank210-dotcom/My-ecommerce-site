@@ -76,21 +76,22 @@ export function InventoryAdjustForm({
   }
 
   return (
-    <section
-      id="adjust"
-      className="rounded-xl border border-gray-200 bg-white p-5"
-    >
-      <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-        <SlidersHorizontal className="h-4 w-4 text-brand" />
-        Adjust stock
-      </h2>
-      <p className="mb-4 text-[12.5px] text-gray-500">
-        Every change is written down — what the stock was, what it became,
-        and why.
-      </p>
+    <section id="adjust" className="admin-panel">
+      <div className="admin-panel-head">
+        <div className="min-w-0">
+          <h2 className="admin-panel-title">
+            <SlidersHorizontal className="h-4 w-4 text-brand" />
+            Adjust stock
+          </h2>
+          <p className="admin-panel-sub">
+            Every change is written down — what the stock was, what it became,
+            and why.
+          </p>
+        </div>
+      </div>
 
-      <form action={formAction} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <form action={formAction} className="admin-panel-body space-y-5">
+        <div className="admin-field-grid admin-field-grid--4">
           <div>
             <label htmlFor="productSlug" className="label">
               Product
@@ -109,7 +110,7 @@ export function InventoryAdjustForm({
               ))}
             </select>
             {errors.productSlug && (
-              <p className="mt-1 text-[12.5px] text-red-600">
+              <p className="admin-error">
                 {errors.productSlug}
               </p>
             )}
@@ -145,12 +146,12 @@ export function InventoryAdjustForm({
           </div>
 
           <div>
-            <span className="label">Change</span>
-            <div className="flex h-[42px] overflow-hidden rounded-lg border border-gray-200">
+            <span className="admin-label">Change</span>
+            <div className="flex h-9 overflow-hidden rounded-lg border border-gray-200">
               {ADJUST_MODES.map((m) => (
                 <label
                   key={m}
-                  className={`flex flex-1 cursor-pointer items-center justify-center text-[12.5px] font-medium transition-colors ${
+                  className={`flex flex-1 cursor-pointer items-center justify-center text-[12.5px] font-semibold transition-colors ${
                     mode === m
                       ? "bg-brand text-white"
                       : "bg-white text-gray-600 hover:bg-gray-50"
@@ -184,12 +185,12 @@ export function InventoryAdjustForm({
               className={`input tnum ${errors.quantity ? "input-error" : ""}`}
             />
             {errors.quantity && (
-              <p className="mt-1 text-[12.5px] text-red-600">{errors.quantity}</p>
+              <p className="admin-error">{errors.quantity}</p>
             )}
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
+        <div className="admin-field-grid">
           <div>
             <label htmlFor="reason" className="label">
               Reason
@@ -208,7 +209,7 @@ export function InventoryAdjustForm({
               ))}
             </select>
             {errors.reason && (
-              <p className="mt-1 text-[12.5px] text-red-600">{errors.reason}</p>
+              <p className="admin-error">{errors.reason}</p>
             )}
           </div>
 

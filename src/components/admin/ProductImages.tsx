@@ -186,7 +186,7 @@ export function ProductImages({
   return (
     <div>
       {images.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-[13px] text-gray-500">
+        <div className="flex items-center gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-[13px] text-gray-500">
           <ImagePlus className="h-5 w-5 shrink-0 text-gray-400" />
           <span>
             No photographs yet. A product with a picture of its own sells
@@ -194,19 +194,19 @@ export function ProductImages({
           </span>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {images.map((img, i) => {
             const isMain = img.path === mainPath;
             return (
               <li
                 key={img.id}
-                className={`rounded-xl border bg-white p-3 ${
-                  isMain ? "border-brand" : "border-gray-200"
+                className={`admin-panel p-3 ${
+                  isMain ? "border-brand shadow-[0_0_0_1px_var(--adm-accent)]" : ""
                 }`}
               >
                 <div className="flex gap-3">
                   <span
-                    className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-gray-50"
+                    className="admin-thumb !h-20 !w-20"
                     style={{ aspectRatio: "1 / 1" }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -219,7 +219,7 @@ export function ProductImages({
 
                   <div className="min-w-0 flex-1">
                     {isMain ? (
-                      <span className="mb-1.5 inline-flex items-center gap-1 rounded-md bg-brand-tint px-2 py-0.5 text-[11px] font-semibold text-brand">
+                      <span className="admin-badge admin-badge--accent mb-1.5">
                         <Star className="h-3 w-3" />
                         Main photograph
                       </span>
@@ -263,7 +263,7 @@ export function ProductImages({
                     onClick={() => move(img.id, -1)}
                     disabled={busy || !canChange || i === 0}
                     aria-label={`Move ${img.alt ?? "photograph"} earlier`}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-30"
+                    className="admin-icon-btn"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
@@ -272,7 +272,7 @@ export function ProductImages({
                     onClick={() => move(img.id, 1)}
                     disabled={busy || !canChange || i === images.length - 1}
                     aria-label={`Move ${img.alt ?? "photograph"} later`}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-30"
+                    className="admin-icon-btn"
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -287,17 +287,18 @@ export function ProductImages({
                     }}
                     disabled={busy || !canChange}
                     aria-label={`Replace ${img.alt ?? "photograph"}`}
-                    className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-30"
+                    title={`Replace ${img.alt ?? "photograph"}`}
+                    className="admin-icon-btn ml-auto"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    Replace
                   </button>
                   <button
                     type="button"
                     onClick={() => remove(img.id)}
                     disabled={busy || !canChange}
                     aria-label={`Remove ${img.alt ?? "photograph"}`}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                    title={`Remove ${img.alt ?? "photograph"}`}
+                    className="admin-icon-btn admin-icon-btn--bad"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -309,8 +310,8 @@ export function ProductImages({
       )}
 
       {error && (
-        <p role="alert" className="mt-3 text-[12.5px] font-medium text-red-600">
-          {error}
+        <p role="alert" className="admin-notice admin-notice--bad mt-3">
+          <span>{error}</span>
         </p>
       )}
 

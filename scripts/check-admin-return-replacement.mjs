@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { db, closeDb } from "./lib/pg-db.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { launchChrome, setInput } from "./lib/browser.mjs";
+import { launchChrome, setInput, waitFor } from "./lib/browser.mjs";
 import { tokenForRole } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,10 +71,16 @@ const { chrome, cdp } = await launchChrome({
   dir: join(ROOT, ".shots"),
 });
 
-/** The status shown on the request page. */
+/**
+ * The status shown on the request page.
+ *
+ * The back office has its own words for the statuses — the customer's
+ * dashboard says "Request Submitted" where the back office says
+ * "Requested" — so the badge it draws is the one that is looked for.
+ */
 const STATUS = `(() => {
-  const badge = [...document.querySelectorAll('span')].find(s =>
-    /^(Request Submitted|Under Review|Evidence Required|Evidence Received|Approved|Rejected|Cancelled|Return Pickup Scheduled|Product Received by ConsoleSeller|Product Inspection in Progress|Inspection Completed|Inspection Failed|Replacement Approved|Replacement Dispatched|Refund Approved|Refund Processing|Refund Completed|Request Resolved)$/.test(s.textContent.trim())
+  const badge = [...document.querySelectorAll('.admin-badge')].find(s =>
+    /^(Requested|Under review|Evidence required|Evidence received|Approved|Rejected|Cancelled|Pickup scheduled|Received|Inspecting|Inspection passed|Inspection failed|Replacement approved|Replacement dispatched|Refund approved|Refund processing|Refund paid|Resolved)$/.test(s.textContent.trim())
   );
   return badge ? badge.textContent.trim() : null;
 })()`;
@@ -120,16 +126,20 @@ try {
   const page = `${BASE}/admin/returns/${requestId}`;
 
   await cdp.goto(page);
-  await sleep(1800);
+  // The page is waited for rather than guessed at: the shop's database is
+  // a long way off, so the page can still be arriving after a fixed pause
+  // — and a badge that has not been drawn yet reads as a status that is
+  // missing.
+  await waitFor(cdp, STATUS, { timeout: 30000 });
   check(
     "the replacement request opens in the back office",
-    (await cdp.evaluate(STATUS)) === "Request Submitted"
+    (await cdp.evaluate(STATUS)) === "Requested"
   );
 
   await act(
     { adminNotes: "Checked against the order." },
     "Approve Return Request",
-    "Replacement Approved",
+    "Replacement approved",
     "approving the request"
   );
   await act(
@@ -140,19 +150,19 @@ try {
       notes: "Collect from the front desk.",
     },
     "Save & Dispatch Pickup",
-    "Return Pickup Scheduled",
+    "Pickup scheduled",
     "scheduling the pickup"
   );
   await act(
     { notes: "One box." },
     "Mark as Received",
-    "Product Received by ConsoleSeller",
+    "Received",
     "marking the product received"
   );
   await act(
     { notes: "Box opened, console present, no physical damage." },
     "Submit QC & Update Stock",
-    "Inspection Completed",
+    "Inspection passed",
     "marking the inspection completed"
   );
 
@@ -246,7 +256,7 @@ try {
       notes: "Sent from the warehouse.",
     },
     "Create the Replacement Shipment",
-    "Replacement Dispatched",
+    "Replacement dispatched",
     "creating the replacement shipment"
   );
 
@@ -347,7 +357,7 @@ try {
   await act(
     { deliveryStatus: "delivered", notes: "Left with the customer." },
     "Record the delivery",
-    "Request Resolved",
+    "Resolved",
     "recording the delivery as delivered"
   );
 
@@ -366,7 +376,7 @@ try {
   await act(
     { notes: "The customer has the replacement." },
     "Mark as Completed",
-    "Request Resolved",
+    "Resolved",
     "closing the request"
   );
 

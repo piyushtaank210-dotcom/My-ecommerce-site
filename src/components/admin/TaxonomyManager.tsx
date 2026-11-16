@@ -86,23 +86,27 @@ export function TaxonomyManager({
       {error && (
         <p
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-medium text-red-700"
+          className="admin-notice admin-notice--bad"
         >
           {error}
         </p>
       )}
 
       {/* The categories */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-          <FolderTree className="h-4 w-4 text-brand" />
-          Categories
-        </h2>
-        <p className="mb-5 text-[12.5px] text-gray-500">
-          What the catalogue is divided into, and what each category asks its
-          products about.
-        </p>
-
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">
+              <FolderTree className="h-4 w-4 text-brand" />
+              Categories
+            </h2>
+            <p className="admin-panel-sub">
+              What the catalogue is divided into, and what each category asks
+              its products about.
+            </p>
+          </div>
+        </div>
+        <div className="admin-panel-body">
         <div className="space-y-4">
           {categories.map((category) => (
             <CategoryCard
@@ -166,19 +170,24 @@ export function TaxonomyManager({
             </div>
           </div>
         )}
+        </div>
       </section>
 
       {/* The suggestions */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-          <Shapes className="h-4 w-4 text-brand" />
-          Suggested categories
-        </h2>
-        <p className="mb-4 text-[12.5px] text-gray-500">
-          The categories a console shop usually needs. One click adds one, with
-          the specification fields it asks about already in place.
-        </p>
-
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">
+              <Shapes className="h-4 w-4 text-brand" />
+              Suggested categories
+            </h2>
+            <p className="admin-panel-sub">
+              The categories a console shop usually needs. One click adds one,
+              with the specification fields it asks about already in place.
+            </p>
+          </div>
+        </div>
+        <div className="admin-panel-body">
         <ul className="grid gap-3 sm:grid-cols-2">
           {SUGGESTED_CATEGORIES.map((suggestion) => {
             const there = present.has(suggestion.slug);
@@ -197,7 +206,7 @@ export function TaxonomyManager({
                     </p>
                   </div>
                   {there ? (
-                    <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[11.5px] font-semibold text-green-700">
+                    <span className="admin-badge admin-badge--good shrink-0">
                       In the catalogue
                     </span>
                   ) : canManage ? (
@@ -230,19 +239,24 @@ export function TaxonomyManager({
             );
           })}
         </ul>
+        </div>
       </section>
 
       {/* The brands */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-          <Tag className="h-4 w-4 text-brand" />
-          Brands
-        </h2>
-        <p className="mb-5 text-[12.5px] text-gray-500">
-          The makers the store sells. Renaming one carries the products that
-          use it with it.
-        </p>
-
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">
+              <Tag className="h-4 w-4 text-brand" />
+              Brands
+            </h2>
+            <p className="admin-panel-sub">
+              The makers the store sells. Renaming one carries the products
+              that use it with it.
+            </p>
+          </div>
+        </div>
+        <div className="admin-panel-body">
         <ul className="space-y-2">
           {brands.map((brand) => (
             <BrandRow
@@ -291,6 +305,7 @@ export function TaxonomyManager({
             </div>
           </div>
         )}
+        </div>
       </section>
     </div>
   );

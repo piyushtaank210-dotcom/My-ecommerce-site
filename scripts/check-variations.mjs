@@ -20,12 +20,27 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
-import { clickByText, launchChrome, setInput } from "./lib/browser.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
+import { clickByText, launchChrome, setInput, waitFor } from "./lib/browser.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+
+/**
+ * Picks the cash-on-delivery method on the checkout.
+ *
+ * The card path opens Razorpay's own checkout on their site, which a
+ * browser cannot drive. The money at the door is a method the shop takes,
+ * so an order is placed that way; the payment itself is exercised by the
+ * payment check, which has a gateway to pay through.
+ */
+const pickCashOnDelivery = `(() => {
+  const el = document.querySelector('input[name="paymentMethod"][value="cod"]');
+  if (!el) return 'NOT_FOUND';
+  el.click();
+  return 'CLICKED';
+})()`;
 const PORT = 9334;
 
 /**
@@ -45,9 +60,9 @@ const ATTRIBUTES = {
   Bundle: ["Console only"],
 };
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
+
+const admin = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -87,9 +102,9 @@ async function options() {
 }
 
 /** The stock the product started the run with, so it can be put back. */
-const STARTING_STOCK = db
-  .prepare("SELECT stock FROM products WHERE slug = ?")
-  .get(HOST)?.stock;
+const STARTING_STOCK = (
+  await db.prepare("SELECT stock FROM products WHERE slug = ?").get(HOST)
+)?.stock;
 
 /* ------------------------------------------------------------ the options */
 
@@ -372,14 +387,22 @@ try {
     await sleep(500);
 
     await cdp.evaluate(clickByText("Add to cart"));
-    await sleep(1500);
-    const badge = await cdp.evaluate(`
-      (() => {
-        const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
-        const m = link && link.textContent.match(/(\\d+)/);
-        return m ? m[1] : '0';
-      })()
-    `);
+    // The basket count is written by the server and comes back with the
+    // page, so it is waited for rather than guessed at — the shop's
+    // database is a long way off, and a fixed wait reads the count from
+    // before the basket had been written.
+    let badge = "0";
+    for (let i = 0; i < 15; i++) {
+      await sleep(1000);
+      badge = await cdp.evaluate(`
+        (() => {
+          const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
+          const m = link && link.textContent.match(/(\\d+)/);
+          return m ? m[1] : '0';
+        })()
+      `);
+      if (badge !== "0") break;
+    }
     check("the option went in the basket", badge === "1", `basket ${badge}`);
 
     // The basket must carry the option, not the product.
@@ -401,8 +424,12 @@ try {
     await cdp.evaluate(setInput("state", "Maharashtra"));
     await cdp.evaluate(setInput("pincode", "411045"));
     await sleep(300);
+    // The money is taken at the door for this order. The other way round
+    // is taken by the payment check, which has a gateway to pay through.
+    await cdp.evaluate(pickCashOnDelivery);
+    await sleep(250);
     await cdp.evaluate(clickByText("Place order"));
-    await sleep(3500);
+    await waitFor(cdp, `location.pathname.startsWith('/order/') ? location.pathname : ''`);
 
     const orderBody = await cdp.evaluate("document.body.innerText");
     const orderId = (orderBody.match(/PF[A-Z0-9]{6}/) ?? [])[0] ?? null;
@@ -477,8 +504,10 @@ try {
       await cdp.evaluate(setInput("state", "Maharashtra"));
       await cdp.evaluate(setInput("pincode", "411045"));
       await sleep(300);
+      await cdp.evaluate(pickCashOnDelivery);
+      await sleep(250);
       await cdp.evaluate(clickByText("Place order"));
-      await sleep(3500);
+      await waitFor(cdp, `location.pathname.startsWith('/order/') ? location.pathname : ''`);
 
       const backorderBody = await cdp.evaluate("document.body.innerText");
       const backorderId =
@@ -560,7 +589,7 @@ console.log("\n→ putting the store back as it was found");
     JSON.stringify(product.attributes)
   );
 
-  db.close();
+  await closeDb();
 }
 
 console.log(

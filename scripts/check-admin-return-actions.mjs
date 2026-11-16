@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { db, closeDb } from "./lib/pg-db.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { launchChrome, setInput } from "./lib/browser.mjs";
+import { launchChrome, setInput, waitFor } from "./lib/browser.mjs";
 import { tokenForRole } from "./lib/session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -78,10 +78,16 @@ const { chrome, cdp } = await launchChrome({
   dir: join(ROOT, ".shots"),
 });
 
-/** The status shown on the request page. */
+/**
+ * The status shown on the request page.
+ *
+ * The back office has its own words for the statuses — the customer's
+ * dashboard says "Request Submitted" where the back office says
+ * "Requested" — so the badge it draws is the one that is looked for.
+ */
 const STATUS = `(() => {
-  const badge = [...document.querySelectorAll('span')].find(s =>
-    /^(Request Submitted|Under Review|Evidence Required|Evidence Received|Approved|Rejected|Cancelled|Return Pickup Scheduled|Product Received by ConsoleSeller|Product Inspection in Progress|Inspection Completed|Inspection Failed|Replacement Approved|Replacement Dispatched|Refund Approved|Refund Processing|Refund Completed|Request Resolved)$/.test(s.textContent.trim())
+  const badge = [...document.querySelectorAll('.admin-badge')].find(s =>
+    /^(Requested|Under review|Evidence required|Evidence received|Approved|Rejected|Cancelled|Pickup scheduled|Received|Inspecting|Inspection passed|Inspection failed|Replacement approved|Replacement dispatched|Refund approved|Refund processing|Refund paid|Resolved)$/.test(s.textContent.trim())
   );
   return badge ? badge.textContent.trim() : null;
 })()`;
@@ -126,10 +132,14 @@ try {
   /** Walks a request as far as the inspection. */
   async function toInspection(id) {
     await cdp.goto(`${BASE}/admin/returns/${id}`);
-    await sleep(1800);
+    // The page is waited for rather than guessed at: the shop's database
+    // is a long way off, so the page can still be arriving after a fixed
+    // pause — and a badge that has not been drawn yet reads as a status
+    // that is missing.
+    await waitFor(cdp, STATUS, { timeout: 30000 });
     check(
       "the request opens in the back office",
-      (await cdp.evaluate(STATUS)) === "Request Submitted"
+      (await cdp.evaluate(STATUS)) === "Requested"
     );
 
     const buttons = await cdp.evaluate(
@@ -162,7 +172,7 @@ try {
     await act(
       { message: "Please send a photo of the serial number on the box." },
       "Ask the customer",
-      "Evidence Required",
+      "Evidence required",
       "asking the customer for more information"
     );
 
@@ -181,21 +191,21 @@ try {
         notes: "Collect from the front desk.",
       },
       "Save & Dispatch Pickup",
-      "Return Pickup Scheduled",
+      "Pickup scheduled",
       "scheduling the pickup"
     );
 
     await act(
       { notes: "One box, controller inside." },
       "Mark as Received",
-      "Product Received by ConsoleSeller",
+      "Received",
       "marking the product received"
     );
 
     await act(
       { notes: "Box opened, controller present, no physical damage." },
       "Submit QC & Update Stock",
-      "Inspection Completed",
+      "Inspection passed",
       "marking the inspection completed"
     );
   }
@@ -210,7 +220,7 @@ try {
       notes: "To the original card.",
     },
     "Approve Refund",
-    "Refund Approved",
+    "Refund approved",
     "approving the refund"
   );
   await cdp.shot("admin-return-refund-pending");
@@ -250,7 +260,7 @@ try {
   await act(
     { reference: "UTR123456789", notes: "Sent by IMFS at 4pm." },
     "Record the refund as paid",
-    "Refund Completed",
+    "Refund paid",
     "confirming the refund has been paid"
   );
 
@@ -269,7 +279,7 @@ try {
   await act(
     { notes: "Money returned to the customer." },
     "Mark as Completed",
-    "Request Resolved",
+    "Resolved",
     "closing the request"
   );
 
@@ -312,7 +322,7 @@ try {
   await act(
     { amount: String(orderItem.price), method: "Bank IMPS/NEFT" },
     "Approve Refund",
-    "Refund Approved",
+    "Refund approved",
     "approving the refund"
   );
 

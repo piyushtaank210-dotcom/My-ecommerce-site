@@ -114,17 +114,21 @@ export function ImportPanel({
   return (
     <div className="space-y-6">
       {/* Getting the file in and out */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-ink">
-          <FileSpreadsheet className="h-4 w-4 text-brand" />
-          Import and export
-        </h2>
-        <p className="mb-5 text-[12.5px] text-gray-500">
-          Take the catalogue out as a spreadsheet, change it, and bring it
-          back. An import only ever touches the products in the file — the
-          rest of the catalogue is left exactly as it is.
-        </p>
-
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">
+              <FileSpreadsheet className="h-4 w-4 text-brand" />
+              Import and export
+            </h2>
+            <p className="admin-panel-sub">
+              Take the catalogue out as a spreadsheet, change it, and bring it
+              back. An import only ever touches the products in the file — the
+              rest of the catalogue is left exactly as it is.
+            </p>
+          </div>
+        </div>
+        <div className="admin-panel-body">
         <div className="flex flex-wrap items-center gap-2">
           <a
             href="/api/admin/products/export"
@@ -194,22 +198,21 @@ export function ImportPanel({
         {error && (
           <p
             role="alert"
-            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-medium text-red-700"
+            className="admin-notice admin-notice--bad mt-4"
           >
             {error}
           </p>
         )}
+        </div>
       </section>
 
       {/* The preview */}
       {preview && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-[15px] font-bold text-ink">
-                What the file would do
-              </h2>
-              <p className="mt-1 text-[12.5px] text-gray-500">
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div className="min-w-0">
+              <h2 className="admin-panel-title">What the file would do</h2>
+              <p className="admin-panel-sub">
                 {preview.filename} · {preview.summary.total} row
                 {preview.summary.total === 1 ? "" : "s"}
               </p>
@@ -230,31 +233,35 @@ export function ImportPanel({
               </button>
             )}
           </div>
-
+        <div className="admin-panel-body">
           {preview.missingColumns.length > 0 && (
-            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-800">
-              The file is missing{" "}
-              <span className="font-semibold">{preview.missingColumns.join(", ")}</span>
-              , so every row will be refused.
+            <p className="admin-notice admin-notice--warn mb-3">
+              <span>
+                The file is missing{" "}
+                <span className="font-semibold">{preview.missingColumns.join(", ")}</span>
+                , so every row will be refused.
+              </span>
             </p>
           )}
           {preview.unknownColumns.length > 0 && (
-            <p className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-[12.5px] text-gray-600">
-              The file has columns that are not read:{" "}
-              <span className="font-medium">{preview.unknownColumns.join(", ")}</span>
-              . They are left out rather than guessed at.
+            <p className="admin-notice mb-3">
+              <span>
+                The file has columns that are not read:{" "}
+                <span className="font-semibold">{preview.unknownColumns.join(", ")}</span>
+                . They are left out rather than guessed at.
+              </span>
             </p>
           )}
 
           <div className="mb-4 flex flex-wrap gap-2 text-[12.5px]">
-            <span className="rounded-full bg-green-50 px-2.5 py-1 font-semibold text-green-700">
+            <span className="admin-badge admin-badge--good">
               {preview.summary.created} to make
             </span>
-            <span className="rounded-full bg-brand-tint px-2.5 py-1 font-semibold text-brand">
+            <span className="admin-badge admin-badge--accent">
               {preview.summary.updated} to change
             </span>
             {preview.summary.errors > 0 && (
-              <span className="rounded-full bg-red-50 px-2.5 py-1 font-semibold text-red-700">
+              <span className="admin-badge admin-badge--bad">
                 {preview.summary.errors} that cannot be used
               </span>
             )}
@@ -265,31 +272,27 @@ export function ImportPanel({
               The file has no rows in it.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-[13px]">
-                <thead className="border-b border-gray-200 text-[11.5px] uppercase tracking-wider text-gray-500">
+            <div className="admin-table-wrap">
+              <table className="admin-table" style={{ minWidth: 760 }}>
+                <thead>
                   <tr>
-                    <th className="px-3 py-2 font-semibold">Row</th>
-                    <th className="px-3 py-2 font-semibold">Product</th>
-                    <th className="px-3 py-2 font-semibold">What will happen</th>
-                    <th className="px-3 py-2 font-semibold">Problems</th>
+                    <th className="admin-th-num">Row</th>
+                    <th>Product</th>
+                    <th>What will happen</th>
+                    <th>Problems</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody>
                   {preview.rows.map((row: ImportRow) => (
-                    <tr key={row.row} className="align-top">
-                      <td className="tnum px-3 py-2.5 text-gray-500">
-                        {row.row}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="block font-medium text-ink">
-                          {row.name || "—"}
-                        </span>
-                        <span className="block truncate text-[11.5px] text-gray-500">
+                    <tr key={row.row}>
+                      <td className="admin-td-num text-gray-500">{row.row}</td>
+                      <td>
+                        <span className="admin-cell-title">{row.name || "—"}</span>
+                        <span className="admin-cell-sub">
                           {row.slug || "no address"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         {row.action === "error" ? (
                           <span className="text-gray-400">Nothing — it cannot be used</span>
                         ) : row.action === "create" ? (
@@ -307,7 +310,7 @@ export function ImportPanel({
                           </ul>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         {row.errors.length === 0 ? (
                           <span className="text-gray-300">—</span>
                         ) : (
@@ -332,52 +335,59 @@ export function ImportPanel({
               </table>
             </div>
           )}
+        </div>
         </section>
       )}
 
       {/* What happened */}
       {done && (
-        <section className="rounded-xl border border-green-200 bg-green-50/50 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
-            <Check className="h-4 w-4 text-green-600" />
-            The import is finished
-          </h2>
-          <p className="mt-1.5 text-[13px] text-gray-600">
-            <span className="font-semibold text-ink">{done.created}</span>{" "}
-            {done.created === 1 ? "product was" : "products were"} made,{" "}
-            <span className="font-semibold text-ink">{done.updated}</span> were
-            changed, and{" "}
-            <span className="font-semibold text-ink">{done.skipped}</span> were
-            left alone because they could not be used. The rest of the
-            catalogue was not touched.
-          </p>
+        <section className="admin-panel admin-panel--good">
+          <div className="admin-panel-head admin-panel-head--plain">
+            <div className="min-w-0">
+              <h2 className="admin-panel-title">
+                <Check className="h-4 w-4 text-green-600" />
+                The import is finished
+              </h2>
+              <p className="admin-panel-sub">
+                <span className="font-semibold text-ink">{done.created}</span>{" "}
+                {done.created === 1 ? "product was" : "products were"} made,{" "}
+                <span className="font-semibold text-ink">{done.updated}</span> were
+                changed, and{" "}
+                <span className="font-semibold text-ink">{done.skipped}</span> were
+                left alone because they could not be used. The rest of the
+                catalogue was not touched.
+              </p>
+            </div>
+          </div>
         </section>
       )}
 
       {/* What goes in each column */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 text-[15px] font-bold text-ink">
-          What goes in each column
-        </h2>
-        <p className="mb-4 text-[12.5px] text-gray-500">
-          The template has these columns and nothing else, so it cannot be
-          imported by accident. Only the address, the name, the category, the
-          price and the MRP are needed; the rest are filled in when they are
-          known.
-        </p>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
-            <thead className="border-b border-gray-200 text-[11.5px] uppercase tracking-wider text-gray-500">
+      <section className="admin-panel">
+        <div className="admin-panel-head">
+          <div className="min-w-0">
+            <h2 className="admin-panel-title">What goes in each column</h2>
+            <p className="admin-panel-sub">
+              The template has these columns and nothing else, so it cannot be
+              imported by accident. Only the address, the name, the category,
+              the price and the MRP are needed; the rest are filled in when
+              they are known.
+            </p>
+          </div>
+        </div>
+        <div className="admin-panel-body admin-panel-body--flush">
+        <div className="admin-table-wrap" style={{ border: 0, borderRadius: 0 }}>
+          <table className="admin-table" style={{ minWidth: 640 }}>
+            <thead>
               <tr>
-                <th className="px-3 py-2 font-semibold">Column</th>
-                <th className="px-3 py-2 font-semibold">What it is</th>
+                <th>Column</th>
+                <th>What it is</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {columns.map((column) => (
                 <tr key={column.key}>
-                  <td className="px-3 py-2.5">
+                  <td>
                     <span className="font-medium text-ink">{column.key}</span>
                     {column.badge && (
                       <span className="ml-1.5 text-[11px] font-semibold text-gray-500">
@@ -395,11 +405,12 @@ export function ImportPanel({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600">{column.help}</td>
+                  <td className="text-gray-600">{column.help}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       </section>
     </div>

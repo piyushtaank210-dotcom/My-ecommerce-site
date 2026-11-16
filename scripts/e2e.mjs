@@ -594,7 +594,7 @@ try {
   // Shop Now lists every product — consoles and controllers — in one grid.
   await cdp.goto(`${BASE}/shop`);
   const shopCount = await cdp.evaluate(`document.querySelectorAll('article').length`);
-  check("shop lists every product", shopCount === 9, `${shopCount} products`);
+  check("shop lists every product", shopCount === 10, `${shopCount} products`);
   const shopText = await cdp.evaluate("document.body.innerText");
   check(
     "shop shows both categories",
@@ -609,7 +609,7 @@ try {
   // Filtering narrows the grid to one category.
   await cdp.goto(`${BASE}/shop?category=controllers`);
   const filtered = await cdp.evaluate(`document.querySelectorAll('article').length`);
-  check("category filter narrows the grid", filtered === 3, `${filtered} controllers`);
+  check("category filter narrows the grid", filtered === 4, `${filtered} controllers`);
 
   // Sorting by price puts the cheapest first.
   await cdp.goto(`${BASE}/shop?sort=price-asc`);
@@ -1105,7 +1105,7 @@ try {
   );
   check(
     "clearing the filters brings the whole catalogue back",
-    rowsAfterClear === 9,
+    rowsAfterClear === 10,
     `${rowsAfterClear} rows`
   );
 
@@ -1380,8 +1380,8 @@ try {
     "document.querySelectorAll('tbody tr').length"
   );
   check(
-    "the catalogue is back to the nine products it started with",
-    catalogueRows === 9,
+    "the catalogue is back to the ten products it started with",
+    catalogueRows === 10,
     `${catalogueRows} rows`
   );
 

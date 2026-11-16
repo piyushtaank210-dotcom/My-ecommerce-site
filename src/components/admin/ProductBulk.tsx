@@ -168,7 +168,7 @@ export function SelectAllMatching() {
     <button
       type="button"
       onClick={selectAllMatching}
-      className="text-[12.5px] font-medium text-brand hover:underline"
+      className="text-[12.5px] font-semibold text-brand hover:underline"
     >
       Select all {matchingTotal} matching products
     </button>
@@ -242,7 +242,7 @@ export function BulkToolbar() {
   const pendingAction = ACTIONS.find((a) => a.value === confirming);
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brand/25 bg-brand-tint px-4 py-3">
+    <div className="admin-bulkbar">
       <span className="text-[13px] font-semibold text-ink">
         {scope === "all"
           ? `All ${count} matching product${count === 1 ? "" : "s"} selected`
@@ -295,7 +295,7 @@ export function BulkToolbar() {
         type="button"
         onClick={clear}
         aria-label="Clear the selection"
-        className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-white hover:text-ink"
+        className="admin-icon-btn ml-auto"
       >
         <X className="h-4 w-4" />
       </button>

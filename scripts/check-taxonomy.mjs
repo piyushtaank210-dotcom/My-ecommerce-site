@@ -11,15 +11,15 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
+
+const admin = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -452,8 +452,8 @@ console.log("\n→ putting the store back as it was found");
     brands.map((b) => b.name).join(", ")
   );
   check(
-    "the catalogue still has its nine products",
-    products.json.total === 9,
+    "the catalogue still has its ten products",
+    products.json.total === 10,
     `${products.json.total}`
   );
   check(
@@ -462,7 +462,7 @@ console.log("\n→ putting the store back as it was found");
       .length === 2
   );
 
-  db.close();
+  await closeDb();
 }
 
 console.log(

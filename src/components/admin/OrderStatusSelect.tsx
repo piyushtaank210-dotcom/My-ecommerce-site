@@ -72,7 +72,7 @@ export function OrderStatusSelect({
         aria-label={`Status for order ${orderId}`}
         disabled={isPending}
         onChange={() => formRef.current?.requestSubmit()}
-        className={`h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium disabled:opacity-60 ${
+        className={`admin-select-sm ${
           current === "cancelled"
             ? "text-red-600"
             : current === "delivered"

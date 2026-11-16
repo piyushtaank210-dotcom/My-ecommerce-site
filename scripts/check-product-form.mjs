@@ -13,16 +13,16 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
-const support = tokenForRole(db, "support");
+
+const admin = await tokenForRole("admin");
+const support = await tokenForRole("support");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -543,7 +543,7 @@ try {
 
   console.log("\n→ the catalogue was left alone");
   {
-    const before = db
+    const before = await db
       .prepare(
         "SELECT slug, name, price, mrp, stock, status, listed FROM products WHERE slug != ? ORDER BY slug"
       )
@@ -561,11 +561,13 @@ try {
     );
     check(
       "and no picture was lost",
-      db
-        .prepare(
-          "SELECT COUNT(*) n FROM product_images WHERE product_slug != ?"
-        )
-        .get(FIXTURE.slug).n > 0,
+      (
+        await db
+          .prepare(
+            "SELECT COUNT(*) n FROM product_images WHERE product_slug != ?"
+          )
+          .get(FIXTURE.slug)
+      ).n > 0,
       "the gallery is still there"
     );
   }
@@ -573,7 +575,7 @@ try {
   // The fixture goes through the back office's own delete endpoint, which
   // refuses to remove a product with order lines — there are none.
   await api(`/api/admin/products/${FIXTURE.slug}`, { method: "DELETE" });
-  db.close();
+  await closeDb();
 }
 
 console.log(

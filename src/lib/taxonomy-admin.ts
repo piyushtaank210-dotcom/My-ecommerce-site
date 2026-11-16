@@ -72,13 +72,16 @@ export async function listCategories(): Promise<CategoryDetail[]> {
     .prepare("SELECT * FROM subcategories ORDER BY position, name")
     .all()) as Row[];
 
+  // PostgreSQL counts come back as a string, so they are turned into
+  // numbers here — a count that is "6" and a count that is 6 are the
+  // same number to a reader, but not to the code that adds them up.
   const productCounts = new Map<string, number>();
   for (const r of (await db
     .prepare(
       "SELECT category_slug, COUNT(*) AS n FROM products GROUP BY category_slug"
     )
     .all()) as { category_slug: string | null; n: number }[]) {
-    if (r.category_slug) productCounts.set(r.category_slug, r.n);
+    if (r.category_slug) productCounts.set(r.category_slug, num(r.n));
   }
 
   const subCounts = new Map<string, number>();
@@ -87,7 +90,7 @@ export async function listCategories(): Promise<CategoryDetail[]> {
       "SELECT subcategory, COUNT(*) AS n FROM products WHERE subcategory IS NOT NULL GROUP BY subcategory"
     )
     .all()) as { subcategory: string | null; n: number }[]) {
-    if (r.subcategory) subCounts.set(r.subcategory, r.n);
+    if (r.subcategory) subCounts.set(r.subcategory, num(r.n));
   }
 
   return categories.map((c) => {
@@ -482,7 +485,7 @@ export async function listBrands(): Promise<BrandDetail[]> {
       "SELECT MIN(brand) AS brand, COUNT(*) AS n FROM products WHERE brand IS NOT NULL GROUP BY lower(brand)"
     )
     .all()) as { brand: string | null; n: number }[]) {
-    if (r.brand) counts.set(r.brand.toLowerCase(), r.n);
+    if (r.brand) counts.set(r.brand.toLowerCase(), num(r.n));
   }
 
   return brands.map((b) => {

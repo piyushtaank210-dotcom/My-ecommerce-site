@@ -641,17 +641,25 @@ export async function applyImport(
   let updated = 0;
   let skipped = 0;
 
-  parsed.rows.forEach(async (raw, i) => {
+  /*
+    The rows are written one after another, and each one is waited for.
+
+    `forEach` does not wait for an async callback, so the loop used to
+    finish before the first row had been written — the summary counted
+    nothing, the rows came back in the wrong order, and the caller was
+    told the file had changed nothing while it was still changing it.
+  */
+  for (const [i, raw] of parsed.rows.entries()) {
     const rowNumber = i + 2;
     const { row, values } = validateRow(raw, rowNumber, context, fileSlugs, fileSkus);
 
     if (!values) {
       rows.push(row);
       skipped++;
-      return;
+      continue;
     }
 
-    const result = (await writeProduct(raw, values, context, userId));
+    const result = await writeProduct(raw, values, context, userId);
     if (!result.ok) {
       rows.push({
         ...row,
@@ -660,7 +668,7 @@ export async function applyImport(
         errors: [{ column: result.column ?? "row", message: result.message }],
       });
       skipped++;
-      return;
+      continue;
     }
 
     rows.push({
@@ -670,7 +678,7 @@ export async function applyImport(
     });
     if (result.created) created++;
     else updated++;
-  });
+  }
 
   const summary: ImportSummary = {
     total: parsed.rows.length,

@@ -60,7 +60,7 @@ export function BackorderPolicySelect({
         value={value}
         disabled={!canManage || busy}
         onChange={(e) => save(e.target.value as BackorderPolicy)}
-        className="input h-9 w-auto cursor-pointer text-[13px]"
+        className="input h-9 w-auto min-w-[200px] cursor-pointer text-[13px]"
       >
         {BACKORDER_POLICIES.map((p) => (
           <option key={p} value={p}>

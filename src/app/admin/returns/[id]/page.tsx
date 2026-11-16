@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   User,
   MapPin,
   Package,
@@ -20,7 +19,6 @@ import {
   getReturnRequest,
   calculateReturnDeadline,
   RETURN_STATUS_LABEL,
-  RETURN_STATUS_TONE,
   RETURN_TYPE_LABEL,
   returnReasonLabel,
   replacementCandidates,
@@ -36,6 +34,9 @@ import { money, formatDate } from "@/lib/format";
 import { evidenceSatisfied, policyForReason } from "@/lib/return-policy";
 import { ReturnAdminActions } from "@/components/admin/returns/ReturnAdminActions";
 import { EvidenceViewer } from "@/components/admin/returns/EvidenceViewer";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { Badge } from "@/components/admin/ui/Badge";
+import { ReturnStatusBadge } from "@/components/admin/ui/StatusBadge";
 import {
   REFUND_STATUS_LABEL,
   REFUND_STATUS_TONE,
@@ -90,52 +91,42 @@ export default async function AdminReturnDetailPage({
     .map((e) => e.label);
 
   return (
-    <div className="mx-auto max-w-[1300px]">
-      <header className="mb-6">
-        <Link
-          href="/admin/returns"
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-500 hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Returns & Refunds
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="tnum text-[26px] font-bold text-ink">{ret.id}</h1>
-            <span
-              className={`rounded-full border px-2.5 py-0.5 text-[12px] font-semibold capitalize ${
-                RETURN_STATUS_TONE[ret.status] ?? "bg-gray-100 text-gray-600 border-gray-200"
-              }`}
-            >
-              {RETURN_STATUS_LABEL[ret.status]}
+    <>
+      <PageHeader
+        back={{ href: "/admin/returns", label: "Returns & Refunds" }}
+        eyebrow="Operations"
+        title={ret.id}
+        meta={
+          <>
+            <ReturnStatusBadge status={ret.status} />
+            <Badge tone="neutral">{RETURN_TYPE_LABEL[ret.type]}</Badge>
+            <span>
+              Requested on {formatDate(ret.created_at)} by{" "}
+              <strong className="text-ink">{ret.customer_name ?? "Customer"}</strong>
             </span>
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[12px] font-medium text-gray-600">
-              {RETURN_TYPE_LABEL[ret.type]}
-            </span>
-          </div>
-
+          </>
+        }
+        actions={
           <Link
             href={`/admin/orders/${ret.order_id}`}
             className="btn btn-outline btn-sm"
           >
             View Order {ret.order_id}
           </Link>
-        </div>
-        <p className="mt-1 text-[13px] text-gray-500">
-          Requested on {formatDate(ret.created_at)} by{" "}
-          <strong className="text-ink">{ret.customer_name ?? "Customer"}</strong>
-        </p>
-      </header>
+        }
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+      <div className="admin-split">
         {/* Left Column: Claim details, Items, Photos, Timeline */}
-        <div className="space-y-6">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* Claim Overview */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
-              Customer Claim Details
-            </h2>
-            <div className="mt-4 space-y-3 text-[13.5px]">
+          <section className="admin-panel">
+            <div className="admin-panel-head admin-panel-head--plain">
+              <div className="min-w-0">
+                <h2 className="admin-panel-title">Customer claim details</h2>
+              </div>
+            </div>
+            <div className="admin-panel-body space-y-3 text-[13.5px]">
               <div>
                 <span className="font-semibold text-ink">Reason: </span>
                 <span className="text-gray-700">{returnReasonLabel(ret.reason)}</span>
@@ -206,7 +197,6 @@ export default async function AdminReturnDetailPage({
                   {ret.rejection_reason}
                 </div>
               )}
-            </div>
 
             {/* The evidence: photographs and unboxing videos, and what
                 the rules say we still need. */}
@@ -255,12 +245,14 @@ export default async function AdminReturnDetailPage({
                 </ul>
 
                 {missingRequired.length > 0 && (
-                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12.5px] text-amber-800">
-                    {missingRequired.join(" and ")}{" "}
-                    {missingRequired.length === 1 ? "is" : "are"} still missing.
-                    Ask the customer for it, or go on with the claim on what
-                    you have — a claim is never turned away only because a
-                    photograph or an unboxing video is missing.
+                  <p className="admin-notice admin-notice--warn mt-3">
+                    <span>
+                      {missingRequired.join(" and ")}{" "}
+                      {missingRequired.length === 1 ? "is" : "are"} still missing.
+                      Ask the customer for it, or go on with the claim on what
+                      you have — a claim is never turned away only because a
+                      photograph or an unboxing video is missing.
+                    </span>
                   </p>
                 )}
 
@@ -278,15 +270,18 @@ export default async function AdminReturnDetailPage({
                 )}
               </div>
             )}
+          </div>
           </section>
 
           {/* Items Table */}
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <header className="border-b border-gray-200 px-5 py-4">
-              <h2 className="text-[15px] font-bold text-ink">
-                Requested Items ({ret.items.length})
-              </h2>
-            </header>
+          <section className="admin-panel">
+            <div className="admin-panel-head admin-panel-head--plain">
+              <div className="min-w-0">
+                <h2 className="admin-panel-title">
+                  Requested Items ({ret.items.length})
+                </h2>
+              </div>
+            </div>
             <ul className="divide-y divide-gray-200">
               {ret.items.map((item) => (
                 <li
@@ -296,7 +291,7 @@ export default async function AdminReturnDetailPage({
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/product/${item.product_slug}`}
-                      className="font-semibold text-ink hover:text-brand"
+                      className="admin-cell-title hover:text-brand"
                     >
                       {item.name}
                     </Link>
@@ -331,11 +326,14 @@ export default async function AdminReturnDetailPage({
           </section>
 
           {/* Audit Event Timeline */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
-              Activity & Audit History
-            </h2>
-            <ol className="relative mt-4 space-y-4 border-l border-gray-200 pl-4 ml-2">
+          <section className="admin-panel">
+            <div className="admin-panel-head admin-panel-head--plain">
+              <div className="min-w-0">
+                <h2 className="admin-panel-title">Activity &amp; Audit History</h2>
+              </div>
+            </div>
+            <div className="admin-panel-body">
+            <ol className="relative ml-2 space-y-4 border-l border-gray-200 pl-4">
               {ret.events.map((ev) => (
                 <li key={ev.id} className="relative">
                   <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-brand" />
@@ -386,6 +384,7 @@ export default async function AdminReturnDetailPage({
                 </ul>
               </div>
             )}
+            </div>
           </section>
 
           {/* The refunds, replacements and inspections — the records
@@ -393,11 +392,15 @@ export default async function AdminReturnDetailPage({
           {(ret.refunds.length > 0 ||
             ret.replacements.length > 0 ||
             ret.inspections.length > 0) && (
-            <section className="rounded-xl border border-gray-200 bg-white p-5">
-              <h2 className="border-b border-gray-100 pb-3 text-[15px] font-bold text-ink">
-                Refunds, Replacements &amp; Inspections
-              </h2>
-
+            <section className="admin-panel">
+              <div className="admin-panel-head admin-panel-head--plain">
+                <div className="min-w-0">
+                  <h2 className="admin-panel-title">
+                    Refunds, replacements &amp; inspections
+                  </h2>
+                </div>
+              </div>
+              <div className="admin-panel-body">
               {ret.refunds.length > 0 && (
                 <div className="mt-4">
                   <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
@@ -543,18 +546,24 @@ export default async function AdminReturnDetailPage({
                   </ul>
                 </div>
               )}
+              </div>
             </section>
           )}
         </div>
 
         {/* Right Column: Customer Info & Interactive Actions */}
-        <div className="space-y-6">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* The purchase the request is about */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
-              <Package className="h-4 w-4 text-brand" />
-              Purchase &amp; Eligibility
-            </h2>
+          <section className="admin-panel">
+            <div className="admin-panel-head admin-panel-head--plain">
+              <div className="min-w-0">
+                <h2 className="admin-panel-title">
+                  <Package className="h-4 w-4 text-brand" />
+                  Purchase &amp; eligibility
+                </h2>
+              </div>
+            </div>
+            <div className="admin-panel-body">
             <dl className="space-y-2.5 text-[13px]">
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-gray-500">Delivered on</dt>
@@ -596,14 +605,20 @@ export default async function AdminReturnDetailPage({
               The window for this return is {deadline.windowDays} days from delivery
               {deadline.formattedDeadline ? ` — it closed on ${deadline.formattedDeadline}` : ""}.
             </p>
+            </div>
           </section>
 
           {/* Customer & Address Details */}
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-[14px] font-bold text-ink">
-              <User className="h-4 w-4 text-brand" />
-              Customer Details
-            </h2>
+          <section className="admin-panel">
+            <div className="admin-panel-head admin-panel-head--plain">
+              <div className="min-w-0">
+                <h2 className="admin-panel-title">
+                  <User className="h-4 w-4 text-brand" />
+                  Customer Details
+                </h2>
+              </div>
+            </div>
+            <div className="admin-panel-body">
             <p className="text-[13.5px] font-semibold text-ink">{ret.customer_name}</p>
             <p className="text-[12.5px] text-gray-500">{ret.customer_email}</p>
             {ret.customer_phone && (
@@ -624,6 +639,7 @@ export default async function AdminReturnDetailPage({
                 </address>
               </div>
             )}
+            </div>
           </section>
 
           {/* Interactive Management Actions */}
@@ -643,7 +659,7 @@ export default async function AdminReturnDetailPage({
           />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

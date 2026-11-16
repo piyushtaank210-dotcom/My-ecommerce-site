@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/guard";
 import { can } from "@/lib/roles";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ADMIN_NAV } from "@/components/admin/nav";
+import "./admin.css";
 
 export const metadata: Metadata = {
   title: "Admin",

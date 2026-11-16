@@ -48,13 +48,18 @@ export function OrderCancellationPanel({
   const decided = cancellation.status !== "requested";
 
   return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-5">
-      <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
-        <XCircle className="h-4 w-4 text-amber-700" />
-        Cancellation request {cancellation.id}
-      </h2>
+    <section className="admin-panel admin-panel--warn">
+      <div className="admin-panel-head admin-panel-head--plain">
+        <div className="min-w-0">
+          <h2 className="admin-panel-title">
+            <XCircle className="h-4 w-4 text-amber-700" />
+            Cancellation request {cancellation.id}
+          </h2>
+        </div>
+      </div>
 
-      <dl className="mt-3 space-y-2 text-[13px]">
+      <div className="admin-panel-body">
+      <dl className="space-y-2 text-[13px]">
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-gray-500">Status</dt>
           <dd className="font-semibold text-ink">
@@ -129,7 +134,7 @@ export function OrderCancellationPanel({
                 type="number"
                 min={0}
                 defaultValue={orderTotal}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] font-bold text-ink"
+                className="input mt-1 tnum font-bold"
               />
               <label className="mt-3 block text-[12px] font-semibold text-gray-600">
                 Notes for the customer
@@ -137,7 +142,7 @@ export function OrderCancellationPanel({
               <input
                 name="adminNotes"
                 placeholder="Optional"
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
               <button
                 type="submit"
@@ -168,12 +173,12 @@ export function OrderCancellationPanel({
                 required
                 rows={3}
                 placeholder="The customer sees this, so it should explain the decision."
-                className="mt-1 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                className="input mt-1 resize-y"
               />
               <button
                 type="submit"
                 disabled={isRejectPending}
-                className="btn btn-outline btn-sm mt-3 w-full text-red-700 hover:border-red-300 hover:bg-red-50"
+                className="btn btn-danger-soft btn-sm mt-3 w-full"
               >
                 {isRejectPending ? "Declining..." : "Decline the request"}
               </button>
@@ -209,7 +214,7 @@ export function OrderCancellationPanel({
                 <input
                   name="refundReference"
                   placeholder="From the payment provider"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
               <button
@@ -232,6 +237,7 @@ export function OrderCancellationPanel({
             </div>
           </form>
         )}
+      </div>
     </section>
   );
 }

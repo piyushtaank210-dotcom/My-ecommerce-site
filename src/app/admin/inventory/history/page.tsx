@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requirePermission } from "@/lib/guard";
 import { formatDate } from "@/lib/format";
 import { countMovements, listMovements } from "@/lib/inventory";
-import { MOVEMENT_LABEL, MOVEMENT_TYPES, MOVEMENT_TONE } from "@/lib/stock";
+import { MOVEMENT_LABEL, MOVEMENT_TYPES } from "@/lib/stock";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { Panel } from "@/components/admin/ui/Panel";
+import { Badge } from "@/components/admin/ui/Badge";
+import { MOVEMENT_TONE } from "@/lib/status-tone";
 
 export const metadata = { title: "Inventory history" };
 
@@ -61,24 +64,19 @@ export default async function AdminInventoryHistoryPage({
   const to = (page - 1) * PER_PAGE + movements.length;
 
   return (
-    <div className="mx-auto max-w-[1600px]">
-      <header className="mb-6">
-        <Link
-          href="/admin/inventory"
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-500 hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Inventory
-        </Link>
-        <h1 className="mt-2 text-[26px] font-bold text-ink">Inventory history</h1>
-        <p className="mt-1.5 text-[13.5px] text-gray-500">
-          {total === 0
+    <>
+      <PageHeader
+        back={{ href: "/admin/inventory", label: "Inventory" }}
+        eyebrow="Operations"
+        title="Inventory history"
+        description={
+          total === 0
             ? "No changes have been recorded yet."
-            : `${total} movement${total === 1 ? "" : "s"} recorded — the stock before, the change, the stock after, and the reason.`}
-        </p>
-      </header>
+            : `${total} movement${total === 1 ? "" : "s"} recorded — the stock before, the change, the stock after, and the reason.`
+        }
+      />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar">
         <PanelSearch placeholder="Search product, option, reason or order" />
         <PanelFilter
           name="type"
@@ -94,120 +92,110 @@ export default async function AdminInventoryHistoryPage({
         />
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white">
+      <Panel bodyClass="admin-panel-body--flush">
         {movements.length === 0 ? (
           <p className="px-5 py-16 text-center text-[13.5px] text-gray-500">
             Nothing matches those filters.
           </p>
         ) : (
-          <>
-            <div className="border-b border-gray-200 px-5 py-3 text-[12.5px] text-gray-500">
-              Showing {from}–{to} of {total}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] table-fixed text-left text-[13.5px]">
-                <colgroup>
-                  <col className="w-[150px]" />
-                  <col className="w-[220px]" />
-                  <col className="w-[90px]" />
-                  <col className="w-[100px]" />
-                  <col className="w-[100px]" />
-                  <col className="w-[100px]" />
-                  <col className="w-[130px]" />
-                </colgroup>
-                <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">When</th>
-                    <th className="px-4 py-3 font-semibold">Product</th>
-                    <th className="px-4 py-3 font-semibold">Option</th>
-                    <th className="px-4 py-3 font-semibold">Was</th>
-                    <th className="px-4 py-3 font-semibold">Change</th>
-                    <th className="px-4 py-3 font-semibold">Now</th>
-                    <th className="px-4 py-3 font-semibold">Reason</th>
+          <div className="admin-table-wrap" style={{ border: 0, borderRadius: 0 }}>
+            <table className="admin-table admin-table--fixed" style={{ minWidth: 980 }}>
+              <colgroup>
+                <col className="w-[13%]" />
+                <col className="w-[19%]" />
+                <col className="w-[13%]" />
+                <col className="w-[8%]" />
+                <col className="w-[9%]" />
+                <col className="w-[8%]" />
+                <col className="w-[30%]" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Product</th>
+                  <th>Option</th>
+                  <th className="admin-th-num">Was</th>
+                  <th className="admin-th-num">Change</th>
+                  <th className="admin-th-num">Now</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m) => (
+                  <tr key={m.id}>
+                    <td className="text-[12.5px] text-gray-500">
+                      {formatDate(m.created_at)}
+                    </td>
+                    <td>
+                      {m.product_slug ? (
+                        <Link
+                          href={`/admin/products/${m.product_slug}`}
+                          className="admin-cell-title hover:text-brand"
+                        >
+                          {m.product_name ?? m.product_slug}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="text-[12.5px] text-gray-500">
+                      {m.variant_name ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="admin-td-num text-gray-500">
+                      {m.previous_stock}
+                    </td>
+                    <td className="admin-td-num">
+                      <span
+                        className={`tnum font-semibold ${
+                          m.quantity_changed > 0
+                            ? "text-green-600"
+                            : m.quantity_changed < 0
+                              ? "text-red-600"
+                              : "text-gray-500"
+                        }`}
+                      >
+                        {m.quantity_changed > 0 ? "+" : ""}
+                        {m.quantity_changed}
+                      </span>
+                    </td>
+                    <td className="admin-td-num font-semibold text-ink">
+                      {m.new_stock}
+                    </td>
+                    <td>
+                      <Badge tone={MOVEMENT_TONE[m.movement_type] ?? "neutral"}>
+                        {MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
+                      </Badge>
+                      <span className="mt-1 block truncate text-[12px] text-gray-500">
+                        {m.reason}
+                      </span>
+                      {m.note && (
+                        <span className="block truncate text-[12px] text-gray-400">
+                          {m.note}
+                        </span>
+                      )}
+                      {m.order_id && (
+                        <Link
+                          href={`/admin/orders/${m.order_id}`}
+                          className="tnum block truncate text-[11.5px] text-brand hover:underline"
+                        >
+                          Order {m.order_id}
+                        </Link>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {movements.map((m) => (
-                    <tr key={m.id} className="bg-white">
-                      <td className="px-4 py-3 text-[12.5px] text-gray-500">
-                        {formatDate(m.created_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {m.product_slug ? (
-                          <Link
-                            href={`/admin/products/${m.product_slug}`}
-                            className="block truncate font-medium text-ink hover:text-brand"
-                          >
-                            {m.product_name ?? m.product_slug}
-                          </Link>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-[12.5px] text-gray-500">
-                        {m.variant_name ?? (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="tnum text-gray-500">
-                          {m.previous_stock}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`tnum font-semibold ${
-                            m.quantity_changed > 0
-                              ? "text-green-600"
-                              : m.quantity_changed < 0
-                                ? "text-red-600"
-                                : "text-gray-500"
-                          }`}
-                        >
-                          {m.quantity_changed > 0 ? "+" : ""}
-                          {m.quantity_changed}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="tnum font-semibold text-ink">
-                          {m.new_stock}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${
-                            MOVEMENT_TONE[m.movement_type] ?? "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
-                        </span>
-                        <span className="mt-1 block truncate text-[12px] text-gray-500">
-                          {m.reason}
-                        </span>
-                        {m.note && (
-                          <span className="block truncate text-[12px] text-gray-400">
-                            {m.note}
-                          </span>
-                        )}
-                        {m.order_id && (
-                          <Link
-                            href={`/admin/orders/${m.order_id}`}
-                            className="tnum block truncate text-[11.5px] text-brand hover:underline"
-                          >
-                            Order {m.order_id}
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+      </Panel>
 
-      <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
-    </div>
+      <div className="admin-table-foot">
+        <span className="tnum">
+          Showing {from}–{to} of {total}
+        </span>
+        <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
+      </div>
+    </>
   );
 }

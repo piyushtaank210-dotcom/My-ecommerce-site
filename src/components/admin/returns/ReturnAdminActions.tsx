@@ -233,8 +233,8 @@ export function ReturnAdminActions({
         ret.status === "under_review" ||
         ret.status === "info_requested" ||
         ret.status === "evidence_received") && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-5">
-          <h2 className="text-[15px] font-bold text-ink">Review Request</h2>
+        <section className="admin-card admin-card--warn">
+          <h2 className="admin-panel-title">Review Request</h2>
           <p className="mt-1 text-[12.5px] text-gray-600">
             Verify customer details and uploaded photo proof. Decide whether to approve for courier pickup or reject.
           </p>
@@ -286,7 +286,7 @@ export function ReturnAdminActions({
                 name="adminNotes"
                 rows={2}
                 placeholder="Optional notes for customer / internal..."
-                className="mt-3 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                className="input mt-3 resize-y"
               />
               <button
                 type="submit"
@@ -312,12 +312,12 @@ export function ReturnAdminActions({
                 required
                 rows={2}
                 placeholder="State why this claim is not covered (e.g. past policy window, user physical damage)..."
-                className="mt-3 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                className="input mt-3 resize-y"
               />
               <button
                 type="submit"
                 disabled={isRejectPending}
-                className="btn btn-outline btn-sm mt-3 w-full text-red-700 hover:bg-red-50 hover:border-red-300"
+                className="btn btn-danger-soft btn-sm mt-3 w-full"
               >
                 {isRejectPending ? "Rejecting..." : "Reject Return Request"}
               </button>
@@ -347,7 +347,7 @@ export function ReturnAdminActions({
               required
               rows={2}
               placeholder="e.g. Please upload a photo of the serial number on the box..."
-              className="mt-3 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+              className="input mt-3 resize-y"
             />
             <button
               type="submit"
@@ -364,8 +364,8 @@ export function ReturnAdminActions({
       {(ret.status === "approved" ||
         ret.status === "replacement_approved" ||
         ret.status === "pickup_scheduled") && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card">
+          <h2 className="admin-panel-title">
             <Truck className="h-4 w-4 text-brand" />
             {ret.status === "pickup_scheduled" ? "Update Pickup Details" : "Schedule Courier Pickup"}
           </h2>
@@ -392,7 +392,7 @@ export function ReturnAdminActions({
                   required
                   defaultValue={ret.pickup_courier ?? "Bluedart Express"}
                   placeholder="e.g. Bluedart, Delhivery"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
 
@@ -406,7 +406,7 @@ export function ReturnAdminActions({
                   required
                   defaultValue={ret.pickup_tracking ?? ""}
                   placeholder="e.g. AWB987654321"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
 
@@ -419,7 +419,7 @@ export function ReturnAdminActions({
                   name="date"
                   required
                   defaultValue={ret.pickup_date ?? new Date().toISOString().slice(0, 10)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
             </div>
@@ -432,7 +432,7 @@ export function ReturnAdminActions({
                 type="text"
                 name="notes"
                 placeholder="Optional instructions for warehouse or courier..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
             </div>
 
@@ -460,8 +460,8 @@ export function ReturnAdminActions({
       {(ret.status === "pickup_scheduled" ||
         ret.status === "approved" ||
         ret.status === "replacement_approved") && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card">
+          <h2 className="admin-panel-title">
             <PackageCheck className="h-4 w-4 text-brand" />
             Mark Product Received
           </h2>
@@ -485,7 +485,7 @@ export function ReturnAdminActions({
                 type="text"
                 name="notes"
                 placeholder="Optional — what came in, and in what condition..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
             </div>
             <button
@@ -508,8 +508,8 @@ export function ReturnAdminActions({
 
       {/* 3b. THE INSPECTION BEING CARRIED OUT */}
       {ret.status === "received" && (
-        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card admin-card--info">
+          <h2 className="admin-panel-title">
             <ClipboardCheck className="h-4 w-4 text-indigo-600" />
             Start the Inspection
           </h2>
@@ -549,8 +549,8 @@ export function ReturnAdminActions({
       {(ret.status === "pickup_scheduled" ||
         ret.status === "received" ||
         ret.status === "inspection_in_progress") && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card">
+          <h2 className="admin-panel-title">
             <ClipboardCheck className="h-4 w-4 text-brand" />
             Item Receipt & Quality Inspection (QC)
           </h2>
@@ -643,7 +643,7 @@ export function ReturnAdminActions({
                 required
                 rows={2}
                 placeholder="Inspected box, serial verified, controller included, no physical damage..."
-                className="mt-1 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                className="input mt-1 resize-y"
               />
             </div>
 
@@ -669,8 +669,8 @@ export function ReturnAdminActions({
       {ret.type === "return" &&
         (ret.status === "qc_passed" ||
           (ret.status === "received" && ret.qc_status === "passed")) && (
-          <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
-            <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+          <section className="admin-card admin-card--good">
+            <h2 className="admin-panel-title">
               <CreditCard className="h-4 w-4 text-green-700" />
               Approve the Refund
             </h2>
@@ -749,7 +749,7 @@ export function ReturnAdminActions({
                         : ret.refund_amount ||
                           ret.items.reduce((sum, it) => sum + it.price * it.quantity, 0)
                     }
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] font-bold text-ink"
+                    className="input mt-1 tnum font-bold"
                   />
                   {refund && (
                     <p className="mt-1 text-[11.5px] text-gray-500">
@@ -769,7 +769,7 @@ export function ReturnAdminActions({
                     defaultValue={
                       refund?.originalPaymentMethod ?? "Original Payment Source"
                     }
-                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-ink"
+                    className="input mt-1"
                   >
                     <option value="Original Payment Source">
                       Original Payment Source (UPI/Card)
@@ -795,7 +795,7 @@ export function ReturnAdminActions({
                   type="text"
                   name="notes"
                   placeholder="Optional — anything the customer should know about the refund..."
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
 
@@ -813,8 +813,8 @@ export function ReturnAdminActions({
       {/* 5b. THE REFUND IS RAISED — IS THE MONEY OUT? */}
       {ret.type === "return" &&
         (ret.status === "refund_approved" || ret.status === "refund_pending") && (
-          <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
-            <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+          <section className="admin-card admin-card--warn">
+            <h2 className="admin-panel-title">
               <Banknote className="h-4 w-4 text-amber-700" />
               The Refund
             </h2>
@@ -907,7 +907,7 @@ export function ReturnAdminActions({
                       name="reference"
                       required
                       placeholder="e.g. UTR492819482910"
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                      className="input mt-1"
                     />
                   </div>
                   <div>
@@ -918,7 +918,7 @@ export function ReturnAdminActions({
                       type="text"
                       name="notes"
                       placeholder="Optional — when it went out, and how..."
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                      className="input mt-1"
                     />
                   </div>
                   <button
@@ -1001,12 +1001,12 @@ export function ReturnAdminActions({
                     required
                     rows={2}
                     placeholder="e.g. The unit was not returned in the condition claimed..."
-                    className="mt-2 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                    className="input mt-2 resize-y"
                   />
                   <button
                     type="submit"
                     disabled={isRefusePending}
-                    className="btn btn-outline btn-sm mt-3 text-red-700 hover:border-red-300 hover:bg-red-50"
+                    className="btn btn-danger-soft btn-sm mt-3"
                   >
                     {isRefusePending ? "Refusing..." : "Refuse the Refund"}
                   </button>
@@ -1023,8 +1023,8 @@ export function ReturnAdminActions({
           ret.status === "replacement_approved" ||
           ret.status === "qc_passed" ||
           (ret.status === "received" && ret.qc_status === "passed")) && (
-        <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card admin-card--info">
+          <h2 className="admin-panel-title">
             <Truck className="h-4 w-4 text-blue-700" />
             Create the Replacement Shipment
           </h2>
@@ -1082,7 +1082,7 @@ export function ReturnAdminActions({
                               },
                             }))
                           }
-                          className="mt-1 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[13px] text-ink"
+                          className="input mt-1 cursor-pointer"
                         >
                           {candidate.options.map((o) => (
                             <option key={o.value} value={o.value}>
@@ -1111,7 +1111,7 @@ export function ReturnAdminActions({
                               },
                             }))
                           }
-                          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                          className="input mt-1"
                         />
                       </div>
                     </div>
@@ -1142,7 +1142,7 @@ export function ReturnAdminActions({
                   name="courier"
                   required
                   defaultValue="Bluedart Express"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
 
@@ -1155,7 +1155,7 @@ export function ReturnAdminActions({
                   name="tracking"
                   required
                   placeholder="e.g. REP-TRK-789012"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
 
@@ -1167,7 +1167,7 @@ export function ReturnAdminActions({
                   type="date"
                   name="dispatchDate"
                   defaultValue={new Date().toISOString().slice(0, 10)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
             </div>
@@ -1180,7 +1180,7 @@ export function ReturnAdminActions({
                 type="text"
                 name="notes"
                 placeholder="Which unit went out, and anything the customer should know..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
             </div>
 
@@ -1199,8 +1199,8 @@ export function ReturnAdminActions({
       {ret.type === "replacement" &&
         (ret.status === "replacement_dispatched" || ret.status === "replacement_pending") &&
         ret.replacement_order_id && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card">
+          <h2 className="admin-panel-title">
             <Truck className="h-4 w-4 text-brand" />
             The Replacement
           </h2>
@@ -1256,7 +1256,7 @@ export function ReturnAdminActions({
               <select
                 name="deliveryStatus"
                 defaultValue={ret.replacement_delivery_status ?? "dispatched"}
-                className="mt-1 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[13px] text-ink sm:w-72"
+                className="input mt-1 cursor-pointer sm:w-72"
               >
                 {REPLACEMENT_DELIVERY_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -1273,7 +1273,7 @@ export function ReturnAdminActions({
                 type="text"
                 name="notes"
                 placeholder="Optional — what the courier said..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
             </div>
             <button type="submit" disabled={isDeliveryPending} className="btn btn-outline btn-sm">
@@ -1287,8 +1287,8 @@ export function ReturnAdminActions({
         ret.status !== "completed" &&
         ret.status !== "resolved" &&
         ret.status !== "rejected" && (
-        <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card admin-card--info">
+          <h2 className="admin-panel-title">
             <Truck className="h-4 w-4 text-blue-700" />
             Send the Missing Accessories
           </h2>
@@ -1326,7 +1326,7 @@ export function ReturnAdminActions({
                   name="courier"
                   required
                   placeholder="Delhivery, Blue Dart..."
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
               <div>
@@ -1337,7 +1337,7 @@ export function ReturnAdminActions({
                   name="tracking"
                   required
                   placeholder="The number the customer will track"
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                  className="input mt-1"
                 />
               </div>
             </div>
@@ -1349,7 +1349,7 @@ export function ReturnAdminActions({
                 name="notes"
                 rows={2}
                 placeholder="What is in the parcel, and when to expect it."
-                className="mt-1 w-full rounded-lg border border-gray-200 p-2.5 text-[13px] text-ink"
+                className="input mt-1 resize-y"
               />
             </div>
             <button
@@ -1372,8 +1372,8 @@ export function ReturnAdminActions({
 
       {/* 6c. Where the missing accessories have got to. */}
       {ret.type === "accessories" && ret.accessories_dispatched_at && (
-        <section className="rounded-xl border border-green-200 bg-green-50/30 p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card admin-card--good">
+          <h2 className="admin-panel-title">
             <Flag className="h-4 w-4 text-green-700" />
             The Accessories Have Been Sent
           </h2>
@@ -1401,8 +1401,8 @@ export function ReturnAdminActions({
         ret.status === "refund_pending" ||
         ret.status === "replacement_dispatched" ||
         ret.status === "replacement_pending") && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+        <section className="admin-card">
+          <h2 className="admin-panel-title">
             <Flag className="h-4 w-4 text-brand" />
             Mark as Completed
           </h2>
@@ -1430,7 +1430,7 @@ export function ReturnAdminActions({
                 type="text"
                 name="notes"
                 placeholder="Optional — what was settled, and how..."
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+                className="input mt-1"
               />
             </div>
             <button
@@ -1452,7 +1452,7 @@ export function ReturnAdminActions({
       )}
 
       {/* 8. INTERNAL STAFF NOTE */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="admin-card">
         <h2 className="flex items-center gap-2 text-[14px] font-bold text-ink">
           <Send className="h-4 w-4 text-gray-500" />
           Add Internal Staff Note
@@ -1469,7 +1469,7 @@ export function ReturnAdminActions({
             name="note"
             required
             placeholder="Log customer phone call, warehouse remark, or internal update..."
-            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[13px] text-ink"
+            className="input flex-1"
           />
           <button
             type="submit"

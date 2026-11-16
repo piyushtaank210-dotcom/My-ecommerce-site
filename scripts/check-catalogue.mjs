@@ -13,15 +13,15 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import { tokenForRole } from "./lib/session.mjs";
+import { db, closeDb } from "./lib/pg-db.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-const db = new DatabaseSync(join(ROOT, "data/store.db"));
 
-const admin = tokenForRole(db, "admin");
+
+const admin = await tokenForRole("admin");
 
 let failures = 0;
 function check(label, ok, extra = "") {
@@ -144,7 +144,7 @@ const PADDERS = Array.from({ length: 15 }, (_, i) => ({
 
 const ALL = [...FIXTURES, ...PADDERS];
 
-function insertFixtures() {
+async function insertFixtures() {
   const ins = db.prepare(
     `INSERT INTO products
        (slug, sku, name, brand, category_slug, price, mrp, rating, reviews, stock,
@@ -152,7 +152,7 @@ function insertFixtures() {
      VALUES (?,?,?,?,?,?,?,0,0,?,NULL,NULL,'{}',NULL,?,?,?)`
   );
   for (const f of ALL) {
-    ins.run(
+    await ins.run(
       f.slug,
       f.slug.toUpperCase(),
       f.name,
@@ -182,17 +182,21 @@ async function removeFixtures() {
 /* ------------------------------------------------------------- the run */
 
 const before = {
-  products: db.prepare("SELECT COUNT(*) n FROM products").get().n,
-  orders: db.prepare("SELECT COUNT(*) n FROM orders").get().n,
-  orderItems: db.prepare("SELECT COUNT(*) n FROM order_items").get().n,
-  rows: db
+  // PostgreSQL counts come back as a string, so they are turned into
+  // numbers here — otherwise "10" + 19 is "1019" rather than 29.
+  products: Number((await db.prepare("SELECT COUNT(*) n FROM products").get()).n),
+  orders: Number((await db.prepare("SELECT COUNT(*) n FROM orders").get()).n),
+  orderItems: Number(
+    (await db.prepare("SELECT COUNT(*) n FROM order_items").get()).n
+  ),
+  rows: await db
     .prepare(
       "SELECT slug, sku, name, price, mrp, stock, listed, status FROM products ORDER BY slug"
     )
     .all(),
 };
 
-insertFixtures();
+await insertFixtures();
 
 try {
   console.log("\n→ search");
@@ -233,7 +237,9 @@ try {
     const byCategory = rows((await page("/admin/products?category=controllers")).body);
     check(
       "the category filter narrows the list",
-      byCategory.length === 5 && byCategory.every((r) => /controllers/.test(r)),
+      // The two fixtures of this category, and the four controllers the
+      // shop sells.
+      byCategory.length === 6 && byCategory.every((r) => /controllers/.test(r)),
       `${byCategory.length} rows`
     );
 
@@ -261,7 +267,15 @@ try {
     const out = await api("/api/admin/products?stock=out&limit=100");
     check(
       "the out-of-stock filter leaves only the empty products",
-      out.json.rows.every((p) => p.stock === 0),
+      // A product that sells through its options is counted by those
+      // options, so the count that matters is the options' stock added
+      // up — not the product's own, which is dormant.
+      out.json.rows.every(
+        (p) =>
+          (p.variants?.length
+            ? p.variants.reduce((sum, v) => sum + v.stock, 0)
+            : p.stock) === 0
+      ),
       `${out.json.rows.length} rows`
     );
     check(
@@ -273,13 +287,19 @@ try {
     const low = await api("/api/admin/products?stock=low&limit=100");
     check(
       "the low-stock filter counts the sellable stock",
-      low.json.rows.every(
-        (p) =>
-          p.variants.length > 0
-            ? p.variants.reduce((s, v) => s + v.stock, 0) > 0 &&
-              p.variants.reduce((s, v) => s + v.stock, 0) <= 5
-            : p.stock > 0 && p.stock <= 5
-      ),
+      // A product that sells through its options is low when what it can
+      // sell has reached its own threshold — or when one of its options
+      // has reached that option's own threshold, because an option that
+      // has run out makes the product low even when the other options
+      // are still on the shelf.
+      low.json.rows.every((p) => {
+        if (!p.variants.length) return p.stock > 0 && p.stock <= 5;
+        const sellable = p.variants.reduce((s, v) => s + v.stock, 0);
+        const anOptionIsLow = p.variants.some((v) => v.stock <= 5);
+        return (
+          sellable > 0 && (sellable <= 5 || anOptionIsLow)
+        );
+      }),
       `${low.json.rows.length} rows`
     );
   }
@@ -594,10 +614,14 @@ try {
   console.log("\n→ nothing was broken");
   {
     const after = {
-      products: db.prepare("SELECT COUNT(*) n FROM products").get().n,
-      orders: db.prepare("SELECT COUNT(*) n FROM orders").get().n,
-      orderItems: db.prepare("SELECT COUNT(*) n FROM order_items").get().n,
-      rows: db
+      products: Number(
+        (await db.prepare("SELECT COUNT(*) n FROM products").get()).n
+      ),
+      orders: Number((await db.prepare("SELECT COUNT(*) n FROM orders").get()).n),
+      orderItems: Number(
+        (await db.prepare("SELECT COUNT(*) n FROM order_items").get()).n
+      ),
+      rows: await db
         .prepare(
           "SELECT slug, sku, name, price, mrp, stock, listed, status FROM products WHERE slug NOT LIKE 'zz-%' ORDER BY slug"
         )
@@ -626,7 +650,7 @@ try {
   }
 } finally {
   await removeFixtures();
-  db.close();
+  await closeDb();
 }
 
 console.log(

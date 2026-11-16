@@ -17,15 +17,17 @@ import {
 import {
   REFUND_STATUSES,
   REFUND_STATUS_LABEL,
-  REFUND_STATUS_TONE,
 } from "@/lib/return-status";
 import { gatewayIsConfigured } from "@/lib/gateway-config";
 import { money, formatDate } from "@/lib/format";
-import { StatCard } from "@/components/admin/StatCard";
+import { StatCard } from "@/components/admin/ui/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { PanelDateRange } from "@/components/admin/PanelDateRange";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
+import { Badge } from "@/components/admin/ui/Badge";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
+import { REFUND_TONE } from "@/lib/status-tone";
 
 const PER_PAGE = 25;
 
@@ -100,7 +102,7 @@ export async function RefundRecordsView({
 
   return (
     <div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="admin-stat-row">
         <StatCard
           label="Refunds on file"
           value={String(all.length)}
@@ -138,8 +140,8 @@ export async function RefundRecordsView({
 
       {/* How a refund is settled. The shop pays it by hand until the
           payment gateway is live, and the panel says which it is. */}
-      <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+      <div className="admin-notice mt-4">
+        <Wallet className="admin-notice-icon h-4 w-4" />
         <p className="text-[12.5px] text-gray-600">
           {gatewayIsConfigured() ? (
             <>
@@ -159,7 +161,7 @@ export async function RefundRecordsView({
         </p>
       </div>
 
-      <div className="mt-5 mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar mt-5">
         <PanelSearch placeholder="Search refund, request, order, customer or transaction" />
         <PanelFilter
           name="status"
@@ -177,26 +179,22 @@ export async function RefundRecordsView({
       </div>
 
       {refunds.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-          <Wallet className="h-9 w-9 text-gray-300" />
-          <h2 className="mt-4 text-[16px] font-semibold text-ink">
-            No refunds match
-          </h2>
-          <p className="mt-1 text-[13px] text-gray-500">
-            Try another search, or clear the filters.
-          </p>
-        </div>
+        <EmptyState
+          icon={Wallet}
+          title="No refunds match"
+          description="Try another search, or clear the filters."
+        />
       ) : (
         <div className="space-y-4">
           {details.map(({ refund: r, lines, events }) => (
             <article
               key={r.id}
-              className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+              className="admin-panel overflow-hidden"
             >
               {/* The row itself — every field the refund carries. */}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-left text-[13.5px]">
-                  <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
+              <div className="admin-table-wrap" style={{ border: 0, borderRadius: 0 }}>
+                <table className="admin-table" style={{ minWidth: 1100 }}>
+                  <thead>
                     <tr>
                       <th className="px-3 py-3 font-semibold">Refund ID</th>
                       <th className="px-3 py-3 font-semibold">Order ID</th>
@@ -214,7 +212,7 @@ export async function RefundRecordsView({
                       <th className="px-3 py-3 text-right font-semibold">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     <tr className="bg-white hover:bg-gray-50/70">
                       <td className="px-3 py-3">
                         <p className="tnum font-semibold text-ink">{r.id}</p>
@@ -270,14 +268,9 @@ export async function RefundRecordsView({
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <span
-                          className={`inline-block whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                            REFUND_STATUS_TONE[r.status] ??
-                            "bg-gray-100 text-gray-600 border-gray-200"
-                          }`}
-                        >
+                        <Badge tone={REFUND_TONE[r.status] ?? "neutral"}>
                           {REFUND_STATUS_LABEL[r.status] ?? r.status}
-                        </span>
+                        </Badge>
                         {r.failed_reason && (
                           <p className="mt-1 max-w-[220px] text-[12px] text-red-600">
                             {r.failed_reason}

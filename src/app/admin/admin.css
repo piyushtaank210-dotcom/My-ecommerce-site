@@ -1,0 +1,1653 @@
+/* ==========================================================================
+   The back office's design system.
+
+   Everything the back office draws with is defined here, in one place: the
+   surfaces, the lines, the type scale, the buttons, the fields, the badges,
+   the panels and the tables. Every admin page then speaks the same
+   language, and a new page inherits it rather than inventing its own.
+
+   This file is imported by the back office's own layout, so it is only
+   ever loaded on an admin page — it cannot reach the shop, and the shop's
+   own stylesheet is left exactly as it was.
+
+   The colours, the measures and the shape are declared as custom
+   properties on `.admin-root`, the element the shell puts around the
+   whole back office. The rules below read from those, so the design
+   system is defined once and can be changed in one place.
+
+   The shop's own `.btn`, `.input` and `.label` are used by the back
+   office too, and this file restates them here — under `.admin-root`,
+   which is more specific — so that the back office's controls are its
+   own size and colour without the shop's stylesheet having to know
+   anything about it.
+   ========================================================================== */
+
+.admin-root {
+  /* Surfaces ---------------------------------------------------------- */
+  --adm-canvas: #f3f5f8;
+  --adm-surface: #ffffff;
+  --adm-surface-2: #f8fafc;
+  --adm-surface-3: #eef2f7;
+
+  /* Lines ------------------------------------------------------------- */
+  --adm-line: #e4e9f0;
+  --adm-line-2: #d3dbe6;
+
+  /* Ink --------------------------------------------------------------- */
+  --adm-ink: #0c1524;
+  --adm-ink-2: #4a5666;
+  --adm-ink-3: #8593a5;
+
+  /* The accent is the shop's own blue, so the back office and the shop
+     are recognisably the same business. */
+  --adm-accent: #0071c5;
+  --adm-accent-2: #005a9e;
+  --adm-accent-soft: #e9f4fc;
+
+  /* States ------------------------------------------------------------ */
+  --adm-good: #05683f;
+  --adm-good-soft: #e9f9f0;
+  --adm-good-line: #a6e5c5;
+  --adm-warn: #96560a;
+  --adm-warn-soft: #fff8e8;
+  --adm-warn-line: #f3d693;
+  --adm-bad: #b42318;
+  --adm-bad-soft: #fdf3f2;
+  --adm-bad-line: #f3c2bd;
+  --adm-info: #14539b;
+  --adm-info-soft: #edf5ff;
+  --adm-info-line: #b9d8fb;
+
+  /* Shape ------------------------------------------------------------- */
+  --adm-r-xs: 6px;
+  --adm-r-sm: 8px;
+  --adm-r: 10px;
+  --adm-r-lg: 14px;
+  --adm-r-xl: 18px;
+
+  /* Depth ------------------------------------------------------------- */
+  --adm-shadow-1: 0 1px 2px rgb(12 21 36 / 0.05);
+  --adm-shadow-2:
+    0 1px 3px rgb(12 21 36 / 0.06), 0 10px 26px -14px rgb(12 21 36 / 0.22);
+  --adm-shadow-3: 0 20px 50px -18px rgb(12 21 36 / 0.32);
+  --adm-ring: 0 0 0 3px rgb(0 113 197 / 0.18);
+
+  /* Measures ---------------------------------------------------------- */
+  --adm-sidebar: 268px;
+  --adm-sidebar-collapsed: 78px;
+  --adm-topbar: 56px;
+
+  min-height: 100vh;
+  background-color: var(--adm-canvas);
+  color: var(--adm-ink);
+  font-family:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==========================================================================
+   The shell
+   ========================================================================== */
+
+.admin-shell {
+  min-height: 100vh;
+}
+
+/* The sidebar: a fixed column on a wide screen, a drawer on a narrow one. */
+.admin-sidebar {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 60;
+  width: var(--adm-sidebar);
+  display: flex;
+  flex-direction: column;
+  background-color: #0b1322;
+  color: #fff;
+  transition: width 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-sidebar[data-collapsed="true"] {
+  width: var(--adm-sidebar-collapsed);
+}
+
+.admin-sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 0 10px;
+}
+
+.admin-sidebar-foot {
+  border-top: 1px solid rgb(255 255 255 / 0.09);
+  padding: 14px 14px 16px;
+}
+
+.admin-body {
+  min-width: 0;
+}
+
+/* The top bar. */
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--adm-topbar);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-inline: clamp(1rem, 2vw, 2rem);
+  background-color: rgb(255 255 255 / 0.88);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--adm-line);
+}
+
+.admin-main {
+  padding: clamp(1.25rem, 1.6vw, 1.75rem) clamp(1rem, 2vw, 2rem) 5rem;
+}
+
+/* The frame every page sits in. It is as wide as the screen allows, with
+   a ceiling high enough that a 1600px monitor is filled edge to edge. */
+.admin-frame {
+  width: 100%;
+  max-width: 1920px;
+  margin-inline: auto;
+}
+
+@media (min-width: 1024px) {
+  .admin-body {
+    margin-left: var(--adm-sidebar);
+  }
+
+  /* The sidebar's width is carried on the body itself rather than by a
+     sibling rule: the drawer's markup sits between the two, so a rule
+     that matched the next sibling would stop matching the moment the
+     drawer was open. */
+  .admin-body[data-sidebar="collapsed"] {
+    margin-left: var(--adm-sidebar-collapsed);
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .admin-sidebar {
+    display: none;
+  }
+
+  .admin-body {
+    margin-left: 0;
+  }
+}
+
+/* ==========================================================================
+   The navigation
+   ========================================================================== */
+
+.admin-nav-group {
+  padding: 14px 20px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.34);
+}
+
+.admin-nav-group:first-child {
+  padding-top: 2px;
+}
+
+.admin-nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 38px;
+  padding-inline: 12px;
+  margin-inline: 8px;
+  border-radius: var(--adm-r-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.66);
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.admin-nav-link:hover {
+  background-color: rgb(255 255 255 / 0.07);
+  color: #fff;
+}
+
+.admin-nav-link[aria-current="page"] {
+  background-color: rgb(255 255 255 / 0.11);
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background-color: var(--adm-accent);
+}
+
+.admin-nav-icon {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+
+.admin-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-sidebar[data-collapsed="true"] .admin-nav-label,
+.admin-sidebar[data-collapsed="true"] .admin-nav-group,
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-user,
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-meta,
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-role,
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-foot button span {
+  display: none;
+}
+
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-foot {
+  padding-inline: 10px;
+}
+
+.admin-sidebar[data-collapsed="true"] .admin-sidebar-foot button {
+  width: 32px;
+  padding-inline: 0;
+  justify-content: center;
+  margin-inline: auto;
+}
+
+.admin-sidebar[data-collapsed="true"] .admin-nav-link {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.admin-sidebar[data-collapsed="true"] .admin-nav-link[aria-current="page"]::before {
+  left: -8px;
+}
+
+/* The identity block at the foot of the sidebar. */
+.admin-sidebar-user {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.admin-sidebar-meta {
+  font-size: 11.5px;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.admin-sidebar-role {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.12);
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.82);
+}
+
+/* ==========================================================================
+   Page furniture
+   ========================================================================== */
+
+.admin-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 22px;
+}
+
+.admin-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--adm-ink-3);
+}
+
+.admin-h1 {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--adm-ink);
+}
+
+.admin-h1-sm {
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--adm-ink);
+}
+
+.admin-lead {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--adm-ink-2);
+  max-width: 76ch;
+}
+
+.admin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--adm-ink-3);
+}
+
+.admin-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-section {
+  margin-top: 28px;
+}
+
+.admin-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* A card that carries its own padding — for the parts of a page that are
+   a single block rather than a panel with a heading and a body. */
+.admin-card {
+  padding: 20px;
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+}
+
+.admin-card--warn {
+  border-color: var(--adm-warn-line);
+  background-color: var(--adm-warn-soft);
+}
+
+.admin-card--good {
+  border-color: var(--adm-good-line);
+  background-color: var(--adm-good-soft);
+}
+
+.admin-card--info {
+  border-color: var(--adm-info-line);
+  background-color: var(--adm-info-soft);
+}
+
+/* A panel — the card everything is built out of
+   ========================================================================== */
+
+.admin-panel {
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+}
+
+.admin-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--adm-line);
+}
+
+.admin-panel-head--plain {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.admin-panel-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--adm-ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-panel-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--adm-ink-2);
+  max-width: 78ch;
+}
+
+.admin-panel-body {
+  padding: 20px;
+}
+
+.admin-panel-body--tight {
+  padding: 14px 20px;
+}
+
+.admin-panel-body--flush {
+  padding: 0;
+}
+
+.admin-panel-foot {
+  padding: 14px 20px;
+  border-top: 1px solid var(--adm-line);
+  background-color: var(--adm-surface-2);
+  border-radius: 0 0 var(--adm-r-lg) var(--adm-r-lg);
+}
+
+/* A panel that is only a coloured notice. */
+.admin-panel--warn {
+  border-color: var(--adm-warn-line);
+  background-color: var(--adm-warn-soft);
+}
+
+.admin-panel--bad {
+  border-color: var(--adm-bad-line);
+  background-color: var(--adm-bad-soft);
+}
+
+.admin-panel--good {
+  border-color: var(--adm-good-line);
+  background-color: var(--adm-good-soft);
+}
+
+.admin-panel--info {
+  border-color: var(--adm-info-line);
+  background-color: var(--adm-info-soft);
+}
+
+/* ==========================================================================
+   Grids
+   ========================================================================== */
+
+/* The main column and the side column of a detail page. */
+.admin-split {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1100px) {
+  .admin-split {
+    grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+  }
+}
+
+/* A row of numbers. */
+.admin-stat-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.admin-stat {
+  display: block;
+  padding: 16px 18px;
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+}
+
+.admin-stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--adm-ink-3);
+}
+
+.admin-stat-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--adm-r-sm);
+  background-color: var(--adm-accent-soft);
+  color: var(--adm-accent);
+}
+
+.admin-stat-icon--good {
+  background-color: var(--adm-good-soft);
+  color: var(--adm-good);
+}
+
+.admin-stat-icon--warn {
+  background-color: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+.admin-stat-icon--bad {
+  background-color: var(--adm-bad-soft);
+  color: var(--adm-bad);
+}
+
+.admin-stat-value {
+  margin-top: 10px;
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--adm-ink);
+}
+
+.admin-stat-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--adm-ink-3);
+}
+
+a.admin-stat {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+a.admin-stat:hover {
+  border-color: var(--adm-line-2);
+  box-shadow: var(--adm-shadow-2);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.admin-root .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding-inline: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--adm-r-sm);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-root .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-root .btn-sm {
+  height: 31px;
+  padding-inline: 11px;
+  font-size: 12.5px;
+  gap: 6px;
+}
+
+.admin-root .btn-lg {
+  height: 42px;
+  padding-inline: 20px;
+  font-size: 14px;
+}
+
+.admin-root .btn-primary {
+  background-color: var(--adm-accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(0 113 197 / 0.28);
+}
+
+.admin-root .btn-primary:not(:disabled):hover {
+  background-color: var(--adm-accent-2);
+}
+
+.admin-root .btn-outline {
+  background-color: var(--adm-surface);
+  border-color: var(--adm-line-2);
+  color: var(--adm-ink);
+}
+
+.admin-root .btn-outline:not(:disabled):hover {
+  border-color: var(--adm-accent);
+  color: var(--adm-accent);
+  background-color: var(--adm-accent-soft);
+}
+
+.admin-root .btn-ghost {
+  background-color: transparent;
+  color: var(--adm-ink-2);
+}
+
+.admin-root .btn-ghost:not(:disabled):hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+/* The destructive one. It is never the default — it is red, and it says
+   what it does. */
+.admin-root .btn-danger {
+  background-color: var(--adm-bad);
+  color: #fff;
+}
+
+.admin-root .btn-danger:not(:disabled):hover {
+  background-color: #99201a;
+}
+
+.admin-root .btn-danger-soft {
+  background-color: var(--adm-bad-soft);
+  border-color: var(--adm-bad-line);
+  color: var(--adm-bad);
+}
+
+.admin-root .btn-danger-soft:not(:disabled):hover {
+  background-color: #fbe4e1;
+  border-color: var(--adm-bad);
+}
+
+/* ==========================================================================
+   Forms
+   ========================================================================== */
+
+.admin-root .input {
+  width: 100%;
+  min-height: 36px;
+  border-radius: var(--adm-r-sm);
+  border: 1px solid var(--adm-line-2);
+  background-color: var(--adm-surface);
+  padding: 7px 11px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--adm-ink);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-root .input::placeholder {
+  color: #9aa6b6;
+}
+
+.admin-root .input:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+
+.admin-root .input:disabled {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink-3);
+  cursor: not-allowed;
+}
+
+.admin-root .input-error {
+  border-color: var(--adm-bad);
+}
+
+.admin-root .input-error:focus {
+  border-color: var(--adm-bad);
+  box-shadow: 0 0 0 3px rgb(180 35 24 / 0.14);
+}
+
+.admin-root .label,
+.admin-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #38455a;
+}
+
+.admin-label--required::after {
+  content: " *";
+  color: var(--adm-bad);
+}
+
+.admin-field {
+  min-width: 0;
+}
+
+.admin-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--adm-ink-3);
+}
+
+.admin-error {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--adm-bad);
+}
+
+/* The row of fields. */
+.admin-field-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-field-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-field-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 899.98px) {
+  .admin-field-grid--3,
+  .admin-field-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 599.98px) {
+  .admin-field-grid,
+  .admin-field-grid--3,
+  .admin-field-grid--4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.admin-root input[type="checkbox"],
+.admin-root input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--adm-accent);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Badges
+   ========================================================================== */
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.admin-badge--neutral {
+  background-color: var(--adm-surface-3);
+  border-color: var(--adm-line);
+  color: var(--adm-ink-2);
+}
+
+.admin-badge--accent {
+  background-color: var(--adm-accent-soft);
+  border-color: #b9dcf6;
+  color: var(--adm-accent-2);
+}
+
+.admin-badge--good {
+  background-color: var(--adm-good-soft);
+  border-color: var(--adm-good-line);
+  color: var(--adm-good);
+}
+
+.admin-badge--warn {
+  background-color: var(--adm-warn-soft);
+  border-color: var(--adm-warn-line);
+  color: var(--adm-warn);
+}
+
+.admin-badge--bad {
+  background-color: var(--adm-bad-soft);
+  border-color: var(--adm-bad-line);
+  color: var(--adm-bad);
+}
+
+.admin-badge--info {
+  background-color: var(--adm-info-soft);
+  border-color: var(--adm-info-line);
+  color: var(--adm-info);
+}
+
+.admin-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: currentColor;
+}
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
+
+.admin-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 13px;
+}
+
+/* A table whose column widths are set by hand. The widths are then
+   authoritative, so a long value cannot push the table past the edge
+   of the screen and hide the columns to its right. */
+.admin-table--fixed {
+  table-layout: fixed;
+}
+
+.admin-table--fixed td,
+.admin-table--fixed th {
+  overflow-wrap: anywhere;
+}
+
+.admin-table thead th {
+  padding: 10px 16px;
+  background-color: var(--adm-surface-2);
+  border-bottom: 1px solid var(--adm-line);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--adm-ink-3);
+  white-space: nowrap;
+}
+
+.admin-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--adm-line);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.admin-table tbody tr:hover {
+  background-color: #fafbfd;
+}
+
+.admin-table tbody tr[data-hl="warn"] {
+  background-color: #fffaf0;
+}
+
+.admin-table tbody tr[data-hl="warn"]:hover {
+  background-color: #fff6e4;
+}
+
+.admin-td-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-th-num {
+  text-align: right;
+}
+
+/* The column of row actions, held against the edge of the table. */
+.admin-td-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-td-actions > * {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+/* The actions column of a wide table, held against the edge so that it
+   is always reachable without scrolling the whole table across. It is
+   only held there on a screen with room for it — on a phone it would
+   take a third of the width and hide the columns beside it. */
+.admin-sticky-actions {
+  background-color: var(--adm-surface);
+  border-left: 1px solid var(--adm-line);
+}
+
+@media (min-width: 1024px) {
+  .admin-sticky-actions {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+  }
+
+  .admin-table thead th.admin-sticky-actions {
+    z-index: 3;
+    background-color: var(--adm-surface-2);
+  }
+
+  .admin-table tbody tr:hover .admin-sticky-actions {
+    background-color: #fafbfd;
+  }
+}
+
+/* The bar that appears when rows are ticked. */
+.admin-bulkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--adm-info-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-accent-soft);
+}
+
+/* The cell that holds a product: its picture and its name. */
+.admin-cell-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-thumb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-sm);
+  background-color: var(--adm-surface-2);
+  overflow: hidden;
+}
+
+.admin-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+.admin-cell-title {
+  display: block;
+  font-weight: 600;
+  color: var(--adm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--adm-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The line under a table: how much there is, and the pages. */
+.admin-table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--adm-ink-3);
+}
+
+/* ==========================================================================
+   The toolbar above a table — the search and the filters
+   ========================================================================== */
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-toolbar--inset {
+  padding: 12px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--adm-line);
+  background-color: var(--adm-surface-2);
+}
+
+.admin-search {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+}
+
+.admin-search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 34px 0 34px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r-sm);
+  background-color: var(--adm-surface);
+  font-size: 13px;
+  color: var(--adm-ink);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.admin-search input:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+
+.admin-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--adm-ink-3);
+  pointer-events: none;
+}
+
+.admin-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--adm-r-xs);
+  color: var(--adm-ink-3);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.admin-search-clear:hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+/* A filter dropdown. */
+.admin-filter {
+  height: 36px;
+  padding-inline: 11px 30px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r-sm);
+  background-color: var(--adm-surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--adm-ink);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-filter:hover {
+  border-color: var(--adm-line-2);
+  background-color: var(--adm-surface-2);
+}
+
+.admin-filter:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+
+/* ==========================================================================
+   Tabs — the views a list can be read through
+   ========================================================================== */
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface);
+}
+
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding-inline: 12px;
+  border-radius: var(--adm-r-xs);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--adm-ink-2);
+  white-space: nowrap;
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-tab:hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+.admin-tab[aria-current="page"] {
+  background-color: var(--adm-ink);
+  color: #fff;
+}
+
+.admin-tab-count {
+  min-width: 20px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  background-color: var(--adm-surface-3);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--adm-ink-2);
+}
+
+.admin-tab[aria-current="page"] .admin-tab-count {
+  background-color: rgb(255 255 255 / 0.18);
+  color: #fff;
+}
+
+/* ==========================================================================
+   Empty states and notices
+   ========================================================================== */
+
+.admin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 56px 24px;
+  text-align: center;
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+}
+
+.admin-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 12px;
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink-3);
+}
+
+.admin-empty-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--adm-ink);
+}
+
+.admin-empty-text {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--adm-ink-2);
+  max-width: 52ch;
+}
+
+.admin-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--adm-info-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-info-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--adm-info);
+}
+
+.admin-notice--warn {
+  border-color: var(--adm-warn-line);
+  background-color: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+.admin-notice--bad {
+  border-color: var(--adm-bad-line);
+  background-color: var(--adm-bad-soft);
+  color: var(--adm-bad);
+}
+
+.admin-notice--good {
+  border-color: var(--adm-good-line);
+  background-color: var(--adm-good-soft);
+  color: var(--adm-good);
+}
+
+.admin-notice-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* ==========================================================================
+   Definition lists — a panel that is a list of facts
+   ========================================================================== */
+
+.admin-facts {
+  display: grid;
+  gap: 0;
+}
+
+.admin-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--adm-line);
+  font-size: 13px;
+}
+
+.admin-fact:last-child {
+  border-bottom: 0;
+}
+
+.admin-fact dt {
+  color: var(--adm-ink-3);
+}
+
+.admin-fact dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--adm-ink);
+  text-align: right;
+}
+
+/* ==========================================================================
+   The sticky section navigation of a long form
+   ========================================================================== */
+
+.admin-sections {
+  position: sticky;
+  top: calc(var(--adm-topbar) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface);
+  box-shadow: var(--adm-shadow-1);
+}
+
+.admin-sections-title {
+  padding: 6px 10px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--adm-ink-3);
+}
+
+.admin-sections-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--adm-r-xs);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--adm-ink-2);
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-sections-link:hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+.admin-sections-link[data-active="true"] {
+  background-color: var(--adm-accent-soft);
+  color: var(--adm-accent-2);
+  font-weight: 650;
+}
+
+.admin-sections-link svg {
+  flex: none;
+  opacity: 0.75;
+}
+
+.admin-sections-link[data-active="true"] svg {
+  opacity: 1;
+}
+
+/* On a narrow screen the section navigation becomes a row that slides. */
+@media (max-width: 1099.98px) {
+  .admin-sections {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 6px;
+    scrollbar-width: none;
+  }
+
+  .admin-sections::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-sections-title {
+    display: none;
+  }
+
+  .admin-sections-link {
+    white-space: nowrap;
+  }
+}
+
+/* ==========================================================================
+   The editor layout — the section navigation beside the form
+   ========================================================================== */
+
+.admin-editor {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1100px) {
+  .admin-editor {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+}
+
+.admin-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* A small dropdown, for a cell in a table. */
+.admin-select-sm {
+  height: 30px;
+  padding: 0 26px 0 9px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r-xs);
+  background-color: var(--adm-surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--adm-ink);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-select-sm:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+
+.admin-select-sm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A small on/off switch, for a cell in a table. */
+.admin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding-inline: 9px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r-xs);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--adm-ink-2);
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.admin-toggle:disabled {
+  opacity: 0.6;
+}
+
+.admin-toggle[data-on="false"] {
+  border-color: var(--adm-warn-line);
+  background-color: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+/* A row of icon buttons — the actions on the right of a table. */
+.admin-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.admin-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--adm-r-xs);
+  color: var(--adm-ink-3);
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-icon-btn:hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+.admin-icon-btn--brand:hover {
+  background-color: var(--adm-accent-soft);
+  color: var(--adm-accent);
+}
+
+.admin-icon-btn--warn:hover {
+  background-color: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+.admin-icon-btn--good:hover {
+  background-color: var(--adm-good-soft);
+  color: var(--adm-good);
+}
+
+.admin-icon-btn--bad:hover {
+  background-color: var(--adm-bad-soft);
+  color: var(--adm-bad);
+}
+
+.admin-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Small pieces
+   ========================================================================== */
+
+.admin-strong {
+  font-weight: 650;
+  color: var(--adm-ink);
+}
+
+/* A row of links that sit together, like the ones under a heading. */
+.admin-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--adm-accent);
+}
+
+.admin-links:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Focus
+   ========================================================================== */
+
+.admin-root :focus-visible {
+  outline: 2px solid var(--adm-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   The narrow screen
+   ========================================================================== */
+
+@media (max-width: 767px), (pointer: coarse) {
+  /* iOS Safari zooms the whole page in when a form field smaller than
+     16px is tapped, and it never zooms back out on its own. The site's
+     own rule sets the floor; the back office's fields are declared
+     above it, so they are given the floor again here. */
+  .admin-root .input,
+  .admin-root .admin-filter,
+  .admin-root .admin-select-sm,
+  .admin-root .admin-search input,
+  .admin-root select,
+  .admin-root textarea {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* The same floor for the controls themselves: a button under 44px is
+     a short, thin strip that is easy to miss and easy to mistype into. */
+  .admin-root .btn,
+  .admin-root .admin-select-sm,
+  .admin-root .admin-filter,
+  .admin-root .admin-toggle {
+    min-height: 2.75rem;
+  }
+
+  /* And for the fields themselves — the shop's own rule, restated here
+     because the back office declares its fields above it. */
+  .admin-root .input,
+  .admin-root .admin-search input,
+  .admin-root .admin-select-sm,
+  .admin-root .admin-filter,
+  .admin-root .admin-toggle {
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .admin-topbar {
+    padding-inline: 14px;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .admin-h1 {
+    font-size: 22px;
+  }
+
+  .admin-page-head {
+    margin-bottom: 18px;
+  }
+
+  .admin-panel-body {
+    padding: 16px;
+  }
+
+  .admin-panel-head {
+    padding: 14px 16px;
+  }
+
+  .admin-table thead th,
+  .admin-table tbody td {
+    padding-inline: 12px;
+  }
+
+  /* The whole table slides sideways rather than squashing. */
+  .admin-table-wrap {
+    border-radius: var(--adm-r);
+  }
+
+  .admin-search {
+    max-width: none;
+  }
+}

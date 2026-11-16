@@ -21,7 +21,6 @@ import {
   listReturnRequests,
   countReturnRequests,
   RETURN_STATUS_LABEL,
-  RETURN_STATUS_TONE,
   RETURN_TYPE_LABEL,
   RETURN_STATUSES,
   RETURN_TYPES,
@@ -31,15 +30,18 @@ import { getReturnsOverview } from "@/lib/returns-records";
 import { getReturnPolicy } from "@/lib/settings";
 import { can } from "@/lib/roles";
 import { money, formatDate } from "@/lib/format";
-import { StatCard } from "@/components/admin/StatCard";
+import { StatCard } from "@/components/admin/ui/StatCard";
 import { PanelSearch } from "@/components/admin/PanelSearch";
 import { PanelFilter } from "@/components/admin/PanelFilter";
 import { PanelDateRange } from "@/components/admin/PanelDateRange";
 import { ReturnTabs } from "@/components/admin/ReturnTabs";
-import { Pagination } from "@/components/Pagination";
+import { Pagination } from "@/components/admin/ui/Pagination";
 import { RefundRecordsView } from "@/components/admin/returns/RefundRecordsView";
 import { ReplacementRecordsView } from "@/components/admin/returns/ReplacementRecordsView";
 import { ReturnPolicySettings } from "@/components/admin/returns/ReturnPolicySettings";
+import { PageHeader } from "@/components/admin/ui/PageHeader";
+import { EmptyState } from "@/components/admin/ui/EmptyState";
+import { ReturnStatusBadge } from "@/components/admin/ui/StatusBadge";
 
 export const metadata = { title: "Returns & Refunds" };
 
@@ -218,14 +220,12 @@ export default async function AdminReturnsPage({
   });
 
   return (
-    <div className="mx-auto max-w-[1600px]">
-      <header className="mb-6">
-        <h1 className="text-[26px] font-bold text-ink">Returns & Refunds</h1>
-        <p className="mt-1.5 text-[13.5px] text-gray-500">
-          Every return, replacement and refund — where each one stands, and
-          what is still to be done.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Operations"
+        title="Returns & Refunds"
+        description="Every return, replacement and refund — where each one stands, and what is still to be done."
+      />
 
       {/* The shop's return policy — the switches that decide whether
           the shop takes returns at all, and what a customer has to
@@ -240,7 +240,7 @@ export default async function AdminReturnsPage({
       />
 
       {/* Summary cards — the whole of the returns desk, at a glance. */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="admin-stat-row mt-5">
         <StatCard
           label="Total requests"
           value={String(stats.total)}
@@ -332,7 +332,7 @@ export default async function AdminReturnsPage({
       ) : (
         <>
       {/* Search, filters and dates */}
-      <div className="mt-4 mb-5 flex flex-wrap items-center gap-3">
+      <div className="admin-toolbar mt-4">
         <PanelSearch placeholder="Search request, order, customer name or email" />
         <PanelFilter
           name="status"
@@ -374,26 +374,24 @@ export default async function AdminReturnsPage({
 
       {/* The table */}
       {returns.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white px-6 py-20 text-center">
-          <RotateCcw className="h-9 w-9 text-gray-300" />
-          <h2 className="mt-4 text-[16px] font-semibold text-ink">
-            No requests match
-          </h2>
-          <p className="mt-1 text-[13px] text-gray-500">
-            Try another view, or clear the search and the dates.
-          </p>
-          <Link href="/admin/returns" className="btn btn-outline btn-sm mt-5">
-            Clear filters
-          </Link>
-        </div>
+        <EmptyState
+          icon={RotateCcw}
+          title="No requests match"
+          description="Try another view, or clear the search and the dates."
+          action={
+            <Link href="/admin/returns" className="btn btn-outline btn-sm">
+              Clear filters
+            </Link>
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full min-w-[980px] text-left text-[13.5px]">
-            <thead className="border-b border-gray-200 bg-gray-50 text-[11.5px] uppercase tracking-wider text-gray-500">
+        <div className="admin-table-wrap">
+          <table className="admin-table" style={{ minWidth: 980 }}>
+            <thead>
               <tr>
-                <th className="px-3 py-3 font-semibold">Request ID</th>
-                <th className="px-3 py-3 font-semibold">Order ID</th>
-                <th className="px-3 py-3 font-semibold">
+                <th>Request ID</th>
+                <th>Order ID</th>
+                <th>
                   <Link
                     href={sortLink("customer", sort === "customer" ? "newest" : "customer")}
                     className={`inline-flex items-center gap-1 ${sortedBy("customer", "customer")}`}
@@ -401,9 +399,9 @@ export default async function AdminReturnsPage({
                     Customer {sortIcon("customer", "customer")}
                   </Link>
                 </th>
-                <th className="px-3 py-3 font-semibold">Product</th>
-                <th className="px-3 py-3 font-semibold">Type</th>
-                <th className="px-3 py-3 font-semibold">
+                <th>Product</th>
+                <th>Type</th>
+                <th>
                   <Link
                     href={sortLink("date", sort === "newest" ? "oldest" : "newest")}
                     className={`inline-flex items-center gap-1 ${sortedBy("date", "newest")}`}
@@ -411,7 +409,7 @@ export default async function AdminReturnsPage({
                     Request date {sortIcon("date", "newest")}
                   </Link>
                 </th>
-                <th className="px-3 py-3 font-semibold">
+                <th>
                   <Link
                     href={sortLink("status", sort === "status" ? "newest" : "status")}
                     className={`inline-flex items-center gap-1 ${sortedBy("status", "status")}`}
@@ -419,29 +417,29 @@ export default async function AdminReturnsPage({
                     Status {sortIcon("status", "status")}
                   </Link>
                 </th>
-                <th className="px-3 py-3 text-right font-semibold">Action</th>
+                <th className="admin-th-num">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {returns.map((ret) => {
                 const items = ret.items;
                 const value = items.reduce((sum, it) => sum + it.price * it.quantity, 0);
 
                 return (
-                  <tr key={ret.id} className="bg-white hover:bg-gray-50/70">
-                    <td className="px-3 py-3">
+                  <tr key={ret.id}>
+                    <td>
                       <Link
                         href={`/admin/returns/${ret.id}`}
                         className="tnum whitespace-nowrap font-semibold text-brand hover:underline"
                       >
                         {ret.id}
                       </Link>
-                      <p className="text-[12px] text-gray-500">
+                      <span className="admin-cell-sub">
                         {returnReasonLabel(ret.reason)}
-                      </p>
+                      </span>
                     </td>
 
-                    <td className="px-3 py-3">
+                    <td>
                       <Link
                         href={`/admin/orders/${ret.order_id}`}
                         className="tnum font-medium text-brand hover:underline"
@@ -450,57 +448,50 @@ export default async function AdminReturnsPage({
                       </Link>
                     </td>
 
-                    <td className="px-3 py-3">
-                      <p className="font-medium text-ink">
+                    <td>
+                      <span className="admin-cell-title">
                         {ret.customer_name ?? "Customer"}
-                      </p>
-                      <p className="max-w-[150px] truncate text-[12px] text-gray-500">
+                      </span>
+                      <span className="admin-cell-sub max-w-[180px]">
                         {ret.customer_email}
-                      </p>
+                      </span>
                     </td>
 
-                    <td className="px-3 py-3">
-                      <p className="max-w-[150px] truncate font-medium text-ink">
+                    <td>
+                      <span className="admin-cell-title max-w-[200px]">
                         {items[0]?.name ?? "—"}
-                      </p>
-                      <p className="text-[12px] text-gray-500">
+                      </span>
+                      <span className="admin-cell-sub">
                         {items.length > 1
                           ? `+${items.length - 1} more · ${money(value)}`
                           : money(value)}
-                      </p>
+                      </span>
                     </td>
 
-                    <td className="px-3 py-3">
+                    <td>
                       <span className="whitespace-nowrap font-medium text-ink">
                         {RETURN_TYPE_LABEL[ret.type]}
                       </span>
-                      <p className="text-[12px] text-gray-500">
+                      <span className="admin-cell-sub">
                         {ret.items.reduce((sum, it) => sum + it.quantity, 0)} unit
                         {ret.items.reduce((sum, it) => sum + it.quantity, 0) === 1
                           ? ""
                           : "s"}
-                      </p>
-                    </td>
-
-                    <td className="px-3 py-3 text-[13px] text-gray-600">
-                      {formatDate(ret.created_at)}
-                    </td>
-
-                    <td className="px-3 py-3">
-                      <span
-                        className={`inline-block whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                          RETURN_STATUS_TONE[ret.status] ??
-                          "bg-gray-100 text-gray-600 border-gray-200"
-                        }`}
-                      >
-                        {RETURN_STATUS_LABEL[ret.status]}
                       </span>
                     </td>
 
-                    <td className="px-3 py-3 text-right">
+                    <td className="text-[13px] text-gray-600">
+                      {formatDate(ret.created_at)}
+                    </td>
+
+                    <td>
+                      <ReturnStatusBadge status={ret.status} />
+                    </td>
+
+                    <td className="admin-td-actions">
                       <Link
                         href={`/admin/returns/${ret.id}`}
-                        className="btn btn-outline btn-xs inline-flex items-center gap-1"
+                        className="admin-links"
                       >
                         Manage
                         <ArrowRight className="h-3 w-3" />
@@ -515,12 +506,16 @@ export default async function AdminReturnsPage({
       )}
 
       {totalPages > 1 && (
-        <div className="mt-5 flex justify-end">
+        <div className="admin-table-foot mt-5">
+          <span className="tnum">
+            Showing {(page - 1) * PER_PAGE + 1}–
+            {(page - 1) * PER_PAGE + returns.length} of {total}
+          </span>
           <Pagination page={page} totalPages={totalPages} pageLink={pageLink} />
         </div>
       )}
         </>
       )}
-    </div>
+    </>
   );
 }

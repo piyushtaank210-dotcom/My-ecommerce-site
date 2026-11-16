@@ -64,7 +64,7 @@ export function ProductSpecs({
     <div>
       {rows.map((row, i) => (
         <div key={i} className="mb-2 flex items-start gap-2">
-          <div className="grid flex-1 gap-2 sm:grid-cols-2">
+          <div className="admin-field-grid flex-1">
             <input
               type="text"
               name="specLabel"
@@ -73,7 +73,7 @@ export function ProductSpecs({
               disabled={disabled}
               placeholder="Storage"
               aria-label={`Specification ${i + 1} name`}
-              className="input h-9 text-[13px]"
+              className="input"
             />
             <input
               type="text"
@@ -83,7 +83,7 @@ export function ProductSpecs({
               disabled={disabled}
               placeholder="1TB NVMe SSD"
               aria-label={`Specification ${i + 1} value`}
-              className="input h-9 text-[13px]"
+              className="input"
             />
           </div>
           <button
@@ -91,14 +91,15 @@ export function ProductSpecs({
             onClick={() => removeRow(i)}
             disabled={disabled}
             aria-label={`Remove specification ${i + 1}`}
-            className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+            title={`Remove specification ${i + 1}`}
+            className="admin-icon-btn admin-icon-btn--bad mt-0.5"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       ))}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => addRow()}
@@ -116,7 +117,7 @@ export function ProductSpecs({
               type="button"
               onClick={() => addRow(s)}
               disabled={disabled}
-              className="rounded-full border border-gray-200 px-2.5 py-1 text-[11.5px] font-medium text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-40"
+              className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-40"
             >
               {s}
             </button>

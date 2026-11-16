@@ -931,9 +931,9 @@ try {
       await tx.prepare("DELETE FROM admin_actions WHERE return_id = ?").run(returnId);
       await tx.prepare("DELETE FROM notifications WHERE return_id = ?").run(returnId);
       // The refund records, their lines and their history.
-      const refunds = (await tx
+      const refunds = await tx
         .prepare("SELECT id FROM return_refunds WHERE return_id = ?")
-        .all(returnId)) as { id: string }[];
+        .all(returnId);
       for (const r of refunds) {
         await tx.prepare("DELETE FROM return_refund_events WHERE refund_id = ?").run(r.id);
         await tx.prepare("DELETE FROM return_refund_lines WHERE refund_id = ?").run(r.id);

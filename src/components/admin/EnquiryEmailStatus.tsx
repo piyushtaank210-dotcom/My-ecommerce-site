@@ -53,10 +53,8 @@ export function EnquiryEmailStatus({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${
-          sent
-            ? "bg-green-50 text-green-700"
-            : "bg-amber-50 text-amber-700"
+        className={`admin-badge ${
+          sent ? "admin-badge--good" : "admin-badge--warn"
         }`}
         title={
           sent
@@ -84,7 +82,7 @@ export function EnquiryEmailStatus({
           type="button"
           onClick={resend}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5 text-[11.5px] font-semibold text-gray-600 hover:border-brand hover:text-brand disabled:opacity-50"
+          className="btn btn-outline btn-sm"
           title="Send the notification again"
         >
           {busy ? (

@@ -44,7 +44,7 @@ export function MessageStatusSelect({
         defaultValue={current}
         aria-label={`Status for enquiry ${messageId}`}
         onChange={() => formRef.current?.requestSubmit()}
-        className="h-9 cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] font-medium text-ink"
+        className="admin-select-sm"
       >
         {MESSAGE_STATUSES.map((s) => (
           <option key={s} value={s}>
