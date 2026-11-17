@@ -1,5 +1,5 @@
 import { fail, json } from "@/lib/api";
-import { clearCart } from "@/lib/cart";
+import { clearCartForOrder } from "@/lib/cart";
 import { GATEWAY_NAME } from "@/lib/checkout";
 import { getDb } from "@/lib/db";
 import {
@@ -205,7 +205,7 @@ async function handleEvent(
   // deduplicated, so a customer who was also told by the browser's own
   // call is not told twice.
   await notifyOrderPlaced(shopOrderId);
-  await clearCart();
+  await clearCartForOrder(shopOrderId);
 
   return { outcome: "applied" };
 }

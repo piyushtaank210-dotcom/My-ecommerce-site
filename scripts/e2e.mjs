@@ -333,7 +333,43 @@ try {
   check("variant options render", options >= 2, `${options} options`);
   await cdp.shot("03-product", true);
 
-  /* ---- 4. Add to cart ---- */
+  /* ---- 4. Register ---- */
+  // The cart belongs to the account, so the customer has an account
+  // before they shop. The account is made here, and the rest of the
+  // suite is what a customer would do with it.
+  console.log("\n→ register");
+  await cdp.goto(`${BASE}/register`);
+  check(
+    "register page renders",
+    (await cdp.evaluate(`document.body.innerText.includes('Create your account')`)) === true
+  );
+  await cdp.shot("07-register", true);
+
+  await cdp.evaluate(setInput("name", ACCOUNT.name));
+  await cdp.evaluate(setInput("email", ACCOUNT.email));
+  await cdp.evaluate(setInput("password", ACCOUNT.password));
+  await cdp.evaluate(setInput("confirm", ACCOUNT.password));
+  await cdp.evaluate(setCheckbox("terms"));
+  await sleep(250);
+  await cdp.evaluate(clickByText("Create account"));
+  // The database is a long way off, so the wait is for the page rather
+  // than for the clock.
+  await waitFor(cdp, "!location.pathname.startsWith('/register')", { timeout: 30000 });
+
+  check(
+    "registration signs the user in",
+    (await cdp.evaluate("location.pathname")) === "/",
+    await cdp.evaluate("location.pathname")
+  );
+  // Check the link, not the label — the "Account" text is hidden on
+  // narrower viewports, but the link is always there.
+  const signedIn = await cdp.evaluate(
+    `!!document.querySelector('header a[href="/account"]')`
+  );
+  check("header shows the signed-in state", signedIn === true);
+
+  /* ---- 5. Add to cart ---- */
+  await cdp.goto(`${BASE}/product/playstation-5-slim-disc-1tb`);
   await cdp.evaluate(clickByText("Add to cart"));
   await waitFor(
     cdp,
@@ -352,7 +388,7 @@ try {
   `);
   check("cart badge incremented", badge === "1", `badge=${badge}`);
 
-  /* ---- 5. Cart ---- */
+  /* ---- 6. Cart ---- */
   await cdp.goto(`${BASE}/cart`);
   const cartText = await cdp.evaluate(`document.body.innerText`);
   check("cart shows the item", /PlayStation 5/.test(cartText));
@@ -373,7 +409,7 @@ try {
   );
   await cdp.shot("04-cart", true);
 
-  /* ---- 6. Checkout + order ---- */
+  /* ---- 7. Checkout + order ---- */
   console.log("\n→ checkout");
   await cdp.goto(`${BASE}/checkout`);
   check(
@@ -414,18 +450,27 @@ try {
   if (orderId) placedOrders.push(orderId);
   await cdp.shot("06-order", true);
 
-  /* ---- 7. Cart emptied ---- */
+  /* ---- 8. Cart emptied ---- */
   await cdp.goto(`${BASE}/cart`);
   check(
     "cart cleared after checkout",
     /Your cart is empty/i.test(await cdp.evaluate("document.body.innerText"))
   );
 
-  /* ---- 8. Validation ---- */
+  /* ---- 9. Validation ---- */
   console.log("\n→ checkout validation");
   await cdp.goto(`${BASE}/product/dualsense-white`);
   await cdp.evaluate(clickByText("Add to cart"));
-  await sleep(1400);
+  // The database is a long way off, so the wait is for the basket rather
+  // than for the clock: the checkout has something to show.
+  await waitFor(
+    cdp,
+    `(() => {
+       const link = [...document.querySelectorAll('a')].find(a => a.getAttribute('href') === '/cart');
+       const m = link && link.textContent.match(/(\\d+)/);
+       return m && Number(m[1]) >= 1 ? m[1] : '';
+     })()`
+  );
   await cdp.goto(`${BASE}/checkout`);
   await cdp.evaluate(pickCashOnDelivery);
   await cdp.evaluate(clickByText("Place order"));
@@ -439,36 +484,6 @@ try {
     "stays on checkout",
     (await cdp.evaluate("location.pathname")) === "/checkout"
   );
-
-  /* ---- 9. Register ---- */
-  console.log("\n→ register");
-  await cdp.goto(`${BASE}/register`);
-  check(
-    "register page renders",
-    (await cdp.evaluate(`document.body.innerText.includes('Create your account')`)) === true
-  );
-  await cdp.shot("07-register", true);
-
-  await cdp.evaluate(setInput("name", ACCOUNT.name));
-  await cdp.evaluate(setInput("email", ACCOUNT.email));
-  await cdp.evaluate(setInput("password", ACCOUNT.password));
-  await cdp.evaluate(setInput("confirm", ACCOUNT.password));
-  await cdp.evaluate(setCheckbox("terms"));
-  await sleep(250);
-  await cdp.evaluate(clickByText("Create account"));
-  await sleep(3000);
-
-  check(
-    "registration signs the user in",
-    (await cdp.evaluate("location.pathname")) === "/",
-    await cdp.evaluate("location.pathname")
-  );
-  // Check the link, not the label — the "Account" text is hidden on
-  // narrower viewports, but the link is always there.
-  const signedIn = await cdp.evaluate(
-    `!!document.querySelector('header a[href="/account"]')`
-  );
-  check("header shows the signed-in state", signedIn === true);
 
   /* ---- 10. Account ---- */
   await cdp.goto(`${BASE}/account`);
@@ -514,6 +529,19 @@ try {
     /not correct|highlighted/i.test(
       await cdp.evaluate("document.body.innerText")
     )
+  );
+
+  // The customer signs in again for the rest of the suite: the cart
+  // belongs to the account, so nothing goes in it without one.
+  await cdp.evaluate(setInput("email", ACCOUNT.email));
+  await cdp.evaluate(setInput("password", ACCOUNT.password));
+  await sleep(200);
+  await cdp.evaluate(clickByText("Sign in"));
+  await waitFor(cdp, "!location.pathname.startsWith('/login')", { timeout: 30000 });
+  check(
+    "signing in again works",
+    (await cdp.evaluate("location.pathname")) === "/",
+    await cdp.evaluate("location.pathname")
   );
 
   /* ---- 13. Shop, About and Contact ---- */
@@ -919,6 +947,15 @@ try {
     process.env.PF_ADMIN_PASSWORD ??
     localEnv.match(/^PF_ADMIN_PASSWORD="(.*)"/m)?.[1] ??
     "myconsole@121";
+
+  // The back office is another account, so the customer signs out first:
+  // a sign-in page will not let a signed-in customer in, and the admin
+  // would never be asked for.
+  await cdp.goto(`${BASE}/`);
+  await cdp.evaluate(clickByText("Sign out", "button"));
+  await waitFor(cdp, `!document.querySelector('header a[href="/account"]')`, {
+    timeout: 20000,
+  });
 
   await cdp.goto(`${BASE}/login`);
   await cdp.evaluate(setInput("email", ADMIN_EMAIL));

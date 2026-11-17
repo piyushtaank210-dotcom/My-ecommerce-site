@@ -12,12 +12,18 @@ export function AuthShell({
   title,
   subtitle,
   points,
+  note,
 }: {
   children: React.ReactNode;
   eyebrow: string;
   title: string;
   subtitle: string;
   points: { title: string; body: string }[];
+  /**
+   * A line that says why the customer is here, when there is a reason —
+   * a purchase waiting for a sign-in, for instance.
+   */
+  note?: string;
 }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
@@ -44,6 +50,12 @@ export function AuthShell({
           <p className="mt-2 text-[14px] leading-relaxed text-gray-500">
             {subtitle}
           </p>
+
+          {note && (
+            <p className="mt-4 rounded-lg border border-brand/25 bg-brand-tint px-3.5 py-2.5 text-[13px] font-medium leading-relaxed text-brand">
+              {note}
+            </p>
+          )}
 
           <div className="mt-8">{children}</div>
         </div>

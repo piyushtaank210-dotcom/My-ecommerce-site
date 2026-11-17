@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthShell, AUTH_POINTS } from "@/components/AuthShell";
 import { AuthForm } from "@/components/AuthForm";
 import { getCurrentUser, safeNext } from "@/lib/auth";
+import { SIGN_IN_REQUIRED } from "@/lib/sign-in";
 
 export const metadata: Metadata = {
   title: "Create an account",
@@ -12,9 +13,9 @@ export const metadata: Metadata = {
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; resume?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, resume } = await searchParams;
   if (await getCurrentUser()) redirect("/account");
 
   return (
@@ -23,8 +24,13 @@ export default async function RegisterPage({
       title="Create your account"
       subtitle="One account for orders, saved addresses and faster checkout. It takes a minute."
       points={AUTH_POINTS}
+      note={resume === "1" ? SIGN_IN_REQUIRED : undefined}
     >
-      <AuthForm mode="register" next={safeNext(next)} />
+      <AuthForm
+        mode="register"
+        next={safeNext(next)}
+        resume={resume === "1"}
+      />
     </AuthShell>
   );
 }

@@ -324,6 +324,12 @@ export async function applyMigrations(db: Db): Promise<void> {
   add("orders", "payment_gateway", "payment_gateway TEXT");
   add("orders", "payment_reference", "payment_reference TEXT");
 
+  // The purchase an order came of, when it was bought outright with
+  // "buy now" rather than out of the cart. It is what tells the shop
+  // that the customer's cart was not part of this order, and that it is
+  // to be left alone.
+  add("orders", "purchase_intent_id", "purchase_intent_id TEXT");
+
   // Where the money is, as against where the parcel is.
   //
   // The two are separate on purpose: a payment that has been taken does

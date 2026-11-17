@@ -79,12 +79,15 @@ export function CheckoutForm({
   account,
   savedAddresses = [],
   total = 0,
+  buy = null,
 }: {
   /** The signed-in customer's details, if there is one. */
   account?: { name: string; email: string; phone: string | null } | null;
   savedAddresses?: Address[];
   /** What the order comes to, so the button can say so. */
   total?: number;
+  /** The basket bought with "buy now", when that is what is being bought. */
+  buy?: string | null;
 }) {
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -173,6 +176,9 @@ export function CheckoutForm({
           // The id of this attempt, so that a repeated request is
           // answered with the order that has already been made.
           checkout_attempt: attemptId.current,
+          // The basket bought with "buy now", when that is the basket.
+          // It names the purchase; the shop reads what is in it itself.
+          ...(buy ? { buy } : {}),
         }),
       });
     } catch {

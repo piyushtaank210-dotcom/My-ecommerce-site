@@ -28,11 +28,14 @@ export function ProductDetails({
   product,
   images,
   backorderPolicy,
+  signedIn,
   children,
 }: {
   product: ProductWithVariants;
   images: GalleryImage[];
   backorderPolicy: BackorderPolicy;
+  /** Whether the visitor is signed in. */
+  signedIn: boolean;
   /** The parts of the page that do not change with the choice. */
   children?: React.ReactNode;
 }) {
@@ -301,6 +304,7 @@ export function ProductDetails({
             product={product}
             variant={variant}
             backorderPolicy={backorderPolicy}
+            signedIn={signedIn}
           />
         </div>
 

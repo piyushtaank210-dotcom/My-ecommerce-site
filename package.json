@@ -69,6 +69,7 @@
     "check:pending-orders": "node scripts/check-pending-orders.mjs",
     "check:razorpay": "node scripts/check-razorpay.mjs",
     "check:razorpay:webhook": "node scripts/check-razorpay-webhook.mjs",
+    "check:buy-now": "node scripts/check-buy-now.mjs",
     "gateway:mode": "node scripts/gateway-mode.mjs",
     "gateway:webhook": "node scripts/gateway-webhook.mjs",
     "deploy:env": "node scripts/deploy-env.mjs",

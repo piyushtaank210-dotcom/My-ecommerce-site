@@ -529,6 +529,31 @@ CREATE TABLE IF NOT EXISTS cart_items (
   created_at   TEXT NOT NULL ${now}
 );
 
+-- A purchase the customer has started but not finished.
+--
+-- "Buy now" is a basket of its own: it is not the cart, and putting the
+-- thing in the cart is not part of it. The row says what is being bought
+-- and how much of it — the price is never kept here, because it is worked
+-- out from the catalogue when the basket is read, and a price the browser
+-- wrote down is not a price.
+--
+-- The same row carries a purchase that is waiting for a sign-in. A guest
+-- who pressed "buy now" is sent to the sign-in page, and this row is what
+-- they come back to. It is claimed once: the claim is a single statement,
+-- so two sign-ins arriving at the same moment cannot both have it.
+CREATE TABLE IF NOT EXISTS purchase_intents (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,
+  user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  product_slug TEXT NOT NULL REFERENCES products(slug) ON DELETE CASCADE,
+  variant_id   TEXT REFERENCES variants(id) ON DELETE SET NULL,
+  quantity     INTEGER NOT NULL DEFAULT 1,
+  next_path    TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  created_at   TEXT NOT NULL ${now},
+  claimed_at   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id             TEXT PRIMARY KEY,
   user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -551,6 +576,11 @@ CREATE TABLE IF NOT EXISTS orders (
   -- provider, and it needs the provider's reference to do it.
   payment_gateway TEXT,
   payment_reference TEXT,
+  -- The purchase this order came of, when it was bought outright with
+  -- "buy now" rather than out of the cart. It is what tells the shop
+  -- that the customer's cart was not part of this order and must be
+  -- left alone.
+  purchase_intent_id TEXT,
   -- Where the order is: pending, confirmed, packed, shipped, delivered
   -- or cancelled. A new order is always pending, and only the back
   -- office moves it.
@@ -937,6 +967,7 @@ CREATE INDEX IF NOT EXISTS idx_products_status      ON products(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_sku   ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_product_images       ON product_images(product_slug);
 CREATE INDEX IF NOT EXISTS idx_cart_session         ON cart_items(session_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_intents_user ON purchase_intents(user_id);
 CREATE INDEX IF NOT EXISTS idx_variants_product     ON variants(product_slug);
 CREATE INDEX IF NOT EXISTS idx_order_items_order    ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user        ON sessions(user_id);

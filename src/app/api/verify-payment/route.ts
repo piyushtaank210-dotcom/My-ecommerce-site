@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { fail, json } from "@/lib/api";
-import { clearCart } from "@/lib/cart";
+import { clearCartForOrder } from "@/lib/cart";
 import { GATEWAY_NAME } from "@/lib/checkout";
 import { getDb } from "@/lib/db";
 import { gatewayIsConfigured } from "@/lib/gateway-config";
@@ -201,7 +201,7 @@ export async function POST(request: Request) {
   // Now the order is in, and the customer is told.
   await notifyOrderPlaced(shopOrderId);
 
-  await clearCart();
+  await clearCartForOrder(shopOrderId);
   revalidatePath("/", "layout");
 
   return json({

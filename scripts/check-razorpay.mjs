@@ -134,6 +134,33 @@ async function gatewayOrder(orderId) {
   return real && real.ok ? real.json() : null;
 }
 
+/**
+ * The orders this run placed.
+ *
+ * An order takes a unit off the shelf, and this runs against the shop's
+ * own database. The orders are put away at the end — through the back
+ * office's own endpoint, so the stock goes back the way a cancelled
+ * order always puts it back — and they are put away even when a check
+ * fails halfway, so that a run of this check does not slowly sell the
+ * shop dry.
+ */
+const placedOrders = [];
+
+/** Puts an order away, and the stock with it. */
+async function putOrderAway(id) {
+  return cdp.evaluate(
+    `fetch('/api/admin/orders/${id}', {
+       method: 'PATCH',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({
+         status: 'cancelled',
+         reasonCode: 'customer_requested',
+         reasonDetail: 'Placed by the payment check; the stock is put back.'
+       }),
+     }).then(r => r.status)`
+  );
+}
+
 try {
   /* ------------------------------------------------------------ the admin */
 
@@ -252,6 +279,7 @@ try {
 
   const gatewayOrderId = created.order_id;
   const shopOrderId = created.shop_order_id;
+  placedOrders.push(shopOrderId);
 
   /* ---------------------------------------------- a signature that is wrong */
 
@@ -266,7 +294,7 @@ try {
          razorpay_payment_id: 'pay_wrong',
          razorpay_signature: 'not-the-right-signature',
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "a signature that does not match is refused",
@@ -279,7 +307,7 @@ try {
        method: 'POST',
        headers: { 'Content-Type': 'application/json' },
        body: JSON.stringify({ razorpay_order_id: ${JSON.stringify(gatewayOrderId)} }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "missing details are refused",
@@ -298,7 +326,7 @@ try {
          razorpay_payment_id: 'pay_unknown_to_the_gateway',
          razorpay_signature: ${JSON.stringify(sign(gatewayOrderId, "pay_unknown_to_the_gateway"))},
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "a payment the gateway does not know is refused",
@@ -340,7 +368,7 @@ try {
            razorpay_payment_id: ${JSON.stringify(paymentId)},
            razorpay_signature: ${JSON.stringify(sign(gatewayOrderId, paymentId))},
          }),
-       }).then(async r => ({ status: r.status, body: await r.json() }))`
+       }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
     );
     check("the payment is accepted", good.status === 200, `HTTP ${good.status} ${JSON.stringify(good.body).slice(0, 160)}`);
     check(
@@ -377,7 +405,7 @@ try {
            razorpay_payment_id: ${JSON.stringify(paymentId)},
            razorpay_signature: ${JSON.stringify(sign(gatewayOrderId, paymentId))},
          }),
-       }).then(async r => ({ status: r.status, body: await r.json() }))`
+       }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
     );
     check(
       "the same payment told about twice is still one payment",
@@ -402,7 +430,7 @@ try {
            razorpay_payment_id: ${JSON.stringify(secondPayment.id)},
            razorpay_signature: ${JSON.stringify(sign(gatewayOrderId, secondPayment.id))},
          }),
-       }).then(async r => ({ status: r.status, body: await r.json() }))`
+       }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
     );
     check(
       "a second payment against the same order is refused",
@@ -422,7 +450,7 @@ try {
     const orderText = await cdp.evaluate("document.body.innerText");
     check(
       "the customer sees the order",
-      /Order confirmed/i.test(orderText),
+      /Order received/i.test(orderText),
       orderText.slice(0, 80).replace(/\n/g, " ")
     );
     check(
@@ -446,7 +474,7 @@ try {
          address1: '12 Palm Grove, Baner', city: 'Pune', state: 'Maharashtra',
          pincode: '411045', paymentMethod: 'cod',
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "the order is finished there and then",
@@ -458,6 +486,7 @@ try {
     typeof cod.body.order_id === "string" && cod.body.order_id.startsWith("PF"),
     cod.body.order_id
   );
+  if (typeof cod.body.order_id === "string") placedOrders.push(cod.body.order_id);
 
   const codOrder = await orderInTheShop(cdp, cod.body.order_id);
   check(
@@ -494,7 +523,7 @@ try {
          address1: '12 Palm Grove, Baner', city: 'Pune', state: 'Maharashtra',
          pincode: '411045', paymentMethod: 'online',
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "an order is made and waits for the money",
@@ -517,7 +546,7 @@ try {
          order_id: ${JSON.stringify(abandoned.body.shop_order_id)},
          pending_token: ${JSON.stringify(abandoned.body.pending_token)},
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "it is put away again",
@@ -542,7 +571,7 @@ try {
          order_id: ${JSON.stringify(abandoned.body.shop_order_id)},
          pending_token: 'not-the-right-token',
        }),
-     }).then(async r => ({ status: r.status, body: await r.json() }))`
+     }).then(async r => ({ status: r.status, body: await r.text().then(t => { try { return JSON.parse(t); } catch { return { error: t.slice(0, 200) }; } }) }))`
   );
   check(
     "and only the browser that made it may put it away",
@@ -557,13 +586,7 @@ try {
   // order always puts it back.
   console.log("\n→ tidying up");
   for (const id of [shopOrderId, cod.body.order_id]) {
-    const tidied = await cdp.evaluate(
-      `fetch('/api/admin/orders/${id}', {
-         method: 'PATCH',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ status: 'cancelled' }),
-       }).then(r => r.status)`
-    );
+    const tidied = await putOrderAway(id);
     check(
       `the order ${id} was put away and the stock is back`,
       tidied === 200,
@@ -571,6 +594,11 @@ try {
     );
   }
 } finally {
+  // The orders are put away even when a check failed halfway, so that
+  // the shop is left with the stock it was found with.
+  for (const id of placedOrders) {
+    await putOrderAway(id).catch(() => null);
+  }
   chrome.kill();
 }
 

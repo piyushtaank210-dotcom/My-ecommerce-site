@@ -164,6 +164,25 @@ export async function endSession(): Promise<void> {
   store.delete(COOKIE);
 }
 
+/**
+ * The account the sign-in cookie is for, without asking the database.
+ *
+ * The cookie carries a signed proof of who it belongs to, so the answer
+ * can be had without a round trip to a database that is a long way off.
+ *
+ * It answers "whose is this?" rather than "is this sign-in still live?" —
+ * the session row is what decides that, and `getCurrentUser` is what to
+ * ask when the answer matters. It is used to find the basket that
+ * belongs to a customer, where the basket is theirs either way.
+ */
+export async function signedInUserId(): Promise<number | null> {
+  const store = await cookies();
+  const raw = store.get(COOKIE)?.value;
+  if (!raw) return null;
+  const signed = verifySession(raw);
+  return signed?.userId ?? null;
+}
+
 export async function getCurrentUser(): Promise<User | null> {
   const store = await cookies();
   const raw = store.get(COOKIE)?.value;

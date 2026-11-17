@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { fail, json } from "@/lib/api";
-import { clearCart } from "@/lib/cart";
+import { clearCartForOrder } from "@/lib/cart";
 import {
   checkoutBasket,
   checkoutSchema,
@@ -27,6 +27,7 @@ import { generateOrderId } from "@/lib/orders";
 import { createGatewayOrder, MINIMUM_AMOUNT } from "@/lib/payment-gateway";
 import { signPendingOrder } from "@/lib/pending-order";
 import { ensureSessionId } from "@/lib/session";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * Waits for an attempt somebody else owns to finish.
@@ -94,13 +95,44 @@ export async function POST(request: Request) {
   }
   const details = parsed.data;
 
-  const basket = await checkoutBasket();
+  // An order belongs to an account. The shop asks for a sign-in before
+  // the checkout, and it asks again here: a request that arrives without
+  // a sign-in is refused, whatever the browser says about the basket.
+  const user = await getCurrentUser();
+  if (!user) {
+    return fail(
+      "Please log in to your account before continuing with your purchase.",
+      401
+    );
+  }
+
+  // The basket is either the customer's cart, or the one thing they
+  // pressed "buy now" for. The second is named by a token; the basket
+  // itself is read from the shop's own records, never from the request.
+  const buyToken = String((body as { buy?: unknown })?.buy ?? "").trim() || null;
+
+  const basket = await checkoutBasket(buyToken, user);
   if (!basket) return fail("Your cart is empty.", 400);
 
   // Money taken at the door.
   if (details.paymentMethod === "cod") {
-    const orderId = await writeCheckoutOrder(details, basket);
-    await clearCart();
+    let orderId: string;
+    try {
+      orderId = await writeCheckoutOrder(details, basket, {
+        purchaseIntentId: buyToken,
+      });
+    } catch (err) {
+      // The stock ran out between the basket and the order. Nothing has
+      // been ordered, and the customer is told why.
+      if (isStockError(err)) {
+        return fail(
+          `${err.message} Nothing has been ordered — please adjust your basket.`,
+          409
+        );
+      }
+      throw err;
+    }
+    await clearCartForOrder(orderId);
     revalidatePath("/", "layout");
     return json({ ok: true, mode: "cod", order_id: orderId });
   }
@@ -194,6 +226,8 @@ export async function POST(request: Request) {
         gateway: GATEWAY_NAME,
         // The order is not announced until the money is in.
         notify: false,
+        // The purchase it came of, when it was bought outright.
+        purchaseIntentId: buyToken,
       });
       return { ok: true };
     } catch (err) {

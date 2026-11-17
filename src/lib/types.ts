@@ -242,6 +242,12 @@ export type Order = {
    * confirmed the money.
    */
   payment_reference: string | null;
+  /**
+   * The purchase the order came of, when it was bought outright with
+   * "buy now" rather than out of the cart. It is what tells the shop
+   * that the customer's cart was not part of this order.
+   */
+  purchase_intent_id?: string | null;
   status: string;
   /**
    * Where the money is.

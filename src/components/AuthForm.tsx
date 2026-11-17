@@ -11,9 +11,12 @@ const initial: AuthState = { ok: false };
 export function AuthForm({
   mode,
   next = "/",
+  resume = false,
 }: {
   mode: "login" | "register";
   next?: string;
+  /** Whether there is a purchase waiting for them to sign in. */
+  resume?: boolean;
 }) {
   const isRegister = mode === "register";
   const [state, formAction] = useActionState(
@@ -26,6 +29,7 @@ export function AuthForm({
   return (
     <form action={formAction} className="space-y-4" noValidate>
       <input type="hidden" name="next" value={next} />
+      {resume && <input type="hidden" name="resume" value="1" />}
       {state.message && (
         <p
           role="alert"

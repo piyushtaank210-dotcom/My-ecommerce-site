@@ -94,7 +94,12 @@ export async function createOrder(
   input: CheckoutInput,
   lines: CheckoutLine[],
   totals: { subtotal: number; shipping: number; total: number },
-  options: { id?: string; notify?: boolean } = {}
+  options: {
+    id?: string;
+    notify?: boolean;
+    /** The purchase this order came of, when it was bought outright. */
+    purchaseIntentId?: string | null;
+  } = {}
 ): Promise<string> {
   const db = getDb();
   const id = options.id ?? generateOrderId();
@@ -105,8 +110,8 @@ export async function createOrder(
       `INSERT INTO orders
         (id, user_id, name, email, phone, address1, address2, city, state, pincode, notes,
          subtotal, shipping, total, payment_method, payment_gateway, payment_reference,
-         status, payment_status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','pending')`
+         purchase_intent_id, status, payment_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','pending')`
     ).run(
       id,
       user?.id ?? null,
@@ -125,6 +130,7 @@ export async function createOrder(
       input.paymentMethod,
       input.paymentGateway || null,
       input.paymentReference || null,
+      options.purchaseIntentId || null,
     ));
 
     const insItem = db.prepare(
@@ -541,6 +547,7 @@ export async function getOrder(id: string): Promise<Order | null> {
     payment_method: str(row.payment_method),
     payment_gateway: strOrNull(row.payment_gateway),
     payment_reference: strOrNull(row.payment_reference),
+    purchase_intent_id: strOrNull(row.purchase_intent_id),
     status: str(row.status),
     payment_status: str(row.payment_status) || "pending",
     delivered_at: strOrNull(row.delivered_at),

@@ -16,6 +16,7 @@ import {
 } from "@/lib/queries";
 import { money, discountPct } from "@/lib/format";
 import { getBackorderPolicy } from "@/lib/settings";
+import { getCurrentUser } from "@/lib/auth";
 import { orderSpecs } from "@/lib/taxonomy";
 
 export async function generateMetadata({
@@ -52,11 +53,12 @@ export default async function ProductPage({
 
   // The rest are asked for together: the database is a long way off, and
   // asking one at a time makes the page as slow as the sum of them.
-  const [related, category, images, backorderPolicy] = await Promise.all([
+  const [related, category, images, backorderPolicy, user] = await Promise.all([
     getRelatedProducts(product, 4),
     product.category_slug ? getCategory(product.category_slug) : null,
     getProductImages(slug),
     getBackorderPolicy(),
+    getCurrentUser(),
   ]);
 
   // The specifications, in the order the category asks for them.
@@ -91,6 +93,7 @@ export default async function ProductPage({
           product={product}
           images={images}
           backorderPolicy={backorderPolicy}
+          signedIn={Boolean(user)}
         >
           {/* Specs. The category's own questions come first — a console is
               asked about its model, its storage and what is in the box — and

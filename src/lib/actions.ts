@@ -1,15 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "./db";
 import { createContactMessage } from "./contact";
-import { ensureSessionId, readSessionId } from "./session";
-import { getBackorderPolicy } from "./settings";
-import { backordersAllowed } from "./variations";
-import { getProduct } from "./queries";
+import { addToCart, cartOwnerKey } from "./cart";
 import { STORE } from "./store-info";
+import { FLASH_COOKIE, encodeFlash, type FlashKind } from "./flash";
+import {
+  claimIntent,
+  clearPendingIntentId,
+  readPendingIntentId,
+} from "./purchase";
 import {
   createUser,
   endSession,
@@ -74,6 +78,7 @@ export async function registerAction(
   const user = await createUser(parsed.data.name, parsed.data.email, parsed.data.password);
   await startSession(user.id);
   revalidatePath("/", "layout");
+  await carryOnPendingPurchase(user.id, formData.get("resume") === "1");
   redirect(safeNext(String(formData.get("next") ?? "")));
 }
 
@@ -112,6 +117,7 @@ export async function loginAction(
 
   await startSession(user.id);
   revalidatePath("/", "layout");
+  await carryOnPendingPurchase(user.id, formData.get("resume") === "1");
   redirect(safeNext(String(formData.get("next") ?? "")));
 }
 
@@ -121,94 +127,97 @@ export async function logoutAction(): Promise<void> {
   redirect("/");
 }
 
-/* ------------------------------------------------------------------- cart */
+/* ------------------------------------------------------- the waiting cart */
 
-export async function addToCartAction(
-  productSlug: string,
-  variantId: string | null,
-  quantity: number
-): Promise<{ ok: boolean; message: string }> {
-  const product = (await getProduct(productSlug));
-  if (!product) return { ok: false, message: "Product not found." };
-
-  const variant = variantId
-    ? product.variants.find((v) => v.id === variantId) ?? null
-    : null;
-
-  // A product with options is stocked by its options, so a basket line
-  // without one has nothing to be counted against.
-  if (product.variants.length > 0 && !variant) {
-    return { ok: false, message: "Choose an option first." };
-  }
-
-  const available = variant ? variant.stock : product.stock;
-  const qty = Math.max(1, Math.min(quantity || 1, 10));
-
-  // A shopper may only buy what is on the shelf — unless the store takes
-  // backorders, in which case the missing units are ordered in.
-  const allowBackorder = backordersAllowed((await getBackorderPolicy()));
-
-  if (available <= 0 && !allowBackorder) {
-    return { ok: false, message: "That option is out of stock." };
-  }
-  if (qty > available && !allowBackorder) {
-    return { ok: false, message: `Only ${available} left in stock.` };
-  }
-
-  const sessionId = await ensureSessionId();
-  const db = getDb();
-
-  const existing = (await db
-    .prepare(
-      `SELECT id, quantity FROM cart_items
-       WHERE session_id = ? AND product_slug = ? AND (variant_id IS ? OR variant_id = ?)`
-    )
-    .get(sessionId, productSlug, variantId, variantId)) as
-    | { id: number; quantity: number }
-    | undefined;
-
-  if (existing) {
-    (await db.prepare("UPDATE cart_items SET quantity = ? WHERE id = ?").run(
-      Math.min(existing.quantity + qty, allowBackorder ? 10 : available),
-      existing.id
-    ));
-  } else {
-    (await db.prepare(
-      `INSERT INTO cart_items (session_id, product_slug, variant_id, quantity)
-       VALUES (?,?,?,?)`
-    ).run(sessionId, productSlug, variantId, qty));
-  }
-
-  revalidatePath("/", "layout");
-  return { ok: true, message: `${product.name} added to cart` };
+/**
+ * Leaves a message for the page the customer lands on next.
+ *
+ * A server action cannot raise a toast — the toast lives in the browser —
+ * so the message is written down in a cookie, and the page reads it and
+ * shows it.
+ */
+async function writeFlash(message: string, kind: FlashKind): Promise<void> {
+  const store = await cookies();
+  store.set(FLASH_COOKIE, encodeFlash({ message, kind }), {
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60,
+  });
 }
+
+/**
+ * Carries on with the purchase the customer was making before they were
+ * asked to sign in.
+ *
+ * The purchase is claimed once: the claim is a single statement, so two
+ * sign-ins arriving at the same moment cannot both have it, and the thing
+ * they asked for is done once and once only.
+ *
+ * A sign-in that did not come from a purchase button — the customer
+ * signing in from the header, hours later — carries on with nothing. The
+ * purchase is let go rather than surprising them with it.
+ */
+async function carryOnPendingPurchase(
+  userId: number,
+  resume: boolean
+): Promise<void> {
+  const pendingId = await readPendingIntentId();
+  if (!pendingId) return;
+
+  // The waiting is over: this purchase is not waiting for another
+  // sign-in, whatever happens next.
+  await clearPendingIntentId();
+  if (!resume) return;
+
+  const intent = await claimIntent(pendingId, userId);
+  if (!intent) return;
+
+  if (intent.kind === "buy-now") {
+    // Straight to the checkout, with the one thing they chose in it and
+    // nothing else.
+    redirect(`/checkout?buy=${intent.id}`);
+  }
+
+  // An item for the cart: the ordinary thing, with the ordinary message.
+  const res = await addToCart(
+    userId,
+    intent.product_slug,
+    intent.variant_id,
+    intent.quantity
+  );
+  await writeFlash(res.message, res.ok ? "success" : "error");
+  revalidatePath("/", "layout");
+  redirect(safeNext(intent.next_path ?? ""));
+}
+
+/* ------------------------------------------------------------------- cart */
 
 export async function updateCartAction(
   lineId: number,
   quantity: number
 ): Promise<void> {
-  const sessionId = await readSessionId();
-  if (!sessionId) return;
+  const owner = await cartOwnerKey();
+  if (!owner) return;
   const db = getDb();
   if (quantity <= 0) {
     (await db.prepare("DELETE FROM cart_items WHERE id = ? AND session_id = ?").run(
       lineId,
-      sessionId
+      owner
     ));
   } else {
     (await db.prepare(
       "UPDATE cart_items SET quantity = ? WHERE id = ? AND session_id = ?"
-    ).run(Math.min(quantity, 10), lineId, sessionId));
+    ).run(Math.min(quantity, 10), lineId, owner));
   }
   revalidatePath("/", "layout");
 }
 
 export async function removeFromCartAction(lineId: number): Promise<void> {
-  const sessionId = await readSessionId();
-  if (!sessionId) return;
+  const owner = await cartOwnerKey();
+  if (!owner) return;
   (await getDb()
     .prepare("DELETE FROM cart_items WHERE id = ? AND session_id = ?")
-    .run(lineId, sessionId));
+    .run(lineId, owner));
   revalidatePath("/", "layout");
 }
 

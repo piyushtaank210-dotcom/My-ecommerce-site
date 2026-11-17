@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { CheckCircle2, Info, XCircle } from "lucide-react";
+import { FLASH_COOKIE, decodeFlash } from "@/lib/flash";
 
 type ToastKind = "success" | "error" | "info";
 type ToastItem = { id: number; message: string; kind: ToastKind };
@@ -20,8 +22,27 @@ const TONES = {
   info: "border-gray-200 text-gray-700",
 };
 
+/**
+ * The message the shop left for this page, if it left one.
+ *
+ * A server action cannot raise a toast on a page it has already sent
+ * away, so a message that has to survive a redirect is written down in
+ * a cookie. This reads it, shows it, and clears it, so that it is shown
+ * once and once only.
+ */
+function takeFlash(): { message: string; kind: ToastKind } | null {
+  const all = document.cookie.split(";");
+  const found = all.find((c) => c.trim().startsWith(`${FLASH_COOKIE}=`));
+  if (!found) return null;
+
+  const raw = found.slice(found.indexOf("=") + 1);
+  document.cookie = `${FLASH_COOKIE}=; Max-Age=0; path=/`;
+  return decodeFlash(raw);
+}
+
 export function Toaster() {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const pathname = usePathname();
 
   useEffect(() => {
     function onToast(event: Event) {
@@ -37,6 +58,16 @@ export function Toaster() {
     window.addEventListener("pf:toast", onToast);
     return () => window.removeEventListener("pf:toast", onToast);
   }, []);
+
+  // The page the shop sent the customer to may have a message waiting
+  // for it. It is read on the way in and on every move to another page,
+  // because the layout — and so this toast — stays put while the
+  // customer walks around the shop.
+  useEffect(() => {
+    const flash = takeFlash();
+    if (!flash) return;
+    toast(flash.message, flash.kind);
+  }, [pathname]);
 
   if (items.length === 0) return null;
 

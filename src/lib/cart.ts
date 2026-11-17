@@ -1,8 +1,10 @@
 import { getDb, parseJson } from "./db";
 import { readSessionId } from "./session";
+import { signedInUserId } from "./auth";
 import { shippingFor } from "./format";
 import { sellingPrice } from "./pricing";
 import { mapProduct, PRODUCT_STOCK_COLUMNS_SQL } from "./queries";
+import { checkSelection } from "./purchase";
 import type { Cart, CartLine, Variant } from "./types";
 
 type Row = Record<string, unknown>;
@@ -11,8 +13,52 @@ const num = (v: unknown) => Number(v ?? 0);
 const strOrNull = (v: unknown) =>
   v === null || v === undefined ? null : String(v);
 
-export async function getCart(): Promise<Cart> {
+/**
+ * Whose cart this is.
+ *
+ * A customer's cart belongs to their account, so it is found on every
+ * device they sign in on and nobody else can see it — not the next
+ * person to use the same browser, and not a guest who happens to be
+ * holding the same cookie.
+ *
+ * A visitor who is not signed in still has a cart of their own, keyed by
+ * the browser session. It is empty in practice: the shop asks for a
+ * sign-in before anything is put in it.
+ */
+export async function cartOwnerKey(): Promise<string | null> {
+  const userId = await signedInUserId();
+  if (userId !== null) return `u:${userId}`;
+  return readSessionId();
+}
+
+/**
+ * Moves a basket that was started before the shop had accounts onto the
+ * account it belongs to.
+ *
+ * The shop used to keep the basket against the browser session, so a
+ * customer who had filled one before they signed in would have found it
+ * empty afterwards. It is moved across the first time their cart is
+ * read, and only then — so the count in the header is not a write on
+ * every page.
+ */
+async function adoptGuestCart(owner: string): Promise<void> {
+  if (!owner.startsWith("u:")) return;
   const sessionId = await readSessionId();
+  if (!sessionId) return;
+
+  const db = getDb();
+  const rows = (await db
+    .prepare("SELECT id FROM cart_items WHERE session_id = ? LIMIT 1")
+    .all(sessionId)) as Row[];
+  if (!rows.length) return;
+
+  await db
+    .prepare("UPDATE cart_items SET session_id = ? WHERE session_id = ?")
+    .run(owner, sessionId);
+}
+
+export async function getCart(): Promise<Cart> {
+  const owner = await cartOwnerKey();
   const empty: Cart = {
     lines: [],
     itemCount: 0,
@@ -21,7 +67,9 @@ export async function getCart(): Promise<Cart> {
     shipping: 0,
     total: 0,
   };
-  if (!sessionId) return empty;
+  if (!owner) return empty;
+
+  await adoptGuestCart(owner);
 
   const db = getDb();
   const rows = (await db
@@ -39,7 +87,7 @@ export async function getCart(): Promise<Cart> {
        WHERE ci.session_id = ? AND p.listed = 1
        ORDER BY ci.id DESC`
     )
-    .all(sessionId)) as Row[];
+    .all(owner)) as Row[];
 
   const lines: CartLine[] = rows.map((r) => {
     const product = mapProduct(r);
@@ -93,6 +141,54 @@ export async function getCart(): Promise<Cart> {
 }
 
 /**
+ * Puts a product in a customer's cart.
+ *
+ * The account is part of the call: the cart belongs to the customer, and
+ * the shop's own rules — the option has to exist, the quantity has to be
+ * something the shop can sell — are checked here, on the server, where
+ * they cannot be argued with.
+ */
+export async function addToCart(
+  userId: number,
+  productSlug: string,
+  variantId: string | null,
+  quantity: number
+): Promise<{ ok: boolean; message: string }> {
+  const checked = await checkSelection(productSlug, variantId, quantity);
+  if (!checked.ok) return { ok: false, message: checked.message };
+  const { selection } = checked;
+
+  const owner = `u:${userId}`;
+  const db = getDb();
+
+  const existing = (await db
+    .prepare(
+      `SELECT id, quantity FROM cart_items
+       WHERE session_id = ? AND product_slug = ? AND (variant_id IS ? OR variant_id = ?)`
+    )
+    .get(owner, productSlug, variantId, variantId)) as
+    | { id: number; quantity: number }
+    | undefined;
+
+  if (existing) {
+    (await db.prepare("UPDATE cart_items SET quantity = ? WHERE id = ?").run(
+      Math.min(
+        existing.quantity + selection.quantity,
+        selection.allowBackorder ? 10 : selection.stock
+      ),
+      existing.id
+    ));
+  } else {
+    (await db.prepare(
+      `INSERT INTO cart_items (session_id, product_slug, variant_id, quantity)
+       VALUES (?,?,?,?)`
+    ).run(owner, productSlug, variantId, selection.quantity));
+  }
+
+  return { ok: true, message: `${selection.product.name} added to cart` };
+}
+
+/**
  * Empties the basket.
  *
  * It is called once the order is in — after the money has been taken for
@@ -101,20 +197,35 @@ export async function getCart(): Promise<Cart> {
  * another's.
  */
 export async function clearCart(): Promise<void> {
-  const sessionId = await readSessionId();
-  if (!sessionId) return;
+  const owner = await cartOwnerKey();
+  if (!owner) return;
   await getDb()
     .prepare("DELETE FROM cart_items WHERE session_id = ?")
-    .run(sessionId);
+    .run(owner);
+}
+
+/**
+ * Empties the basket, unless the order was a basket bought outright.
+ *
+ * An order that came of "buy now" did not come out of the cart, so the
+ * cart is left exactly as it was — that is the whole point of buying
+ * one thing without touching the basket.
+ */
+export async function clearCartForOrder(orderId: string): Promise<void> {
+  const row = (await getDb()
+    .prepare("SELECT purchase_intent_id FROM orders WHERE id = ?")
+    .get(orderId)) as Row | undefined;
+  if (str(row?.purchase_intent_id)) return;
+  await clearCart();
 }
 
 export async function getCartCount(): Promise<number> {
-  const sessionId = await readSessionId();
-  if (!sessionId) return 0;
+  const owner = await cartOwnerKey();
+  if (!owner) return 0;
   const row = (await getDb()
     .prepare(
       "SELECT COALESCE(SUM(quantity), 0) AS n FROM cart_items WHERE session_id = ?"
     )
-    .get(sessionId)) as Row | undefined;
+    .get(owner)) as Row | undefined;
   return num(row?.n);
 }

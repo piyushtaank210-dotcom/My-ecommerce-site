@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthShell, AUTH_POINTS } from "@/components/AuthShell";
 import { AuthForm } from "@/components/AuthForm";
 import { getCurrentUser, safeNext } from "@/lib/auth";
+import { SIGN_IN_REQUIRED } from "@/lib/sign-in";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -12,9 +13,9 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; resume?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, resume } = await searchParams;
   const target = safeNext(next);
 
   // Someone who is already signed in has no business on this page — but
@@ -30,8 +31,9 @@ export default async function LoginPage({
       title="Sign in to your account"
       subtitle="Track your orders, save your details and check out in a couple of taps."
       points={AUTH_POINTS}
+      note={resume === "1" ? SIGN_IN_REQUIRED : undefined}
     >
-      <AuthForm mode="login" next={target} />
+      <AuthForm mode="login" next={target} resume={resume === "1"} />
     </AuthShell>
   );
 }
