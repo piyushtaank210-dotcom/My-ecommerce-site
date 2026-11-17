@@ -8,7 +8,14 @@ import {
 } from "./returns";
 import { peekUploads, claimUploads } from "./return-uploads";
 import { MAX_PHOTOS, MAX_VIDEOS } from "./evidence";
-import { checkRequestAllowed, policyForReason } from "./return-policy";
+import {
+  checkRequestAllowed,
+  mandatoryEvidenceFor,
+  mandatoryEvidenceNotice,
+  missingEvidenceFor,
+  policyForReason,
+  returnWindowExpiredNotice,
+} from "./return-policy";
 
 /**
  * The customer's claim, and the checks it has to pass.
@@ -108,7 +115,7 @@ export async function submitReturnRequest(
   if (eligibility.isWindowClosed) {
     return {
       ok: false,
-      message: `Return window closed. The deadline for this order passed on ${eligibility.formattedDeadline}.`,
+      message: returnWindowExpiredNotice(eligibility.windowDays),
     };
   }
 
@@ -219,13 +226,31 @@ export async function submitReturnRequest(
   // The evidence the rules ask for. Where it has not been sent, the
   // customer is asked to say why — and the claim still goes forward,
   // because a claim is never turned away for the want of a photograph.
-  const missingEvidence = policy.evidence.filter((e) => {
-    if (!e.required) return false;
-    if (e.id === "order_id" || e.id === "description") return false;
-    if (e.id === "missing_list") return missingAccessories.length < 3;
-    if (e.id === "unboxing_video" || e.id === "sealed_video") return videos.length === 0;
-    return photos.length === 0;
-  });
+  //
+  // Some evidence is different: a claim about a unit that arrived
+  // broken, or one that does not work, cannot be assessed without the
+  // photographs and the video that show it. Those are refused here,
+  // whatever the customer says, and the form refuses them too.
+  const onFile = {
+    photographs: photos.length,
+    videos: videos.length,
+    description: customerNotes.length >= 10,
+    serialNumber: serialNumber.length > 0,
+    missingList: missingAccessories.length >= 3,
+  };
+
+  const missingMandatory = mandatoryEvidenceFor(policy, onFile);
+  if (missingMandatory.length) {
+    return {
+      ok: false,
+      errors: {
+        evidence: mandatoryEvidenceNotice(missingMandatory),
+      },
+      message: mandatoryEvidenceNotice(missingMandatory),
+    };
+  }
+
+  const missingEvidence = missingEvidenceFor(policy, onFile);
 
   if (missingEvidence.length && evidenceExcused.length < 10) {
     return {
@@ -255,14 +280,18 @@ export async function submitReturnRequest(
       reason,
       customerNotes: customerNotes || null,
       serialNumber: serialNumber || null,
-      // The customer's answer about the seal is one of two things. Any
-      // other word the form happened to carry is not an answer about the
-      // seal, so it is treated as no answer at all.
-      sealedState: policy.requiresSealed
-        ? "sealed"
-        : sealedState === "sealed" || sealedState === "opened"
-          ? sealedState
-          : null,
+      // The customer's answer about the seal. For a voluntary return it
+      // has to be "sealed" — the request is refused above if it is not,
+      // so the confirmation is recorded as it was made. For every other
+      // reason it is what the customer said, and the back office reads
+      // it: a unit that has been opened cannot be returned for a change
+      // of mind, and knowing that saves everyone the round trip.
+      sealedState:
+        policy.requiresSealed
+          ? "sealed"
+          : sealedState === "sealed" || sealedState === "opened"
+            ? sealedState
+            : null,
       missingAccessories: missingAccessories || null,
       deliveryDate,
       customerName: contactName,

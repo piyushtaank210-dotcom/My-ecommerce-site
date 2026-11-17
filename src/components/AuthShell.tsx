@@ -108,7 +108,7 @@ export const AUTH_POINTS = [
     body: "Orders placed before 4pm leave our warehouse the same working day.",
   },
   {
-    title: "7-day replacement",
+    title: "5-day replacement",
     body: "Dead on arrival? We replace it, with no restocking fee.",
   },
 ];

@@ -54,6 +54,7 @@ export function ReturnAdminActions({
   candidates = [],
   refund,
   gatewayAvailable = false,
+  missingMandatory = [],
 }: {
   ret: ReturnRequest;
   candidates?: ReplacementCandidate[];
@@ -62,6 +63,13 @@ export function ReturnAdminActions({
    * payment gateway. Until it has, a refund is paid by hand.
    */
   gatewayAvailable?: boolean;
+  /**
+   * The evidence this claim cannot be decided without. While any of it
+   * is still missing, the approval button stays out of the way — the
+   * server would refuse the request anyway, and a button that is
+   * always refused is a button that teaches people to ignore it.
+   */
+  missingMandatory?: string[];
   /**
    * What the request is worth, worked out from the order as it was
    * bought. It is shown to the administrator so that the amount is
@@ -282,6 +290,12 @@ export function ReturnAdminActions({
               <p className="mt-1 text-[12px] text-gray-500">
                 Approving moves this request to pickup scheduling.
               </p>
+              {missingMandatory.length > 0 && (
+                <p className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-[12px] text-red-800">
+                  The customer has not sent the evidence this claim needs, so
+                  it cannot be approved yet. Ask them for it first.
+                </p>
+              )}
               <textarea
                 name="adminNotes"
                 rows={2}
@@ -290,7 +304,7 @@ export function ReturnAdminActions({
               />
               <button
                 type="submit"
-                disabled={isApprovePending}
+                disabled={isApprovePending || missingMandatory.length > 0}
                 className="btn btn-primary btn-sm mt-3 w-full"
               >
                 {isApprovePending ? "Approving..." : "Approve Return Request"}

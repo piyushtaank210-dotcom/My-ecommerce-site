@@ -360,7 +360,7 @@ export async function confirmCancellationRefund(
     orderId: request.order_id,
     kind: "order_cancelled",
     title: `The refund for order ${request.order_id} has been sent`,
-    body: `The refund for your cancelled order ${request.order_id} has been paid back to you under reference ${reference.trim()}. It reaches your account in 2–5 working days.`,
+    body: `The refund for your cancelled order ${request.order_id} has been paid back to you under reference ${reference.trim()}. It should reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`,
   });
 
   return { ok: true, message: "The refund is confirmed as paid." };

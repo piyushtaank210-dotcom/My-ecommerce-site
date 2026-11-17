@@ -312,7 +312,7 @@ try {
     "document.body.innerText.slice(0, 12000)"
   );
   check("the policy page is there", /Return, Refund and Replacement Rules/.test(policyText));
-  check("it gives the reporting window", /7 calendar days/.test(policyText));
+  check("it gives the reporting window", /5 calendar days/.test(policyText));
   check("it says replacement comes first", /replacement/i.test(policyText));
   check("it covers the sealed conditions", /completely sealed/i.test(policyText));
   check("it covers the inspection", /Inspection of the Returned Product/.test(policyText));

@@ -486,7 +486,7 @@ export async function createRefundRecord(input: {
     tellCustomer: {
       kind: "refund_approved",
       title: `Refund approved for request ${input.returnId}`,
-      body: `We have approved a refund of ₹${input.amount} for order ${str(row.order_id)}. The money is sent back by ${input.paymentMethod ?? calculation.originalPaymentMethod ?? "your original payment method"} once the returned product has been checked.`,
+      body: `We have approved a refund of ₹${input.amount} for order ${str(row.order_id)}. The money is sent back by ${input.paymentMethod ?? calculation.originalPaymentMethod ?? "your original payment method"} once the returned product has been checked. It should then reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`,
     },
   });
 
@@ -774,13 +774,13 @@ export async function updateRefundRecord(input: {
       ? {
           kind: "refund_completed",
           title: `Refund completed for request ${str(row.return_id)}`,
-          body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been paid under reference ${input.gatewayTransactionId}. It reaches your account in 2–5 working days.`,
+          body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been paid under reference ${input.gatewayTransactionId}. It should reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`,
         }
       : input.status === "processing"
         ? {
             kind: "refund_processing",
             title: `Refund on its way for request ${str(row.return_id)}`,
-            body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been sent to your payment method.`,
+            body: `The refund of ₹${num(row.amount)} for order ${str(row.order_id)} has been sent to your payment method. It should reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`,
           }
         : null,
   });

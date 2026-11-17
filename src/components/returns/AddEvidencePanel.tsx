@@ -23,6 +23,16 @@ const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
 
+/** What the customer has chosen each file is evidence of. */
+const EVIDENCE_KIND_OPTIONS = [
+  { value: "product", label: "The product itself" },
+  { value: "package", label: "The packaging it came in" },
+  { value: "serial", label: "The serial number" },
+  { value: "unboxing", label: "The unboxing" },
+  { value: "issue", label: "The fault itself" },
+  { value: "other", label: "Something else" },
+] as const;
+
 type Pending = {
   file: File;
   url: string;
@@ -56,14 +66,16 @@ export function AddEvidencePanel({
   const [files, setFiles] = useState<Pending[]>([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // What the file is evidence of, so the back office can sort it.
+  const [evidenceKind, setEvidenceKind] = useState<string>("other");
 
   const uploadOne = async (file: File) => {
     const outcome = await uploadFiles({
       ticketUrl: "/api/returns/uploads",
       commitUrl: "/api/returns/uploads",
       files: [file],
-      payload: { evidenceKind: "other" },
-      appFields: { evidenceKind: "other" },
+      payload: { evidenceKind },
+      appFields: { evidenceKind },
       onProgress: (_index, percent) => {
         setFiles((prev) =>
           prev.map((f) =>
@@ -253,6 +265,27 @@ export function AddEvidencePanel({
             className="hidden"
           />
         </label>
+
+        <div>
+          <label
+            htmlFor={`evidence-kind-${returnId}`}
+            className="block text-[12.5px] font-semibold text-gray-700"
+          >
+            What are you sending?
+          </label>
+          <select
+            id={`evidence-kind-${returnId}`}
+            value={evidenceKind}
+            onChange={(e) => setEvidenceKind(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-ink sm:w-auto"
+          >
+            {EVIDENCE_KIND_OPTIONS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div>
           <label

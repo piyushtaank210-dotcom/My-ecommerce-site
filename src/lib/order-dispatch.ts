@@ -703,8 +703,8 @@ export async function refundCancelledOrder(input: {
       ? `The refund for order ${order.id} has been paid back`
       : `The refund for order ${order.id} is on its way`,
     body: processed
-      ? `The refund of ${money(amount)} for your cancelled order ${order.id} has been paid back to the method you paid with. It reaches your account in 5–7 working days.`
-      : `The refund of ${money(amount)} for your cancelled order ${order.id} has been sent to the payment provider. It takes 5–7 working days to reach the method you paid with.${
+      ? `The refund of ${money(amount)} for your cancelled order ${order.id} has been paid back to the method you paid with. It should reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`
+      : `The refund of ${money(amount)} for your cancelled order ${order.id} has been sent to the payment provider. It should reflect in your original payment account within 3–4 business days of the refund being processed, depending on your bank or payment provider.${
           result.refundId ? `\n\nReference: ${result.refundId}` : ""
         }`,
   });
@@ -713,7 +713,7 @@ export async function refundCancelledOrder(input: {
     ok: true,
     message: processed
       ? `The refund of ${money(amount)} has been paid back.`
-      : `The refund of ${money(amount)} has been accepted by the payment provider and is on its way. It reaches the customer in 5–7 working days.`,
+      : `The refund of ${money(amount)} has been accepted by the payment provider and is on its way. It should reflect in the customer's original payment account within 3–4 business days of the refund being processed, depending on their bank or payment provider.`,
     refundId: result.refundId ?? null,
     refundStatus: gatewayStatus,
     order: await getOrder(order.id),
@@ -898,7 +898,7 @@ export async function refreshRefundStatus(input: {
       orderId: order.id,
       kind: "refund_completed",
       title: `The refund for order ${order.id} has been paid back`,
-      body: `The refund of ${money(refund.amount)} for your cancelled order ${order.id} has been paid back to the method you paid with. It reaches your account in 5–7 working days.`,
+      body: `The refund of ${money(refund.amount)} for your cancelled order ${order.id} has been paid back to the method you paid with. It should reflect in your original payment account within 3–4 business days, depending on your bank or payment provider.`,
     });
   }
 

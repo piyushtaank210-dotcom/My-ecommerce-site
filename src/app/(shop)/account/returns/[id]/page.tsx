@@ -33,6 +33,7 @@ import { CancelReturnButton } from "@/components/returns/CancelReturnButton";
 import { AddEvidencePanel } from "@/components/returns/AddEvidencePanel";
 import { customerStageIndex, customerStagesFor } from "@/lib/return-stages";
 import { evidenceMayBeAdded } from "@/lib/returns-records";
+import { REFUND_TIMELINE_NOTICE } from "@/lib/return-policy";
 
 export async function generateMetadata({
   params,
@@ -445,6 +446,9 @@ export default async function CustomerReturnDetailPage({
             {ret.refund_method || "original payment source"}. It is being sent now —
             this page updates as soon as the payment has gone through.
           </p>
+          <p className="mt-2 text-[12.5px] text-amber-900/70">
+            {REFUND_TIMELINE_NOTICE}
+          </p>
         </section>
       )}
 
@@ -493,7 +497,9 @@ export default async function CustomerReturnDetailPage({
 
           {ret.refund_processed_at && (
             <p className="mt-3 text-[12px] text-emerald-800">
-              Processed on {formatDate(ret.refund_processed_at)}. Depending on your bank or card issuer, the funds reflect in 2–5 business days.
+              Processed on {formatDate(ret.refund_processed_at)}. The refunded
+              amount should reflect in your original payment account within 3–4
+              business days, depending on your bank or payment provider.
             </p>
           )}
         </section>

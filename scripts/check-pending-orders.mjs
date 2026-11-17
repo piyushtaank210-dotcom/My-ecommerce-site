@@ -51,34 +51,53 @@ process.env.RAZORPAY_WEBHOOK_SECRET =
 const PORT = 3017;
 const BASE = `http://localhost:${PORT}`;
 
-const server = spawn(
-  process.execPath,
-  ["node_modules/next/dist/bin/next", "dev", "-p", String(PORT)],
-  {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      // The second server keeps its build and its lock file of its own,
-      // so that it can run beside the one on port 3000.
-      NEXT_DIST_DIR: ".next-pending-check",
-      RAZORPAY_API_BASE: mock.base,
-      RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
-      RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
-      RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
-      RESEND_API_KEY: "",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  }
-);
-
 /** What the shop said as it came up. */
 const serverLog = [];
-server.stdout.on("data", (chunk) => serverLog.push(String(chunk)));
-server.stderr.on("data", (chunk) => serverLog.push(String(chunk)));
 
-/** Waits for the shop to answer. */
+/**
+ * Starts the shop on its own port, beside the one on port 3000.
+ *
+ * The first `next dev` in a build directory of its own stops to show the
+ * upgrade reminder and asks to be run again. So the server is started,
+ * and if it stops for that reason it is started once more — the second
+ * time it comes straight up.
+ */
+function startServer() {
+  const child = spawn(
+    process.execPath,
+    ["node_modules/next/dist/bin/next", "dev", "-p", String(PORT)],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        // The second server keeps its build and its lock file of its own,
+        // so that it can run beside the one on port 3000.
+        NEXT_DIST_DIR: ".next-pending-check",
+        RAZORPAY_API_BASE: mock.base,
+        RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+        RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+        RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+        RESEND_API_KEY: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  child.stdout.on("data", (chunk) => serverLog.push(String(chunk)));
+  child.stderr.on("data", (chunk) => serverLog.push(String(chunk)));
+  return child;
+}
+
+let server = startServer();
+
+/**
+ * Waits for the shop to answer.
+ *
+ * It gives up early if the server stops — which is what the upgrade
+ * reminder does — rather than waiting out the whole timeout.
+ */
 async function waitForServer() {
   for (let i = 0; i < 120; i++) {
+    if (server.exitCode !== null) return false;
     try {
       const res = await fetch(`${BASE}/api/health`);
       if (res.status < 500) return true;
@@ -258,7 +277,16 @@ try {
   /* ─────────────────────────────────────────────────────────────── */
   section("0. The shop, talking to the mock gateway");
 
-  const up = await waitForServer();
+  let up = await waitForServer();
+  // The first `next dev` in a build directory of its own stops to show
+  // the upgrade reminder and asks to be run again. It is run again.
+  if (!up && serverLog.join("").includes("upgrade recommendation")) {
+    console.log("  the shop stopped for the upgrade reminder — starting it again");
+    server.kill();
+    await sleep(1000);
+    server = startServer();
+    up = await waitForServer();
+  }
   check("the shop is up", up);
   if (!up) {
     console.log("  the shop said:");
@@ -537,6 +565,31 @@ try {
   console.log("\n— cleaning up —");
 
   const db = getDb();
+
+  // The stock this run took out of the shelf goes back on it. Without
+  // this the test quietly drains the catalogue every time it is run,
+  // and a later run has nothing to order. It goes back before the rows
+  // are removed, because the movement is recorded against the order.
+  {
+    const { putStockBack } = await import("../src/lib/inventory.ts");
+    for (const orderId of createdOrders) {
+      await putStockBack(
+        db,
+        orderId,
+        {
+          id: 0,
+          product_slug: fixture.slug,
+          variant_id: fixture.variantId,
+          quantity: 1,
+        },
+        "restock",
+        "The pending-orders check put it back",
+        null,
+        null
+      );
+    }
+  }
+
   await withTransaction(async (tx) => {
     for (const orderId of createdOrders) {
       await tx.prepare("DELETE FROM order_refunds WHERE order_id = ?").run(orderId);

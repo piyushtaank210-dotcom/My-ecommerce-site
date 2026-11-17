@@ -10,6 +10,7 @@ import {
   setReturnWindowDays,
 } from "@/lib/settings";
 import { BACKORDER_POLICIES } from "@/lib/variations";
+import { RETURN_WINDOW_MAX_DAYS } from "@/lib/return-policy";
 
 /**
  * GET /api/admin/settings — the store's own settings.
@@ -77,8 +78,13 @@ export async function PATCH(request: Request) {
 
   if (body.returnWindowDays !== undefined) {
     const days = Number(body.returnWindowDays);
-    if (!Number.isFinite(days) || days < 1 || days > 60) {
-      return fail("Return window must be between 1 and 60 days.", 400);
+    // The published window is the maximum. It may be shortened, never
+    // lengthened past what the customer has been promised.
+    if (!Number.isFinite(days) || days < 1 || days > RETURN_WINDOW_MAX_DAYS) {
+      return fail(
+        `Return window must be between 1 and ${RETURN_WINDOW_MAX_DAYS} days.`,
+        400
+      );
     }
     await setReturnWindowDays(days);
   }

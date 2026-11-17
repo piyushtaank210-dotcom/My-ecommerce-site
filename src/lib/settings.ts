@@ -1,6 +1,10 @@
 import { getDb } from "./db";
 import { parseBackorderPolicy, type BackorderPolicy } from "./variations";
-import { RETURN_WINDOW_DAYS, RETURN_WINDOW_SETTING } from "./return-policy";
+import {
+  RETURN_WINDOW_DAYS,
+  RETURN_WINDOW_MAX_DAYS,
+  RETURN_WINDOW_SETTING,
+} from "./return-policy";
 
 /**
  * The store's own settings.
@@ -35,7 +39,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
 /**
  * The default return window in calendar days from delivery.
  *
- * Seven days, and it is the same seven days for every kind of claim: a
+ * Five days, and it is the same five days for every kind of claim: a
  * damaged or faulty unit, a wrong item, a missing accessory, and a
  * voluntary return on a sealed unit.
  */
@@ -166,16 +170,29 @@ export async function getReturnPolicy(): Promise<{
   };
 }
 
-/** Returns the configured return window duration in days (default 7). */
+/**
+ * The configured return window duration in days.
+ *
+ * The published policy is the maximum the shop may offer. A window the
+ * back office has set is read as it stands, but it is never allowed to
+ * run past the maximum — the window the shop publishes is the promise
+ * the customer reads.
+ */
 export async function getReturnWindowDays(): Promise<number> {
   const val = (await getSetting(RETURN_WINDOW_SETTING, String(DEFAULT_RETURN_WINDOW_DAYS)));
   const parsed = parseInt(val, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RETURN_WINDOW_DAYS;
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_RETURN_WINDOW_DAYS;
+  return Math.min(parsed, RETURN_WINDOW_MAX_DAYS);
 }
 
-/** Sets the configured return window duration in days. */
+/**
+ * Sets the configured return window duration in days.
+ *
+ * The window may be made shorter — a shorter window is easier to
+ * honour — but it can never be longer than the published maximum.
+ */
 export async function setReturnWindowDays(days: number): Promise<void> {
-  const safe = Math.max(1, Math.min(60, Math.round(days)));
+  const safe = Math.max(1, Math.min(RETURN_WINDOW_MAX_DAYS, Math.round(days)));
   (await setSetting(RETURN_WINDOW_SETTING, String(safe)));
 }
 

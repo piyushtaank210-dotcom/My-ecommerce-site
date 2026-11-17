@@ -76,8 +76,8 @@ export default async function AdminReturnDetailPage({
   const refundRecord = refundsForRequest.find((r) => r.return_id === ret.id) ?? null;
 
   // The rules this claim is judged against, and what has arrived against
-  // them. A claim is never turned away only because a photograph or an
-  // unboxing video is missing, so this is a prompt to ask — not a bar.
+  // them. Some evidence is a condition of the claim: the request cannot
+  // be approved without it. The rest is asked for, and a person decides.
   const policy = policyForReason(ret.reason);
   const onFile = {
     photographs: ret.images.filter((i) => i.kind === "photo").length,
@@ -87,7 +87,10 @@ export default async function AdminReturnDetailPage({
     missingList: Boolean(ret.missing_accessories),
   };
   const missingRequired = policy.evidence
-    .filter((e) => e.required && !evidenceSatisfied(e, onFile))
+    .filter((e) => e.required && !e.mandatory && !evidenceSatisfied(e, onFile))
+    .map((e) => e.label);
+  const missingMandatory = policy.evidence
+    .filter((e) => e.mandatory && !evidenceSatisfied(e, onFile))
     .map((e) => e.label);
 
   return (
@@ -211,25 +214,27 @@ export default async function AdminReturnDetailPage({
                 {/* What the rules ask for, and what has arrived. */}
                 <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
                   {policy.evidence.map((e) => {
-                    const has = evidenceSatisfied(e, {
-                      photographs: ret.images.filter((i) => i.kind === "photo").length,
-                      videos: ret.images.filter((i) => i.kind === "video").length,
-                      description: Boolean(ret.customer_notes),
-                      serialNumber: Boolean(ret.serial_number),
-                      missingList: Boolean(ret.missing_accessories),
-                    });
+                    const has = evidenceSatisfied(e, onFile);
                     return (
                       <li key={e.id} className="flex items-start gap-2.5">
                         <span
                           className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
                             has
                               ? "bg-green-50 text-green-700"
-                              : e.required
-                                ? "bg-red-50 text-red-700"
-                                : "bg-gray-100 text-gray-500"
+                              : e.mandatory
+                                ? "bg-red-100 text-red-800"
+                                : e.required
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-gray-100 text-gray-500"
                           }`}
                         >
-                          {has ? "On file" : e.required ? "Needed" : "Helpful"}
+                          {has
+                            ? "On file"
+                            : e.mandatory
+                              ? "Required"
+                              : e.required
+                                ? "Needed"
+                                : "Helpful"}
                         </span>
                         <span className="min-w-0">
                           <span className="block text-[12.5px] font-medium text-ink">
@@ -249,9 +254,21 @@ export default async function AdminReturnDetailPage({
                     <span>
                       {missingRequired.join(" and ")}{" "}
                       {missingRequired.length === 1 ? "is" : "are"} still missing.
-                      Ask the customer for it, or go on with the claim on what
-                      you have — a claim is never turned away only because a
-                      photograph or an unboxing video is missing.
+                      Ask the customer for it and the claim goes forward on what
+                      they send.
+                    </span>
+                  </p>
+                )}
+
+                {missingMandatory.length > 0 && (
+                  <p className="admin-notice admin-notice--bad mt-3">
+                    <span>
+                      The {missingMandatory.length === 1 ? "piece" : "pieces"} of
+                      evidence marked{" "}
+                      <strong className="font-semibold uppercase">required</strong>{" "}
+                      above {missingMandatory.length === 1 ? "is" : "are"} still
+                      missing. The request cannot be approved until the customer
+                      has sent it.
                     </span>
                   </p>
                 )}
@@ -602,8 +619,14 @@ export default async function AdminReturnDetailPage({
               )}
             </dl>
             <p className="mt-3 border-t border-gray-100 pt-3 text-[12px] text-gray-500">
-              The window for this return is {deadline.windowDays} days from delivery
-              {deadline.formattedDeadline ? ` — it closed on ${deadline.formattedDeadline}` : ""}.
+              The window for this return is {deadline.windowDays} days from
+              delivery
+              {deadline.formattedDeadline
+                ? deadline.isExpired
+                  ? ` — it closed on ${deadline.formattedDeadline}`
+                  : ` — it closes on ${deadline.formattedDeadline}`
+                : ""}
+              .
             </p>
             </div>
           </section>
@@ -647,6 +670,7 @@ export default async function AdminReturnDetailPage({
             ret={ret}
             candidates={candidates}
             gatewayAvailable={gatewayIsConfigured()}
+            missingMandatory={missingMandatory}
             refund={{
               id: refundRecord?.id ?? "",
               amount: calculation.amount,

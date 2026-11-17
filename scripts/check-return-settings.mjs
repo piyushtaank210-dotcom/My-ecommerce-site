@@ -52,10 +52,19 @@ try {
   );
 
   section("2. The window can be changed");
+  await setReturnWindowDays(3);
+  check("it is three days now", (await getReturnPolicy()).windowDays === 3);
   await setReturnWindowDays(5);
-  check("it is five days now", (await getReturnPolicy()).windowDays === 5);
+  check("and five now", (await getReturnPolicy()).windowDays === 5);
+  // The published window is the maximum. A window can be made shorter —
+  // that is kinder to the customer — but it can never be longer than
+  // the promise the shop has published.
   await setReturnWindowDays(9);
-  check("and nine now", (await getReturnPolicy()).windowDays === 9);
+  check(
+    "and it will not go past the published maximum",
+    (await getReturnPolicy()).windowDays === 5,
+    `${(await getReturnPolicy()).windowDays} days`
+  );
   await setReturnWindowDays(before.windowDays);
   check(
     "and it goes back to what it was",

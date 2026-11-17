@@ -24,6 +24,7 @@ const { applyMigrations } = await import("../src/lib/migrations.ts");
 const {
   RETURN_WINDOW_DAYS,
   checkRequestAllowed,
+  mandatoryEvidenceFor,
   policyForReason,
   REASON_POLICIES,
 } = await import("../src/lib/return-policy.ts");
@@ -56,21 +57,99 @@ const orderId = `POL-${stamp}`;
 
 console.log("\n→ the window");
 {
-  check(RETURN_WINDOW_DAYS === 7, "the window is seven calendar days");
+  check(RETURN_WINDOW_DAYS === 5, "the window is five calendar days");
+
+  /**
+   * The end of the day, in IST, that is `days` days after the day the
+   * parcel arrived — worked out here the same way the shop works it out,
+   * so the two can be compared exactly.
+   */
+  const expectedDeadline = (deliveredIso, days) => {
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(new Date(deliveredIso).getTime() + istOffsetMs);
+    return (
+      Date.UTC(
+        ist.getUTCFullYear(),
+        ist.getUTCMonth(),
+        ist.getUTCDate() + days,
+        23,
+        59,
+        59,
+        999
+      ) - istOffsetMs
+    );
+  };
 
   const delivered = new Date("2026-11-10T09:00:00.000Z");
   const deadline = await calculateReturnDeadline(delivered.toISOString());
   const day = deadline.deadlineIso.slice(0, 10);
   check(
-    day === "2026-11-17",
-    "a unit delivered on the 10th must be reported by the 17th",
+    day === "2026-11-15",
+    "a unit delivered on the 10th must be reported by the 15th",
     day
   );
   check(
-    deadline.windowDays === 7,
+    deadline.deadlineIso === new Date(expectedDeadline(delivered.toISOString(), 5)).toISOString(),
+    "the deadline is the end of the day five days after delivery",
+    deadline.deadlineIso
+  );
+  check(
+    deadline.windowDays === 5,
     "the deadline is calculated on the published window",
     `${deadline.windowDays} days`
   );
+
+  // The days are counted in IST, so the deadline does not move with the
+  // clock of the machine the test runs on.
+  const lateEvening = await calculateReturnDeadline(
+    new Date("2026-11-10T18:30:00.000Z").toISOString()
+  );
+  check(
+    lateEvening.deadlineIso === new Date(expectedDeadline("2026-11-10T18:30:00.000Z", 5)).toISOString(),
+    "a parcel delivered late in the day still has the whole window",
+    lateEvening.deadlineIso
+  );
+
+  // A parcel that arrived today has the whole window in front of it.
+  const today = await calculateReturnDeadline(new Date().toISOString());
+  check(
+    !today.isExpired && today.daysRemaining === 5,
+    "a unit delivered today has the whole window in front of it",
+    `${today.daysRemaining} days`
+  );
+
+  // A parcel that arrived four days ago is still inside the window.
+  const fourDaysAgo = await calculateReturnDeadline(
+    new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
+  );
+  check(!fourDaysAgo.isExpired, "a unit delivered four days ago is still inside the window");
+
+  // A parcel that arrived five days ago is judged on the exact deadline:
+  // the end of that fifth day. Nothing else.
+  const fiveDaysAgoAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  const fiveDaysAgo = await calculateReturnDeadline(fiveDaysAgoAt.toISOString());
+  const deadlineInstant = expectedDeadline(fiveDaysAgoAt.toISOString(), 5);
+  check(
+    fiveDaysAgo.deadlineIso === new Date(deadlineInstant).toISOString(),
+    "a unit delivered five days ago is judged on the end of that fifth day",
+    fiveDaysAgo.deadlineIso
+  );
+  check(
+    fiveDaysAgo.isExpired === Date.now() > deadlineInstant,
+    "and it is inside the window only until that moment",
+    fiveDaysAgo.isExpired ? "closed" : "open"
+  );
+
+  // Six days after delivery the window is shut.
+  const sixDaysAgo = await calculateReturnDeadline(
+    new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+  );
+  check(sixDaysAgo.isExpired, "a unit delivered six days ago is outside the window");
+  check(sixDaysAgo.daysRemaining === 0, "a closed window reads no days left");
+
+  // A delivery with no date on it cannot be shown to be inside a window.
+  const undated = await calculateReturnDeadline(null);
+  check(undated.isExpired, "an order with no delivery date has no window");
 }
 
 console.log("\n→ what each reason allows");
@@ -87,13 +166,57 @@ console.log("\n→ what each reason allows");
 
   const video = damage.evidence.find((e) => e.id === "unboxing_video");
   check(
-    video !== undefined && video.required === false,
-    "the unboxing video is recommended, not required"
+    video !== undefined && video.required === true && video.mandatory === true,
+    "the unboxing video is required for a unit that arrived damaged"
   );
   const photos = damage.evidence.find((e) => e.id === "product_photos");
   check(
     photos !== undefined && photos.required === true,
     "photographs of the damaged product are asked for"
+  );
+
+  // A unit that does not work is shown by the fault, not by the unboxing.
+  const notWorking = policyForReason("product_not_working");
+  const fault = notWorking.evidence.find((e) => e.id === "issue_video");
+  check(
+    fault !== undefined && fault.required === true && fault.mandatory === true,
+    "a video of the fault is required for a unit that does not work"
+  );
+  const defect = policyForReason("defective_product");
+  const defectFault = defect.evidence.find((e) => e.id === "issue_video");
+  check(
+    defectFault !== undefined && defectFault.mandatory === true,
+    "a video of the fault is required for a defective unit"
+  );
+  const defectUnboxing = defect.evidence.find((e) => e.id === "unboxing_video");
+  check(
+    defectUnboxing !== undefined && defectUnboxing.mandatory !== true,
+    "the unboxing video is only asked for on a unit that arrived intact"
+  );
+
+  // The evidence a claim cannot go ahead without.
+  const nothingOnFile = {
+    photographs: 0,
+    videos: 0,
+    description: false,
+    serialNumber: false,
+    missingList: false,
+  };
+  check(
+    mandatoryEvidenceFor(damage, nothingOnFile).length > 0,
+    "a damaged claim is blocked without its photographs and its video"
+  );
+  check(
+    mandatoryEvidenceFor(policyForReason("other"), nothingOnFile).length === 0,
+    "a claim the shop looks at by hand is not blocked by evidence"
+  );
+  check(
+    mandatoryEvidenceFor(damage, {
+      ...nothingOnFile,
+      photographs: 2,
+      videos: 1,
+    }).length === 0,
+    "a damaged claim with photographs and a video is not blocked"
   );
 
   const change = policyForReason("change_of_mind");

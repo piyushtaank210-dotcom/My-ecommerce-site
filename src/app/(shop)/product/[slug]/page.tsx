@@ -125,7 +125,7 @@ export default async function ProductPage({
                 Icon: RotateCcw,
                 text:
                   product.returns ??
-                  "7-day replacement on dead-on-arrival units",
+                  "5-day replacement on dead-on-arrival units",
               },
             ].map(({ Icon, text }) => (
               <div key={text} className="flex items-center gap-2.5">

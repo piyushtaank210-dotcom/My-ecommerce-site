@@ -33,7 +33,11 @@ const { getReturnRequest, listReturnRequests } = returns;
 const records = await import("../src/lib/returns-records.ts");
 const { createRefundRecord, listAdminActions, listRefunds, listReplacements, updateRefundRecord, recordInspection } = records;
 const { maySeeReturn } = await import("../src/lib/return-access.ts");
-const { evidenceSatisfied, policyForReason } = await import("../src/lib/return-policy.ts");
+const {
+  evidenceSatisfied,
+  mandatoryEvidenceFor,
+  policyForReason,
+} = await import("../src/lib/return-policy.ts");
 const { readEvidence } = await import("../src/lib/evidence.ts");
 const { getNotificationsForUser } = await import("../src/lib/notifications.ts");
 
@@ -724,7 +728,46 @@ try {
     evidenceKind: "product",
   });
   check("a photograph is staged for the second claim", secondPhoto.ok);
+  // A unit that does not work has to be shown not working, so the claim
+  // carries a video of the fault as well as the photograph of it.
+  const secondVideo = await stageUpload({
+    userId: customer.id,
+    file: new File([makeMp4()], "fault.mp4", { type: "video/mp4" }),
+    evidenceKind: "issue",
+  });
+  check("a video of the fault is staged for the second claim", secondVideo.ok);
   const secondClaim = await submitReturnRequest(
+    {
+      orderId: secondOrderId,
+      type: "return",
+      reason: "product_not_working",
+      customerNotes: "The controller does not pair with anything and the lights do not come on.",
+      items: [
+        {
+          orderItemId: secondOrder.items[0].id ?? 1,
+          productSlug: secondOrder.items[0].product_slug,
+          variantId: secondOrder.items[0].variant_id ?? null,
+          name: secondOrder.items[0].name,
+          price: secondOrder.items[0].price,
+          quantity: 1,
+        },
+      ],
+      deliveryDate: new Date().toISOString().slice(0, 10),
+      contactName: customer.name,
+      contactEmail: customer.email,
+      uploadIds: [
+        ...(secondPhoto.ok ? [secondPhoto.upload.id] : []),
+        ...(secondVideo.ok ? [secondVideo.upload.id] : []),
+      ],
+    },
+    { id: customer.id, email: customer.email }
+  );
+  check("a second claim can be raised on another order", secondClaim.ok, secondClaim.message);
+  if (secondClaim.ok) createdReturnIds.push(secondClaim.returnId);
+
+  // The same claim without the video of the fault is refused: the
+  // evidence is a condition of the claim, not a prompt.
+  const secondWithoutVideo = await submitReturnRequest(
     {
       orderId: secondOrderId,
       type: "return",
@@ -747,8 +790,11 @@ try {
     },
     { id: customer.id, email: customer.email }
   );
-  check("a second claim can be raised on another order", secondClaim.ok, secondClaim.message);
-  if (secondClaim.ok) createdReturnIds.push(secondClaim.returnId);
+  check(
+    "a unit that does not work cannot be claimed without a video of the fault",
+    !secondWithoutVideo.ok,
+    secondWithoutVideo.message
+  );
 
   const noReason = await rejectReturnRequest(claim.returnId, staff, "");
   check("a rejection with no reason is refused", !noReason.ok);
@@ -895,11 +941,29 @@ try {
     "a photograph and a video satisfy the damage evidence",
     policy.evidence.filter((e) => e.required).every((e) => evidenceSatisfied(e, onFile))
   );
+  // The video is a condition of a claim about a unit that arrived
+  // broken, so the back office has to be able to see that it is the
+  // piece that is still missing.
   check(
-    "a claim with no video is still looked at, not refused",
-    policy.evidence
-      .filter((e) => e.required)
-      .every((e) => evidenceSatisfied(e, { ...onFile, videos: 0 }))
+    "a claim about a damaged unit needs its video",
+    !evidenceSatisfied(
+      policy.evidence.find((e) => e.id === "unboxing_video"),
+      { ...onFile, videos: 0 }
+    )
+  );
+  check(
+    "and the video is what the back office is told is missing",
+    mandatoryEvidenceFor(policy, { ...onFile, videos: 0 }).some(
+      (e) => e.id === "unboxing_video"
+    )
+  );
+  check(
+    "but a claim the shop looks at by hand is not held up by evidence",
+    mandatoryEvidenceFor(policyForReason("other"), {
+      ...onFile,
+      photographs: 0,
+      videos: 0,
+    }).length === 0
   );
 } catch (err) {
   console.error("\n✗ the run stopped:", err);

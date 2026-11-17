@@ -207,8 +207,8 @@ try {
   check("it asks for the contact details", /How we reach you/.test(formText));
   check("it asks for the evidence", /Send us the evidence/.test(formText));
   check(
-    "it explains the unboxing video is recommended, not required",
-    /never turned away only because/i.test(formText)
+    "it explains which evidence has to be sent, and which is only asked for",
+    /marked\s+Required/i.test(formText) && /marked\s+Needed/i.test(formText)
   );
 
   const fileInput = await cdp.evaluate(

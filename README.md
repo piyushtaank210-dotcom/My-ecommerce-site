@@ -1,6 +1,6 @@
 # ConsoleSeller — Consoles & Gaming Accessories
 
-Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 7-day return, replacement & refund management system.
+Official repository for **ConsoleSeller** ([consoleseller.in](https://consoleseller.in)): Premium gaming consoles, controllers, and gaming gear with guaranteed delivery, live inventory management, and an end-to-end 5-day return, replacement & refund management system.
 
 **Stack:** Next.js 16 (App Router, Turbopack, React 19) · Tailwind CSS v4 · PostgreSQL via `pg` · Zod.
 
@@ -484,9 +484,9 @@ Typography is Inter with tabular numbers (`tnum`) for prices and tracking codes.
 | `/cart` | Real-time shopping cart and summary |
 | `/checkout` | Single-page checkout with saved addresses and address verification |
 | `/order/[id]` | Real-time order status, invoice details, delivery tracking, and return actions |
-| `/order/[id]/return` | 7-day return and replacement request form — photographs and video, uploaded with live progress, kept private |
+| `/order/[id]/return` | 5-day return and replacement request form — photographs and video, uploaded with live progress, kept private |
 | `/account` | Customer account dashboard |
-| `/account/orders` | Customer order history with 7-day return window indicators |
+| `/account/orders` | Customer order history with 5-day return window indicators |
 | `/account/returns` | Customer return & replacement requests list |
 | `/account/returns/[id]` | Interactive status timeline, the customer's own evidence, and the option to send more when the shop asks for it |
 | `/account/notifications` | Every message the shop has sent about the customer's requests |
@@ -662,7 +662,7 @@ calls `pending` has not reached the customer yet, and the shop says so.
 | Status | |
 |---|---|
 | `none` | Nothing has been sent |
-| `pending` | Razorpay has accepted it; it takes 5–7 working days to arrive |
+| `pending` | Razorpay has accepted it; it takes 3–4 business days to arrive |
 | `processed` | Razorpay has confirmed the money has gone back |
 | `failed` | The attempt did not work; the reason is on the order and it can be retried |
 
@@ -1005,6 +1005,32 @@ the shop needs to be able to tell the two apart.
 The whole of a claim lives in the database, and the back office sees
 everything the customer sent.
 
+**The window is five calendar days from delivery.** The day the parcel
+arrived is day one, and the request has to be made by the end of the
+fifth day after it. The deadline is worked out in Indian Standard Time
+from the order's own record of its delivery — never from the day the
+order was placed or paid for — so it does not move with the clock of the
+machine it is worked out on. The customer sees the last eligible date
+and the days remaining on the order page, and the request form is not
+offered at all once the window has shut. The same rule is enforced on
+the server, so a request sent straight to the API after the deadline is
+refused the same way the button is hidden.
+
+**The window may be made shorter, never longer.** The published window
+is the maximum the shop may offer, and the back office can bring it down
+without a deployment — but it can never be pushed past what the customer
+has been promised.
+
+**Some evidence is a condition of the claim.** A unit that arrived
+broken has to carry the photographs and the continuous unboxing video,
+and a unit that does not work has to carry the photographs and a video
+of the fault. There is nothing to assess without them, so the request
+is refused until they arrive — the form blocks the send, the server
+refuses it, and the back office cannot approve it either. Everything
+else is asked for rather than required: where the customer cannot send
+it, they are asked why, the reason is recorded against the request, and
+a person still looks at the claim.
+
 **The claim.** A customer raises a request from the order page. The form
 is driven by the rules for the reason they pick, so it asks for what that
 reason actually needs — the delivery date, the serial number where the
@@ -1025,7 +1051,10 @@ served from a guessable URL.
 customer cannot send, the form says so and asks them why. The claim still
 goes forward, because a genuine claim is never turned away for the want
 of a photograph — the reason is recorded on the request and shown to the
-back office.
+back office. The evidence that is a condition of the claim — the unboxing
+video for a unit that arrived damaged, the fault video for a unit that
+does not work — is the exception: without it there is nothing to look
+at, so the request is refused until it arrives.
 
 **The records.** A request, its items, its evidence, its history and its
 audit log are one case. Beside them:
@@ -1059,6 +1088,10 @@ constants in the code, and they can be changed without a deployment.
 initiated*, then *pending*, then *processing*, and only then *completed* —
 and completing it needs the transaction reference. The customer is told
 the same way, and the customer never sees the shop's internal notes.
+The refund is raised only once the returned product has been received
+and inspected; the money then reaches the customer's original payment
+account within 3–4 business days of the refund being processed, which
+depends on their bank or payment provider.
 
 ### Refunds
 
@@ -1517,6 +1550,36 @@ runs off the side of the page at 320, 375, 768 or 1024 pixels.
 
 The browser half of the order checks needs the dev server on port 3000; the
 dispatch and pending checks stand on their own.
+
+The return and replacement policy has its own checks:
+
+```bash
+npm run check:return-window
+npm run check:return-policy
+npm run check:returns
+```
+
+`check:return-window` is the end-to-end one. It makes an order that was
+delivered today, one delivered four days ago, one delivered five days ago
+and one delivered six days ago, and checks that the five-day window is
+worked out from the delivery date in Indian Standard Time: the buttons are
+on the order inside the window and gone on the order outside it, the
+request page refuses to open outside it, and the API refuses the request
+with the published wording. It then checks the sealed confirmation — a
+change of mind is refused on an opened unit — the evidence that is a
+condition of the claim — a damaged unit cannot be claimed without the
+photographs and the unboxing video, and a unit that does not work cannot
+be claimed without a video of the fault — that a claim with the right
+evidence is accepted, that the files land on it, that nobody else can
+read it, and that a second claim about the same unit is refused. It also
+checks the back office: that a claim missing its evidence cannot be
+approved, that it can be once the evidence has arrived, and that a
+customer cannot reach the back office at all.
+
+`check:return-policy` checks the rules themselves — the window, what each
+reason allows, and what a customer may ask for. `check:returns` walks a
+claim through the whole journey: the request, the review, the evidence,
+the pickup, the arrival, the inspection, the refund and the replacement.
 
 The catalogue has a test of its own:
 

@@ -808,31 +808,32 @@ try {
     );
   }
 
-  // The refund timeline is the headline number, and it starts at approval.
+  // The refund timeline is the headline number, and it runs from the
+  // moment the refund is processed rather than from the request.
   await cdp.goto(`${BASE}/refund-policy`);
   const refundText = await cdp.evaluate("document.body.innerText");
   check(
-    "refund policy states 7-15 days",
-    /7-15 days|7–15 days/.test(refundText),
-    refundText.match(/within 7[-–]15 days[^.]*/i)?.[0] ?? "not found"
+    "refund policy states the 3-4 business days",
+    /3-4 business days|3–4 business days/.test(refundText),
+    refundText.match(/within 3[-–]4 business days[^.]*/i)?.[0] ?? "not found"
   );
   check(
-    "refund policy measures the window from approval",
-    /begins on the date we approve/i.test(refundText)
+    "refund policy waits for the inspection before the money goes back",
+    /received and successfully inspected/i.test(refundText)
   );
   check(
     "refund policy has no placeholder left in it",
     !/\[INSERT /.test(refundText)
   );
 
-  // The rules themselves: a seven-day window on every claim, a
+  // The rules themselves: a five-day window on every claim, a
   // replacement first where a unit is damaged or wrong, an unboxing video
-  // that is recommended rather than required, and no clause that stands
-  // in the way of the customer's statutory rights.
+  // that is required for a unit that arrived damaged, and no clause that
+  // stands in the way of the customer's statutory rights.
   check(
-    "refund policy states the seven-day window",
-    /7 calendar days/.test(refundText),
-    refundText.match(/7 calendar days[^.]*/i)?.[0] ?? "not found"
+    "refund policy states the five-day window",
+    /5 calendar days/.test(refundText),
+    refundText.match(/5 calendar days[^.]*/i)?.[0] ?? "not found"
   );
   check(
     "refund policy says a replacement comes first",
@@ -840,10 +841,14 @@ try {
     refundText.match(/first thing we do[^.]*/i)?.[0] ?? "not found"
   );
   check(
-    "refund policy does not make an unboxing video a condition",
-    /never refused because you could not record an unboxing video/i.test(
-      refundText
-    )
+    "refund policy makes the unboxing video a condition for a damaged unit",
+    /unboxing video is required/i.test(refundText),
+    refundText.match(/unboxing video is required[^.]*/i)?.[0] ?? "not found"
+  );
+  check(
+    "refund policy requires a video of the fault for a unit that does not work",
+    /fault video is required/i.test(refundText),
+    refundText.match(/fault video is required[^.]*/i)?.[0] ?? "not found"
   );
   check(
     "refund policy leaves the statutory rights alone",
@@ -851,7 +856,7 @@ try {
   );
   check(
     "refund policy says a refund waits for the inspection",
-    /inspected first/i.test(refundText)
+    /inspected/i.test(refundText)
   );
   await cdp.shot("15-policies", true);
 

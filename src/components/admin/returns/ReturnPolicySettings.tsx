@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Settings2, Save } from "lucide-react";
 import { toast } from "@/components/Toaster";
+import { RETURN_WINDOW_MAX_DAYS } from "@/lib/return-policy";
 
 /**
  * The shop's return policy.
@@ -152,7 +153,7 @@ export function ReturnPolicySettings({
                   id="return-window-days"
                   type="number"
                   min={1}
-                  max={60}
+                  max={RETURN_WINDOW_MAX_DAYS}
                   value={days}
                   disabled={busy}
                   onChange={(e) => setDays(Number(e.target.value))}
@@ -165,6 +166,11 @@ export function ReturnPolicySettings({
                   from the day the parcel arrived
                 </span>
               </div>
+              <p className="mt-1.5 text-[11.5px] text-gray-500">
+                The published window is {RETURN_WINDOW_MAX_DAYS} days. You can
+                make it shorter, but it can never be longer than the promise
+                the shop has published.
+              </p>
             </div>
           </div>
 

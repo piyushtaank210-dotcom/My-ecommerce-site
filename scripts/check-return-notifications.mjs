@@ -173,6 +173,30 @@ try {
   const returnId = createdReturnId;
   created.returns.push(returnId);
 
+  // A claim about a unit that arrived damaged cannot be approved without
+  // the photographs and the unboxing video, so the evidence is put on it.
+  for (const [kind, evidenceKind, name, mime] of [
+    ["photo", "product", "fault.jpg", "image/jpeg"],
+    ["photo", "package", "box.jpg", "image/jpeg"],
+    ["video", "unboxing", "unboxing.mp4", "video/mp4"],
+  ]) {
+    await db
+      .prepare(
+        `INSERT INTO return_images
+           (return_id, path, kind, evidence_kind, stored_name, mime_type, size_bytes, original_name, version, superseded)
+         VALUES (?, ?, ?, ?, ?, ?, 12, ?, 1, 0)`
+      )
+      .run(
+        returnId,
+        `/uploads/returns/${returnId}/${name}`,
+        kind,
+        evidenceKind,
+        name,
+        mime,
+        name
+      );
+  }
+
   let kinds = await kindsFor(returnId);
   check("the customer is told the claim is in", kinds.includes("submitted"), kinds.join(", "));
 

@@ -40,7 +40,7 @@ export default async function AccountReturnsPage() {
         </span>
         <h2 className="mt-4 text-[16px] font-bold text-ink">No return or replacement requests</h2>
         <p className="mt-1.5 text-[13.5px] text-gray-500 max-w-md mx-auto">
-          {`Need to return or replace an item? You can submit a request directly from any delivered order within the ${RETURN_WINDOW_DAYS}-day return window.`}
+          {`Need to return or replace an item? You can submit a request directly from any delivered order within ${RETURN_WINDOW_DAYS} days of delivery.`}
         </p>
         <Link href="/account/orders" className="btn btn-primary btn-sm mt-5">
           View My Orders

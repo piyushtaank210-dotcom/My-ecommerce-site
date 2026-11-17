@@ -44,7 +44,7 @@ const PROMISES = [
   {
     Icon: RotateCcw,
     title: `${STORE.replacementDays}-day replacement`,
-    body: "Dead on arrival, damaged in transit, or simply not what you ordered? Tell us within seven days of delivery and we replace it — no restocking fee and no argument.",
+    body: `Dead on arrival, damaged in transit, or simply not what you ordered? Tell us within ${STORE.replacementDays} days of delivery and we replace it — no restocking fee and no argument.`,
   },
   {
     Icon: CreditCard,
@@ -78,7 +78,7 @@ const WHEN_IT_GOES_WRONG = [
   },
   {
     title: "If you change your mind",
-    body: "You can raise a return within seven days of delivery. Send it back with the original box and every accessory, and we process the refund within 7–15 days of approving it.",
+    body: `You can raise a return within ${STORE.replacementDays} days of delivery. Send it back with the original box and every accessory, and we inspect it before the refund is raised.`,
   },
   {
     title: "If you need a warranty claim",

@@ -396,7 +396,7 @@ export function OrderActionBar({
                 <p className="text-[12.5px] text-gray-700">
                   {refunded
                     ? "The payment provider has confirmed that the money has been paid back."
-                    : "The payment provider has accepted the refund. It has not reached the customer yet — it takes 5–7 working days."}
+                    : "The payment provider has accepted the refund. It has not reached the customer yet — it takes 3–4 business days."}
                 </p>
                 {!refunded && (
                   <form action={statusAction}>
@@ -719,7 +719,7 @@ function RefundModal({
 
         <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2.5 text-[12px] text-amber-800">
           {paymentReference
-            ? `The refund will be sent to ${paymentGateway ?? "the payment provider"} against payment ${paymentReference}. It takes 5–7 working days to reach the customer's account.`
+            ? `The refund will be sent to ${paymentGateway ?? "the payment provider"} against payment ${paymentReference}. It takes 3–4 business days to reach the customer's account.`
             : "This order has no gateway payment on it, so the refund has to be paid by hand."}
         </p>
 

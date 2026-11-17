@@ -18,6 +18,7 @@ import {
   RETURN_STATUS_LABEL,
   RETURN_STATUS_TONE,
 } from "@/lib/returns";
+import { returnWindowExpiredNotice } from "@/lib/return-policy";
 import { getOrder } from "@/lib/orders";
 import { ORDER_STATUS_LABEL, ORDER_TIMELINE, type OrderStatus } from "@/lib/orders";
 import { getProduct } from "@/lib/queries";
@@ -461,8 +462,10 @@ export default async function OrderPage({
                 Return & Replacement Window Active
               </h2>
               <p className="mt-0.5 text-[12.5px] text-gray-600">
-                Delivered on {formatDate(order.delivered_at || order.created_at)}. Return or exchange eligible items until{" "}
-                <strong className="text-ink">{eligibility.formattedDeadline}</strong> ({eligibility.daysRemaining}{" "}
+                Delivered on {formatDate(order.delivered_at || order.created_at)}. You
+                can request a return or replacement until{" "}
+                <strong className="text-ink">{eligibility.formattedDeadline}</strong> —{" "}
+                that is your last eligible date ({eligibility.daysRemaining}{" "}
                 {eligibility.daysRemaining === 1 ? "day" : "days"} remaining).
               </p>
             </div>
@@ -480,8 +483,14 @@ export default async function OrderPage({
               Return Window Closed
             </div>
             <p className="mt-1 text-[12.5px] text-gray-500">
-              The {eligibility.windowDays}-calendar-day return window for this order closed on{" "}
-              <span className="font-medium text-gray-700">{eligibility.formattedDeadline}</span>.
+              {returnWindowExpiredNotice(eligibility.windowDays)}
+            </p>
+            <p className="mt-1 text-[12.5px] text-gray-500">
+              The last day a request could be submitted for this order was{" "}
+              <span className="font-medium text-gray-700">
+                {eligibility.formattedDeadline}
+              </span>
+              .
             </p>
           </section>
         ) : null}

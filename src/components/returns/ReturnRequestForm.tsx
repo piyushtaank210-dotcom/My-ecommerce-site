@@ -18,6 +18,9 @@ import {
   type ReturnActionState,
 } from "@/lib/return-actions";
 import {
+  defaultEvidenceKindFor,
+  mandatoryEvidenceFor,
+  missingEvidenceFor,
   OPENED_PRODUCT_NOTICE,
   policyForReason,
   REASON_POLICIES,
@@ -62,6 +65,7 @@ const EVIDENCE_KIND_OPTIONS = [
   { value: "package", label: "The packaging it came in" },
   { value: "serial", label: "The serial number" },
   { value: "unboxing", label: "The unboxing" },
+  { value: "issue", label: "The fault itself" },
   { value: "other", label: "Something else" },
 ] as const;
 
@@ -121,7 +125,15 @@ export function ReturnRequestForm({
   const [customerNotes, setCustomerNotes] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [missingAccessories, setMissingAccessories] = useState("");
-  const [sealed, setSealed] = useState(false);
+  /**
+   * What the customer says about the seal: sealed, opened, or not said.
+   *
+   * For a voluntary return it is a confirmation the customer has to
+   * make before the request can go. For every other reason it is a
+   * statement of fact that the back office reads, because a unit that
+   * has been opened cannot be returned for a change of mind.
+   */
+  const [sealedState, setSealedState] = useState<"sealed" | "opened" | "">("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [evidenceKind, setEvidenceKind] = useState<string>("product");
@@ -191,6 +203,14 @@ export function ReturnRequestForm({
       setType(first.value);
     }
   }, [remedies, type]);
+
+  // What a file is evidence of follows the reason as well: a claim about
+  // a unit that arrived damaged is shown by the unboxing, and a claim
+  // about a unit that does not work is shown by the fault itself. The
+  // customer can still change it before every upload.
+  useEffect(() => {
+    setEvidenceKind(defaultEvidenceKindFor(policy));
+  }, [policy]);
 
   // Items selection state: map item.id -> { selected: boolean, quantity: number }
   const [selectedItems, setSelectedItems] = useState<
@@ -383,19 +403,28 @@ export function ReturnRequestForm({
   /**
    * The evidence the rules ask for, and whether it has arrived.
    *
-   * What is missing is not a reason to refuse the claim — it is a reason
-   * to ask the customer to say why, so that a person can decide.
+   * This is worked out by the same function the server and the back
+   * office use, so the three cannot disagree about what a claim is
+   * missing.
+   *
+   * Most evidence that has not arrived is a reason to ask the customer
+   * to say why, not a reason to refuse the claim. Some evidence is a
+   * condition of the claim: there is nothing to assess without it, so
+   * the request cannot be sent until it is there.
    */
-  const missingEvidence = policy.evidence.filter((e) => {
-    if (!e.required) return false;
-    if (e.id === "order_id" || e.id === "description") return false;
-    if (e.id === "missing_list") return missingAccessories.trim().length < 3;
-    if (e.id === "unboxing_video" || e.id === "sealed_video")
-      return videos.length === 0;
-    return photos.length === 0;
-  });
+  const onFile = {
+    photographs: photos.length,
+    videos: videos.length,
+    description: customerNotes.trim().length >= 10,
+    serialNumber: serialNumber.trim().length > 0,
+    missingList: missingAccessories.trim().length >= 3,
+  };
+  const missingEvidence = missingEvidenceFor(policy, onFile);
+  const missingMandatory = mandatoryEvidenceFor(policy, onFile);
+  /** The evidence that is only asked for — the customer may explain. */
+  const missingOptional = missingEvidence.filter((e) => !e.mandatory);
 
-  const blocked = policy.requiresSealed && !sealed;
+  const blocked = policy.requiresSealed && sealedState !== "sealed";
   const missingDetails =
     customerNotes.trim().length < 10 ||
     !deliveryDate ||
@@ -407,7 +436,7 @@ export function ReturnRequestForm({
       <input type="hidden" name="orderId" value={order.id} />
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="items" value={JSON.stringify(itemsPayload)} />
-      <input type="hidden" name="sealedState" value={sealed ? "sealed" : "opened"} />
+      <input type="hidden" name="sealedState" value={sealedState} />
       <input type="hidden" name="uploadIds" value={uploadedIds.join(",")} />
 
       {/* The order, and the day the claim has to be made by. */}
@@ -746,13 +775,15 @@ export function ReturnRequestForm({
             </div>
           )}
 
-          {policy.requiresSealed && (
+          {policy.requiresSealed ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
               <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
-                  checked={sealed}
-                  onChange={(e) => setSealed(e.target.checked)}
+                  checked={sealedState === "sealed"}
+                  onChange={(e) =>
+                    setSealedState(e.target.checked ? "sealed" : "")
+                  }
                   className="mt-0.5 h-4 w-4 rounded border-amber-300 text-brand focus:ring-brand"
                 />
                 <span className="text-[13px] text-amber-900">
@@ -771,6 +802,41 @@ export function ReturnRequestForm({
                 {OPENED_PRODUCT_NOTICE}
               </p>
             </div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-[13px] font-bold text-ink">
+                Is the unit still sealed, or has it been opened?
+              </p>
+              <p className="mt-1 text-[12.5px] text-gray-500">
+                Tell us the truth — it decides what we can do. A unit that
+                has been opened cannot be returned for a change of mind,
+                but it can still be replaced if it arrived damaged or does
+                not work.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["sealed", "It is sealed and unused"],
+                    ["opened", "It has been opened or used"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 text-[13px] text-ink"
+                  >
+                    <input
+                      type="radio"
+                      name="sealedStateChoice"
+                      value={value}
+                      checked={sealedState === value}
+                      onChange={() => setSealedState(value)}
+                      className="h-4 w-4 border-gray-300 text-brand focus:ring-brand"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -785,18 +851,24 @@ export function ReturnRequestForm({
           </span>
         </div>
 
-        {/* What is needed, and what is only useful. */}
+        {/* What is needed, and what is only useful. The order and the
+            description have fields of their own above, so they are not
+            repeated here. */}
         <ul className="mt-4 space-y-2.5">
-          {policy.evidence.map((e: EvidenceItem) => (
+          {policy.evidence
+            .filter((e) => e.id !== "order_id" && e.id !== "description")
+            .map((e: EvidenceItem) => (
             <li key={e.id} className="flex items-start gap-2.5">
               <span
                 className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
-                  e.required
-                    ? "bg-red-50 text-red-700"
-                    : "bg-gray-100 text-gray-500"
+                  e.mandatory
+                    ? "bg-red-100 text-red-800"
+                    : e.required
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-gray-100 text-gray-500"
                 }`}
               >
-                {e.required ? "Needed" : "Helpful"}
+                {e.mandatory ? "Required" : e.required ? "Needed" : "Helpful"}
               </span>
               <span className="min-w-0">
                 <span className="block text-[13px] font-medium text-ink">
@@ -809,9 +881,11 @@ export function ReturnRequestForm({
         </ul>
 
         <p className="mt-4 rounded-lg bg-gray-50 p-3 text-[12.5px] text-gray-600">
-          A claim is never turned away only because a photograph or an
-          unboxing video is missing. If you cannot send one of them, tell
-          us and we will look at the claim on what we have.
+          Anything marked <strong className="text-ink">Required</strong> has to
+          be sent with the request — without it there is nothing for us to
+          look at. Anything marked <strong className="text-ink">Needed</strong>{" "}
+          is asked for: if you cannot send it, tell us why below and we will
+          still look at the claim.
         </p>
 
         {/* What each file is evidence of, so the back office can sort it. */}
@@ -934,21 +1008,47 @@ export function ReturnRequestForm({
           Videos: MP4, WebM or MOV up to 60MB, up to {MAX_VIDEOS}.
         </p>
 
-        {/* The way out for a customer who cannot send something. */}
-        {missingEvidence.length > 0 && (
+        {/* The evidence the request cannot go ahead without. */}
+        {missingMandatory.length > 0 && (
+          <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4">
+            <div className="flex items-start gap-2.5">
+              <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold text-red-900">
+                  This request cannot be sent yet
+                </p>
+                <ul className="mt-1.5 list-inside list-disc text-[12.5px] text-red-800">
+                  {missingMandatory.map((e) => (
+                    <li key={e.id}>{e.label}</li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[12.5px] text-red-800">
+                  Add{" "}
+                  {missingMandatory.length === 1 ? "it" : "these"} above and the
+                  request can be sent. We cannot assess a claim about a
+                  damaged or faulty unit without seeing it.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* The way out for a customer who cannot send something that is
+            only asked for. */}
+        {missingOptional.length > 0 && (
           <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-start gap-2.5">
               <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-bold text-amber-900">
                   We cannot see{" "}
-                  {missingEvidence.length === 1
+                  {missingOptional.length === 1
                     ? "one piece of evidence"
-                    : `${missingEvidence.length} pieces of evidence`}{" "}
+                    : `${missingOptional.length} pieces of evidence`}{" "}
                   just yet
                 </p>
                 <ul className="mt-1.5 list-inside list-disc text-[12.5px] text-amber-800">
-                  {missingEvidence.map((e) => (
+                  {missingOptional.map((e) => (
                     <li key={e.id}>{e.label}</li>
                   ))}
                 </ul>
@@ -1063,6 +1163,7 @@ export function ReturnRequestForm({
               uploading ||
               itemsPayload.length === 0 ||
               blocked ||
+              missingMandatory.length > 0 ||
               missingDetails
             }
             className="btn btn-primary"

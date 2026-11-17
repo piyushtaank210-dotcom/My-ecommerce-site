@@ -110,6 +110,7 @@ export default async function OrderReturnRequestPage({
             daysRemaining={eligibility.daysRemaining}
             initialItemId={itemId ? parseInt(itemId, 10) : undefined}
             initialType={type === "replacement" ? "replacement" : "return"}
+            policyDescription={policy.description}
           />
         )}
       </div>

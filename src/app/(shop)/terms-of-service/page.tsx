@@ -184,7 +184,7 @@ const doc: PolicyDoc = {
         },
         {
           kind: "p",
-          text: "In summary: a return request must be made within the return window, the item must be in a condition that allows it to be resold, and refunds are generally processed within 7–15 days of a request being approved. The policy also explains the cases where a faulty or incorrect product is dealt with differently.",
+          text: "In summary: a return request must be made within the return window, the item must be in a condition that allows it to be resold, and refunds are generally processed within 3–4 business days of the refund being sent to the payment provider. The policy also explains the cases where a faulty or incorrect product is dealt with differently.",
         },
         {
           kind: "note",

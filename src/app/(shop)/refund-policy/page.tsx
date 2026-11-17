@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { PolicyPage, type PolicyDoc } from "@/components/policy/PolicyPage";
-import { RETURN_WINDOW_DAYS } from "@/lib/return-policy";
+import {
+  REFUND_TIMELINE_NOTICE,
+  RETURN_WINDOW_DAYS,
+} from "@/lib/return-policy";
 
 export const metadata: Metadata = {
   title: "Return, Refund and Replacement Rules",
@@ -33,19 +36,45 @@ const doc: PolicyDoc = {
           text: "What to send us",
         },
         {
+          kind: "p",
+          text: "If the unit arrived broken, or is not what you ordered, send us:",
+        },
+        {
           kind: "ul",
           items: [
-            "An unboxing video showing the original package and its condition.",
+            "An unboxing video, recorded continuously while you open the original sealed package. It must show the original packaging and the intact seal before you open it, and the damage once the unit is out.",
             "Clear photographs of the shipping package.",
-            "Clear photographs of the damaged or defective product.",
-            "A photograph of the product serial number, wherever the unit carries one.",
+            "Clear photographs of the damaged product.",
             "Your order ID.",
             "A description of the problem.",
           ],
         },
         {
+          kind: "note",
+          tone: "brand",
+          text: "The unboxing video is required for a unit that arrived damaged. It is the only record of how the parcel actually got to you, so a claim of this kind cannot be assessed without it.",
+        },
+        {
           kind: "p",
-          text: "The unboxing video is strongly recommended, because it is usually the quickest way for us to see what happened and to settle a disagreement without delay. It is not a condition of the claim. A genuine damage, defect or wrong-item claim is never refused because you could not record an unboxing video, and we will not refuse a claim because the packaging had been opened to look the product over.",
+          text: "If the unit arrived intact but does not work, or is faulty, send us:",
+        },
+        {
+          kind: "ul",
+          items: [
+            "A video showing the fault — the unit being used and the fault happening.",
+            "Clear photographs of the fault.",
+            "Your order ID.",
+            "A description of the problem.",
+          ],
+        },
+        {
+          kind: "note",
+          tone: "brand",
+          text: "The fault video is required for a unit that does not work or is defective. We cannot assess a claim of that kind without a video of the fault.",
+        },
+        {
+          kind: "p",
+          text: "A photograph of the product serial number is helpful wherever the unit carries one, and an unboxing video is helpful for a claim about a unit that arrived intact. Neither is a condition of those claims: if you cannot send one, tell us why and we will look at the claim on what we have.",
         },
         {
           kind: "h3",
@@ -61,7 +90,7 @@ const doc: PolicyDoc = {
         },
         {
           kind: "note",
-          text: "Nothing in these rules is intended to prevent you from exercising your rights under the consumer protection laws that apply in India. We do not apply a blanket clause to turn a complaint away, and we do not treat the absence of a photograph or a video as a reason on its own to refuse a genuine claim.",
+          text: "Nothing in these rules is intended to prevent you from exercising your rights under the consumer protection laws that apply in India. We do not apply a blanket clause to turn a complaint away, and we do not treat the absence of a photograph as a reason on its own to refuse a genuine claim.",
         },
       ],
     },
@@ -177,7 +206,7 @@ const doc: PolicyDoc = {
         {
           kind: "note",
           tone: "brand",
-          text: `${RETURN_WINDOW_DAYS} calendar days from delivery, for every kind of claim in these rules. The day of delivery counts as day one, and the window closes at the end of the seventh day.`,
+          text: `${RETURN_WINDOW_DAYS} calendar days from delivery, for every kind of claim in these rules. The day of delivery counts as day one, and the window closes at the end of the ${RETURN_WINDOW_DAYS === 5 ? "fifth" : RETURN_WINDOW_DAYS === 7 ? "seventh" : RETURN_WINDOW_DAYS + "th"} day.`,
         },
         {
           kind: "p",
@@ -187,6 +216,10 @@ const doc: PolicyDoc = {
           kind: "p",
           text: "The window applies to every claim — damaged, faulty, incorrect, incomplete, and voluntary returns on a sealed unit. It is a short window because a console or controller that has been opened and used cannot be sold on as new, and because the evidence of what arrived is at its clearest soon after delivery.",
         },
+        {
+          kind: "note",
+          text: "After the window has closed we cannot accept a request for that order. The Return and Replacement buttons disappear from your order page, and the request is refused if the page is reached directly. If there is something wrong with a unit after the window has closed, please contact us anyway — we will look at it, and nothing in these rules takes away a right you have under the consumer protection laws that apply in India.",
+        },
       ],
     },
     {
@@ -195,7 +228,8 @@ const doc: PolicyDoc = {
       blocks: [
         {
           kind: "note",
-          text: "Approved refunds are generally processed within 7–15 days. That period begins on the date we approve the refund — not the date you asked, and not the date the returned product reaches us.",
+          tone: "brand",
+          text: REFUND_TIMELINE_NOTICE,
         },
         {
           kind: "p",
@@ -205,20 +239,20 @@ const doc: PolicyDoc = {
           kind: "ol",
           items: [
             "You send us the request, with the order number and the reason.",
-            "We assess the request and confirm whether it is approved. Approval starts the 7–15 day refund clock.",
-            "If a physical return is needed, we send you the return instructions and the address.",
-            "You return the product, and we receive and inspect it.",
-            "We raise the refund, and the 7–15 day clock is running during this period.",
-            "The money reaches your account, subject to how long your bank or payment provider takes once we have released it.",
+            "We assess the request and confirm whether it is approved.",
+            "If a physical return is needed, we arrange the pickup and send you the courier details.",
+            "You return the product, and we receive it.",
+            "We inspect the unit, and then raise the refund.",
+            "The payment provider sends the money back, and it reflects in your original payment account within 3–4 business days.",
           ],
         },
         {
           kind: "p",
-          text: "On top of the 7–15 days, allow 2–5 working days for your bank, card issuer or UPI provider to reflect the credit. We send you a confirmation with the bank reference (UTR) when we release the refund, and you can quote it if the money has not reached you by the end of that period.",
+          text: "A refund is never marked as completed before the payment provider confirms it. We approve a refund as a promise to pay it; the money has actually gone back once the provider has confirmed it, and we confirm that to you with a reference.",
         },
         {
           kind: "p",
-          text: "Where a refund is approved but no physical return is required — a damaged item we are replacing, for example — the 7–15 day period starts as soon as we approve the request.",
+          text: "How long the money takes to reach you after that is up to your bank, card issuer or UPI provider, and it varies from one to the next. We send you a confirmation with the payment reference when the refund is released, and you can quote it if the money has not reached you by the end of that period.",
         },
         {
           kind: "p",
@@ -337,7 +371,7 @@ const doc: PolicyDoc = {
             "Open the order in your account — My Orders — and choose the order.",
             "Choose the item, the reason, and how you would like it put right. The form shows you exactly what to send with your claim.",
             "Give us the date the parcel arrived, and the best way to reach you.",
-            "Add your photographs, and your unboxing video if you have one.",
+            "Add the evidence the form asks for — the photographs, and the video the claim needs.",
             "Send it. We confirm what we have and what happens next.",
             "Where a return is needed, we arrange the pickup and send you the address.",
             "We inspect the product, and we raise the refund or the replacement.",
@@ -345,7 +379,11 @@ const doc: PolicyDoc = {
         },
         {
           kind: "p",
-          text: "If you cannot send one of the pieces of evidence we ask for, tell us why in the box on the form. Your request still goes forward, and a person still looks at it. We will not turn a genuine claim away only because a photograph or an unboxing video is missing.",
+          text: "If you cannot send one of the pieces of evidence we ask for, tell us why in the box on the form. Your request still goes forward, and a person still looks at it.",
+        },
+        {
+          kind: "note",
+          text: "The evidence marked as required on the form — the unboxing video for a unit that arrived damaged, and the fault video for a unit that does not work — has to be sent with the request. Without it there is nothing for us to look at, so the request cannot be accepted until it arrives.",
         },
         {
           kind: "p",

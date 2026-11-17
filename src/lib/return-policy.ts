@@ -15,8 +15,24 @@
  * this file.
  */
 
-/** How long a customer has to raise a case, in calendar days. */
-export const RETURN_WINDOW_DAYS = 7;
+/**
+ * How long a customer has to raise a case, in calendar days.
+ *
+ * The window runs from the day the parcel was delivered, not from the
+ * day the order was placed or paid for, and it is the same for every
+ * kind of claim. Five days is the shop's published maximum: the back
+ * office may publish a shorter window, never a longer one.
+ */
+export const RETURN_WINDOW_DAYS = 5;
+
+/**
+ * The longest window the shop may publish.
+ *
+ * The back office can bring the window down — a shorter window is
+ * kinder to the customer and easier to honour — but it can never be
+ * pushed past the published maximum.
+ */
+export const RETURN_WINDOW_MAX_DAYS = 5;
 
 /** The key the return window duration (in days) is stored under. */
 export const RETURN_WINDOW_SETTING = "return_window_days";
@@ -29,6 +45,43 @@ export const RETURN_WINDOW_SETTING = "return_window_days";
  * left alone.
  */
 export const RETURN_WINDOW_POLICY_MARKER = "return_window_policy_applied";
+
+/**
+ * The revision of the published window the shop is on.
+ *
+ * The marker above only says that a window has been applied once. The
+ * revision says *which* window was applied, so that when the published
+ * window changes — from seven days to five — the database is brought
+ * onto it exactly once, and never fought with afterwards.
+ */
+export const RETURN_WINDOW_POLICY_REVISION = "5";
+
+/** The key the applied window revision is stored under. */
+export const RETURN_WINDOW_REVISION_SETTING = "return_window_policy_revision";
+
+/**
+ * What the customer is told once the window has closed.
+ *
+ * The same sentence is used on the order page, on the request form and
+ * in the refusal the server sends, so the customer reads the same rule
+ * wherever they meet it. The number in it is the window that is
+ * actually in force, which the back office may have made shorter than
+ * the published maximum.
+ */
+export function returnWindowExpiredNotice(windowDays: number): string {
+  return `The return and replacement period for this order has expired. Requests can only be submitted within ${windowDays} days of delivery.`;
+}
+
+/**
+ * What the customer is told about their money once a return is approved.
+ *
+ * A refund is only raised after the unit has come back and been looked
+ * at, and it only reaches the customer's account once the payment
+ * provider has moved it. Both halves of that are said here, so the
+ * customer is not left wondering where the money is.
+ */
+export const REFUND_TIMELINE_NOTICE =
+  "Once your returned product has been received and successfully inspected, your refund will be processed. The refunded amount should reflect in your original payment account within 3–4 business days after refund processing, depending on your bank or payment provider.";
 
 /**
  * What kind of claim a reason is.
@@ -62,6 +115,17 @@ export type EvidenceItem = {
   required: boolean;
   /** The line of explanation under the item. */
   hint: string;
+  /**
+   * Whether the claim can be made at all without this piece of evidence.
+   *
+   * Most evidence is asked for, and a claim is still looked at when it
+   * is missing — the customer is asked why, and the reason is recorded
+   * against the request. A mandatory item is different: there is
+   * nothing to assess without it, so the request is refused until it
+   * arrives. A unit that arrived broken, or a unit that does not work,
+   * cannot be judged without the photographs and the video that show it.
+   */
+  mandatory?: boolean;
 };
 
 /** Everything the shop knows about one reason. */
@@ -106,27 +170,70 @@ const ORDER_AND_DESCRIPTION: EvidenceItem[] = [
 ];
 
 /**
- * Evidence for a unit that arrived damaged, faulty, wrong or
- * misrepresented.
+ * Evidence for a unit that arrived damaged, or that is not the unit
+ * that was ordered.
  *
- * The unboxing video is recommended rather than required, and it is
- * marked as such: a genuine damage or wrong-item claim is never refused
- * only because the customer could not record one. Packaging that has
- * been opened to look at the product is not held against the customer
- * either.
+ * The customer did not open this one — the shop did, on the way here.
+ * The only record of how the parcel actually arrived is what the
+ * customer filmed while opening it, so the continuous unboxing video is
+ * what the claim is judged on. Without it, and without the photographs
+ * that go with it, there is nothing to assess.
  */
-const DAMAGE_EVIDENCE: EvidenceItem[] = [
+const DAMAGED_ON_ARRIVAL_EVIDENCE: EvidenceItem[] = [
   {
     id: "product_photos",
-    label: "Clear photographs of the damaged or defective product",
+    label: "Clear photographs showing the damage",
     required: true,
+    mandatory: true,
     hint: "The fault itself, in focus, in good light.",
   },
   {
     id: "package_photos",
-    label: "Clear photographs of the shipping package",
+    label: "Clear photographs of the packaging the unit arrived in",
     required: true,
+    mandatory: true,
     hint: "The outer box and any internal packaging, including any damage to them.",
+  },
+  {
+    id: "unboxing_video",
+    label:
+      "An unboxing video, recorded continuously while you open the original sealed package",
+    required: true,
+    mandatory: true,
+    hint:
+      "One continuous take. It must show the original packaging and the intact seal before you open it, and the damage once the unit is out. A claim about a unit that arrived damaged cannot be taken without it.",
+  },
+  {
+    id: "serial_photo",
+    label: "Photograph of the product serial number, wherever applicable",
+    required: false,
+    hint: "On the underside of a console or controller, if the unit carries one.",
+  },
+  ...ORDER_AND_DESCRIPTION,
+];
+
+/**
+ * Evidence for a unit that does not work, or is faulty.
+ *
+ * This one has been opened — it has to have been, for the fault to be
+ * found — so what is asked for is the fault itself: photographs of it,
+ * and a video that shows it happening.
+ */
+const DEFECT_EVIDENCE: EvidenceItem[] = [
+  {
+    id: "product_photos",
+    label: "Clear photographs of the fault",
+    required: true,
+    mandatory: true,
+    hint: "The fault itself, in focus, in good light.",
+  },
+  {
+    id: "issue_video",
+    label: "A video showing the fault — the unit not working",
+    required: true,
+    mandatory: true,
+    hint:
+      "Show the unit being used and the fault happening. A claim that a unit does not work cannot be taken without a video of it.",
   },
   {
     id: "serial_photo",
@@ -136,9 +243,33 @@ const DAMAGE_EVIDENCE: EvidenceItem[] = [
   },
   {
     id: "unboxing_video",
-    label: "Unboxing video",
+    label: "Unboxing video, if you recorded one",
     required: false,
-    hint: "Strongly recommended, and it settles a dispute faster. A claim is never refused only because there is no video.",
+    hint:
+      "Helpful, and it settles a dispute faster — but it is not a condition of this claim.",
+  },
+  ...ORDER_AND_DESCRIPTION,
+];
+
+/**
+ * Evidence for a unit that is not as it was described.
+ *
+ * This is the claim a person looks at, so the evidence is asked for
+ * rather than required. If the customer cannot send it, they say why
+ * and the claim goes forward.
+ */
+const MISDESCRIBED_EVIDENCE: EvidenceItem[] = [
+  {
+    id: "product_photos",
+    label: "Clear photographs of the unit as it arrived",
+    required: true,
+    hint: "The unit as it is, in good light.",
+  },
+  {
+    id: "issue_video",
+    label: "A short video of the unit, if you have one",
+    required: false,
+    hint: "Helpful, and not a condition of the claim.",
   },
   ...ORDER_AND_DESCRIPTION,
 ];
@@ -211,7 +342,7 @@ export const REASON_POLICIES: ReasonPolicy[] = [
     allowRefund: true,
     allowReplacement: true,
     requiresSealed: false,
-    evidence: DAMAGE_EVIDENCE,
+    evidence: DAMAGED_ON_ARRIVAL_EVIDENCE,
   },
   {
     value: "product_not_working",
@@ -223,7 +354,7 @@ export const REASON_POLICIES: ReasonPolicy[] = [
     allowRefund: true,
     allowReplacement: true,
     requiresSealed: false,
-    evidence: DAMAGE_EVIDENCE,
+    evidence: DEFECT_EVIDENCE,
   },
   {
     value: "defective_product",
@@ -235,7 +366,7 @@ export const REASON_POLICIES: ReasonPolicy[] = [
     allowRefund: true,
     allowReplacement: true,
     requiresSealed: false,
-    evidence: DAMAGE_EVIDENCE,
+    evidence: DEFECT_EVIDENCE,
   },
   {
     value: "wrong_product_received",
@@ -247,7 +378,7 @@ export const REASON_POLICIES: ReasonPolicy[] = [
     allowRefund: true,
     allowReplacement: true,
     requiresSealed: false,
-    evidence: DAMAGE_EVIDENCE,
+    evidence: DAMAGED_ON_ARRIVAL_EVIDENCE,
   },
   {
     value: "different_from_description",
@@ -259,7 +390,7 @@ export const REASON_POLICIES: ReasonPolicy[] = [
     allowRefund: true,
     allowReplacement: true,
     requiresSealed: false,
-    evidence: DAMAGE_EVIDENCE,
+    evidence: MISDESCRIBED_EVIDENCE,
   },
   {
     value: "missing_parts",
@@ -352,6 +483,7 @@ export function evidenceSatisfied(
       return onFile.missingList;
     case "unboxing_video":
     case "sealed_video":
+    case "issue_video":
       return onFile.videos > 0;
     case "product_photos":
     case "package_photos":
@@ -360,6 +492,72 @@ export function evidenceSatisfied(
     default:
       return true;
   }
+}
+
+/**
+ * The evidence a claim is still waiting for.
+ *
+ * This is the one place that works it out, and the customer form, the
+ * server and the back office all ask it the same question — so they
+ * cannot disagree about what a claim is missing.
+ *
+ * The order and the description are not in the list: they are checked
+ * on their own, because they are words rather than files.
+ */
+export function missingEvidenceFor(
+  policy: ReasonPolicy,
+  onFile: EvidenceOnFile
+): EvidenceItem[] {
+  return policy.evidence.filter((e) => {
+    if (!e.required) return false;
+    if (e.id === "order_id" || e.id === "description") return false;
+    return !evidenceSatisfied(e, onFile);
+  });
+}
+
+/**
+ * The evidence a claim cannot go ahead without.
+ *
+ * Where a claim is about a unit that arrived broken, or one that does
+ * not work, there is nothing to assess without the photographs and the
+ * video. These are refused on the server, in the form, and again when
+ * the back office tries to approve the claim.
+ */
+export function mandatoryEvidenceFor(
+  policy: ReasonPolicy,
+  onFile: EvidenceOnFile
+): EvidenceItem[] {
+  return missingEvidenceFor(policy, onFile).filter((e) => e.mandatory);
+}
+
+/**
+ * What a file is evidence of, by default, for a given reason.
+ *
+ * A claim about a unit that arrived broken is shown by the unboxing
+ * video; a claim about a unit that does not work is shown by the fault
+ * itself. The customer can still change it before every upload.
+ */
+export function defaultEvidenceKindFor(policy: ReasonPolicy): string {
+  if (policy.evidence.some((e) => e.id === "unboxing_video" && e.mandatory)) {
+    return "unboxing";
+  }
+  if (policy.evidence.some((e) => e.id === "issue_video" && e.mandatory)) {
+    return "issue";
+  }
+  return "product";
+}
+
+/**
+ * What the customer is told when a claim is missing evidence it cannot
+ * go ahead without.
+ */
+export function mandatoryEvidenceNotice(items: EvidenceItem[]): string {
+  const labels = items.map((i) => i.label.toLowerCase());
+  const list =
+    labels.length === 1
+      ? labels[0]
+      : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+  return `This request cannot be accepted without ${list}. Please add it and submit the request again.`;
 }
 
 /**
@@ -429,8 +627,8 @@ export const SEALED_REQUIRED_NOTICE =
  * The wording for a claim where the evidence has not been sent.
  *
  * A missing piece of evidence is a reason to ask for it, not a reason
- * to refuse the claim — except where the law says otherwise, which is
- * what this wording leaves room for.
+ * to refuse the claim — except where the rules say it is a condition of
+ * the claim, which this wording leaves room for.
  */
 export const EVIDENCE_REQUEST_NOTICE =
-  "We need the photographs and the description below before we can move this on. If you cannot send one of them, tell us why and we will look at the claim on what we have — a claim is never turned away only because a photograph or an unboxing video is missing.";
+  "We need the photographs and the description below before we can move this on. If you cannot send one of them, tell us why and we will look at the claim on what we have.";

@@ -36,6 +36,11 @@ import {
   REPLACEMENT_DELIVERY_LABEL,
 } from "./return-status";
 import { getReturnWindowDays } from "./settings";
+import {
+  mandatoryEvidenceFor,
+  policyForReason,
+  returnWindowExpiredNotice,
+} from "./return-policy";
 import { notifyAdmins, notifyCustomer, type NotificationKind } from "./notifications";
 import {
   createRefundRecord,
@@ -55,8 +60,16 @@ export function generateReturnId(): string {
 
 /**
  * Calculates the exact return deadline in Indian Standard Time (UTC+5:30).
- * Default return window is 7 calendar days from delivery date.
- * If delivered on 10 November, return deadline is end of day 17 November (23:59:59.999 IST).
+ *
+ * The window is the number of calendar days on the published policy, and
+ * it runs from the day the parcel was delivered. The deadline is the end
+ * of the day that is that many days after the delivery day: if the parcel
+ * was delivered on 10 November, the deadline is the end of 15 November
+ * (23:59:59.999 IST) with a five-day window.
+ *
+ * A delivery date that is missing cannot be worked out, so the window is
+ * treated as closed. An order with no record of when it arrived cannot
+ * be shown to have arrived inside any window.
  */
 export async function calculateReturnDeadline(deliveredAt: string | null): Promise<{
   deadline: Date;
@@ -67,7 +80,32 @@ export async function calculateReturnDeadline(deliveredAt: string | null): Promi
   windowDays: number;
 }> {
   const windowDays = (await getReturnWindowDays());
-  const delivery = deliveredAt ? new Date(deliveredAt) : new Date();
+
+  // Without a record of the delivery there is no window to work out.
+  if (!deliveredAt) {
+    const end = new Date();
+    return {
+      deadline: end,
+      deadlineIso: end.toISOString(),
+      formattedDeadline: "Not recorded",
+      isExpired: true,
+      daysRemaining: 0,
+      windowDays,
+    };
+  }
+
+  const delivery = new Date(deliveredAt);
+  if (Number.isNaN(delivery.getTime())) {
+    const end = new Date();
+    return {
+      deadline: end,
+      deadlineIso: end.toISOString(),
+      formattedDeadline: "Not recorded",
+      isExpired: true,
+      daysRemaining: 0,
+      windowDays,
+    };
+  }
 
   // IST offset is +5 hours 30 minutes
   const istOffsetMs = 5.5 * 60 * 60 * 1000;
@@ -84,7 +122,12 @@ export async function calculateReturnDeadline(deliveredAt: string | null): Promi
   const now = Date.now();
   const isExpired = now > deadlineUtcMs;
   const msRemaining = Math.max(0, deadlineUtcMs - now);
-  const daysRemaining = isExpired ? 0 : Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+  // The counter never reads more than the window itself: on the day a
+  // parcel arrives the customer has the whole window in front of them,
+  // not the window plus the fraction of that day still to run.
+  const daysRemaining = isExpired
+    ? 0
+    : Math.min(windowDays, Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000))));
 
   const formattedDeadline =
     deadline.toLocaleString("en-IN", {
@@ -247,7 +290,9 @@ export async function getOrderReturnEligibility(order: Order): Promise<{
   } else if (!isDelivered) {
     orderReason = "Returns can only be requested once your order has been delivered.";
   } else if (isWindowClosed) {
-    orderReason = `The ${deadlineCalc.windowDays}-day return window closed on ${deadlineCalc.formattedDeadline}.`;
+    orderReason = order.delivered_at
+      ? `${returnWindowExpiredNotice(deadlineCalc.windowDays)} The deadline for this order was ${deadlineCalc.formattedDeadline}.`
+      : "We have no record of when this order was delivered, so we cannot show that it was reported inside the return window. Please contact us and we will look at your case.";
   } else if (!anyItemCanReturn) {
     orderReason = "All items in this order already have active requests or are non-returnable.";
   }
@@ -904,8 +949,17 @@ export async function approveReturnRequest(
   const db = getDb();
 
   const req = (await db
-    .prepare("SELECT status, type FROM return_requests WHERE id = ?")
-    .get(id)) as { status?: string; type?: string } | undefined;
+    .prepare("SELECT status, type, reason, customer_notes, serial_number, missing_accessories FROM return_requests WHERE id = ?")
+    .get(id)) as
+    | {
+        status?: string;
+        type?: string;
+        reason?: string;
+        customer_notes?: string | null;
+        serial_number?: string | null;
+        missing_accessories?: string | null;
+      }
+    | undefined;
 
   if (!req) return { ok: false, message: "Request not found." };
   // A request the customer has been asked about can still be decided —
@@ -917,6 +971,31 @@ export async function approveReturnRequest(
     req.status !== "evidence_received"
   ) {
     return { ok: false, message: `Request is already in '${req.status}' state.` };
+  }
+
+  // A claim about a unit that arrived broken, or one that does not
+  // work, is judged on the photographs and the video that show it. A
+  // request that is still missing them cannot be approved — the shop
+  // asks the customer for the evidence first, and the case is decided
+  // once it has arrived.
+  const evidenceRows = (await db
+    .prepare(
+      `SELECT kind FROM return_images WHERE return_id = ? AND superseded = 0`
+    )
+    .all(id)) as { kind?: string }[];
+  const policy = policyForReason(str(req.reason));
+  const missingMandatory = mandatoryEvidenceFor(policy, {
+    photographs: evidenceRows.filter((e) => e.kind === "photo").length,
+    videos: evidenceRows.filter((e) => e.kind === "video").length,
+    description: Boolean(str(req.customer_notes)),
+    serialNumber: Boolean(str(req.serial_number)),
+    missingList: Boolean(str(req.missing_accessories)),
+  });
+  if (missingMandatory.length) {
+    return {
+      ok: false,
+      message: `This request is still missing ${missingMandatory.map((e) => e.label).join(" and ")}. Ask the customer for it before approving the case.`,
+    };
   }
 
   // A replacement is approved before it is dispatched: the customer is

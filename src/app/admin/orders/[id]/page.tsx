@@ -334,7 +334,7 @@ export default async function AdminOrderDetailPage({
               {order.refund_status === "pending" && (
                 <p className="mt-3 border-t border-gray-100 pt-3 text-[12px] text-gray-500">
                   The payment provider has accepted the refund. It has not
-                  reached the customer yet — it takes 5–7 working days.
+                  reached the customer yet — it takes 3–4 business days.
                 </p>
               )}
             </Panel>

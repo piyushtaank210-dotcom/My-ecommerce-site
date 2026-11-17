@@ -6,6 +6,8 @@ import { PRODUCT_GALLERY } from "./product-gallery.ts";
 import {
   RETURN_WINDOW_DAYS,
   RETURN_WINDOW_POLICY_MARKER,
+  RETURN_WINDOW_POLICY_REVISION,
+  RETURN_WINDOW_REVISION_SETTING,
   RETURN_WINDOW_SETTING,
 } from "./return-policy.ts";
 import { returnsSchemaSql, orderDispatchSchemaSql } from "./schema.ts";
@@ -579,20 +581,24 @@ async function sweepReturnUploads(db: Db): Promise<void> {
 /**
  * Brings the stored return window onto the published policy.
  *
- * The shop's rules say seven calendar days for every kind of claim — a
+ * The shop's rules say five calendar days for every kind of claim — a
  * damaged or faulty unit, a wrong item, a missing accessory and a
- * voluntary return on a sealed unit all get the same seven days. The
- * setting was left at the old default, so it is moved once. A marker row
- * records that this has been done, so a window the back office sets
- * afterwards is left alone.
+ * voluntary return on a sealed unit all get the same five days. The
+ * window is a setting, and the back office can shorten it, but it can
+ * never be longer than the published maximum.
+ *
+ * The revision below records which window was last written here. When
+ * the published window changes, the revision changes with it, and the
+ * setting is brought onto the new window exactly once — a window a
+ * person has set afterwards is left alone.
  */
 async function applyReturnWindowPolicy(db: Db): Promise<void> {
   if (!(await tableExists(db, "store_settings"))) return;
 
-  const marker = await db
+  const revision = await db
     .prepare("SELECT value FROM store_settings WHERE key = ?")
-    .get(RETURN_WINDOW_POLICY_MARKER);
-  if (marker) return;
+    .get(RETURN_WINDOW_REVISION_SETTING);
+  if (revision && revision.value === RETURN_WINDOW_POLICY_REVISION) return;
 
   await db
     .prepare(
@@ -607,6 +613,13 @@ async function applyReturnWindowPolicy(db: Db): Promise<void> {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`
     )
     .run(RETURN_WINDOW_POLICY_MARKER, String(RETURN_WINDOW_DAYS));
+
+  await db
+    .prepare(
+      `INSERT INTO store_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(RETURN_WINDOW_REVISION_SETTING, RETURN_WINDOW_POLICY_REVISION);
 }
 
 /**

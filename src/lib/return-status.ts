@@ -219,6 +219,7 @@ export const EVIDENCE_KINDS = [
   "package",
   "serial",
   "unboxing",
+  "issue",
   "other",
 ] as const;
 
@@ -229,6 +230,7 @@ export const EVIDENCE_KIND_LABEL: Record<EvidenceKind, string> = {
   package: "The packaging",
   serial: "The serial number",
   unboxing: "Unboxing video",
+  issue: "The fault itself",
   other: "Other evidence",
 };
 
