@@ -545,7 +545,7 @@ account.
 | `/admin/returns?view=replacements` | The replacement records — every replacement and accessory shipment, with the serials, the courier, the tracking number, and where the parcel has got to |
 | `/admin/inventory` | Every stock line, its threshold and its level; manual adjustments; returns waiting to be checked |
 | `/admin/inventory/history` | Every change to a stock level, and why it was made |
-| `/admin/categories` | The categories, their subcategories and specification fields, and the brands |
+| `/admin/categories` | The categories, their subcategories and specification fields — and the brands, on a tab of their own |
 | `/admin/import` | The catalogue in and out as a spreadsheet — export, template, and a preview before anything is imported |
 | `/admin/messages` | Enquiries from the contact page, triaged new → open → answered → closed |
 | `/admin/users` | Every account, with its role, order count and spend; roles changed and accounts removed |
@@ -901,6 +901,13 @@ them.
 
 The shape of the catalogue is managed in one place: **`/admin/categories`**.
 
+The page is read one list at a time. **Categories** and **Brands** are two
+tabs, and under the categories tab each category is **folded away** behind
+its own heading — the heading says what the category is and how many
+products are in it, and clicking it opens the category so its name,
+description, subcategories and specification fields can be changed. Nothing
+is laid out all at once.
+
 **Categories** carry the list of **specification fields** their products
 are described by. A console is asked about its model, its storage, what it
 connects to and what is in the box; a controller is asked about its colour,
@@ -914,11 +921,10 @@ what kind of thing it is and what it is compatible with.
 | **Gaming Accessories** | Accessory type · Compatibility · Connectivity · Included items · Warranty |
 | **Gaming Bundles** | — the administrator adds what a bundle needs |
 
-The four are **suggestions**, not a fixed list: the manager offers them
-one click away, and a category may carry any fields the store wants. The
-administrator may add fields to a category at any time, and a product may
-carry specifications of its own on top — the free-form table under the
-category's fields.
+The four are the store's own, not a fixed list: a category may carry any
+fields the store wants, and the administrator may add fields to a category
+at any time, or take them away again. A product may carry specifications of
+its own on top — the free-form table under the category's fields.
 
 **Only the fields of the selected category are shown.** A product that is
 put in the consoles category is asked the console questions; move it to the
@@ -933,7 +939,9 @@ the subcategories of the category that is chosen, and a name typed that is
 not in the list yet is added to it.
 
 **Brands** are the makers the store sells. A product names its brand, and
-the brand list is kept alongside so the back office can manage it.
+the brand list is kept alongside so the back office can manage it. The
+brands have their own tab, so they are managed on their own and not
+among the categories.
 
 **Nothing that is in use can be taken away.** A category that products are
 in, a subcategory a product carries and a brand a product names are all
@@ -1780,7 +1788,7 @@ src/
     stock.ts            ← stock levels, thresholds and the vocabulary (no database)
     inventory.ts        ← stock buckets, movements, adjustments and order stock
     variations.ts       ← attributes, option values and the backorder policy (no database)
-    taxonomy.ts         ← the suggested categories and their specification fields (no database)
+    taxonomy.ts         ← the helpers a category's fields are tidied and ordered with (no database)
     taxonomy-admin.ts   ← creating and managing categories, subcategories and brands
     csv.ts              ← reading and writing spreadsheets (no database)
     product-import.ts   ← the columns, the checks, the preview and the import

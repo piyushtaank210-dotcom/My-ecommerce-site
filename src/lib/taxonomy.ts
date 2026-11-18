@@ -1,6 +1,5 @@
 /**
- * The categories the store is likely to need, and what each one asks
- * about.
+ * The questions a category asks its products.
  *
  * A category carries the list of specification fields its products are
  * described by: a console is asked about its model, its storage, what it
@@ -9,81 +8,12 @@
  * office offers those fields when a product is put in that category, so
  * the same questions are asked of every console and every controller.
  *
- * The list is a suggestion. A category may carry any fields the store
- * wants, and the administrator may add more.
+ * A category may carry any fields the store wants, and the administrator
+ * may add more.
  *
  * This module holds no data and imports nothing, so a client component is
  * free to use it.
  */
-
-/** What a category is called, and what its products are asked about. */
-export type SuggestedCategory = {
-  slug: string;
-  name: string;
-  blurb: string;
-  icon: string;
-  specFields: string[];
-};
-
-/**
- * The categories a console shop usually needs.
- *
- * The first two are the ones the store already has; the other two are
- * there for when the business grows into them.
- */
-export const SUGGESTED_CATEGORIES: SuggestedCategory[] = [
-  {
-    slug: "consoles",
-    name: "Gaming Consoles",
-    blurb:
-      "Official console hardware — sealed, warranted, and ready to ship the same working day.",
-    icon: "console",
-    specFields: [
-      "Model and edition",
-      "Storage capacity",
-      "Connectivity",
-      "Included accessories",
-      "Warranty",
-    ],
-  },
-  {
-    slug: "controllers",
-    name: "Gaming Controllers",
-    blurb:
-      "Official controller hardware — sealed, warranted, and ready to ship the same working day.",
-    icon: "controller",
-    specFields: [
-      "Model and colour",
-      "Connectivity",
-      "Compatibility",
-      "Battery information",
-      "Special features",
-      "Warranty",
-    ],
-  },
-  {
-    slug: "accessories",
-    name: "Gaming Accessories",
-    blurb:
-      "The things that go with the hardware — chargers, stands, headsets and the rest.",
-    icon: "accessory",
-    specFields: [
-      "Accessory type",
-      "Compatibility",
-      "Connectivity",
-      "Included items",
-      "Warranty",
-    ],
-  },
-  {
-    slug: "bundles",
-    name: "Gaming Bundles",
-    blurb:
-      "Consoles and controllers together, boxed and ready — one parcel, one price.",
-    icon: "bundle",
-    specFields: [],
-  },
-];
 
 /**
  * Tidies a list of specification fields.

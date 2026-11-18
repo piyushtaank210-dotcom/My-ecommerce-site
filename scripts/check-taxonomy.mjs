@@ -92,12 +92,20 @@ console.log("\n→ the categories page");
   const p = await page("/admin/categories");
   check("the page renders", p.status === 200, `status ${p.status}`);
   check("it shows the categories", p.body.includes("Gaming Consoles"));
-  check("it shows the brands", p.body.includes("Brands"));
-  check("it offers the suggestions", p.body.includes("Suggested categories"));
+  check("it has a tab for the brands", p.body.includes("Brands"));
+  check("it offers to add a category", p.body.includes("Add category"));
   check(
     "a category's specification fields are shown",
     p.body.includes("Storage capacity") && p.body.includes("Battery information")
   );
+}
+
+console.log("\n→ the brands tab");
+{
+  const p = await page("/admin/categories?tab=brands");
+  check("it renders", p.status === 200, `status ${p.status}`);
+  check("it shows the brands", p.body.includes("Sony"));
+  check("it offers to add a brand", p.body.includes("Add brand"));
 }
 
 console.log("\n→ a category that products are in");

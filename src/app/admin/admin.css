@@ -1542,6 +1542,210 @@ a.admin-stat:hover {
 }
 
 /* ==========================================================================
+   The accordion — a category, folded away until it is wanted
+   ========================================================================== */
+
+.admin-accordion {
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+  overflow: hidden;
+}
+
+.admin-accordion-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  width: 100%;
+  padding: 13px 18px;
+  text-align: left;
+  transition: background-color 0.14s ease;
+}
+
+.admin-accordion-head:hover {
+  background-color: var(--adm-surface-2);
+}
+
+.admin-accordion-chevron {
+  flex: none;
+  color: var(--adm-ink-3);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-accordion[data-open="true"] .admin-accordion-chevron {
+  transform: rotate(90deg);
+}
+
+.admin-accordion-main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.admin-accordion-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--adm-ink);
+}
+
+.admin-accordion-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--adm-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-accordion-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.admin-accordion-body {
+  padding: 18px;
+  border-top: 1px solid var(--adm-line);
+  background-color: var(--adm-surface-2);
+}
+
+.admin-accordion-block + .admin-accordion-block {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.admin-accordion-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--adm-ink-3);
+}
+
+.admin-accordion-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--adm-ink-3);
+}
+
+.admin-accordion-empty {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--adm-ink-2);
+}
+
+.admin-accordion-grid {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .admin-accordion-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A row of things that can be renamed or taken away. */
+.admin-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-edit-row .input,
+.admin-add-row .input {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.admin-edit-count {
+  flex: none;
+  min-width: 22px;
+  text-align: right;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--adm-ink-3);
+}
+
+/* The row that adds one more. */
+.admin-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* A fact that cannot be changed — the address a category is found at. */
+.admin-static {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px dashed var(--adm-line-2);
+  border-radius: var(--adm-r-sm);
+  background-color: var(--adm-surface);
+  font-size: 13px;
+  color: var(--adm-ink-2);
+}
+
+/* ==========================================================================
+   The brand rows
+   ========================================================================== */
+
+.admin-brand-row {
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  padding: 16px 20px;
+}
+
+.admin-brand-row + .admin-brand-row {
+  border-top: 1px solid var(--adm-line);
+}
+
+.admin-brand-row .admin-badge {
+  align-self: center;
+  justify-self: start;
+}
+
+.admin-brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (min-width: 900px) {
+  .admin-brand-row {
+    grid-template-columns:
+      minmax(160px, 220px) minmax(0, 1fr)
+      auto auto;
+    align-items: center;
+  }
+
+  .admin-brand-row .admin-field .admin-label {
+    display: none;
+  }
+}
+
+/* ==========================================================================
    Small pieces
    ========================================================================== */
 
@@ -1600,6 +1804,13 @@ a.admin-stat:hover {
   .admin-root .admin-select-sm,
   .admin-root .admin-filter,
   .admin-root .admin-toggle {
+    min-height: 2.75rem;
+  }
+
+  /* And for the icon buttons, which are square — the floor is given to
+     both sides so the target stays a shape a thumb can find. */
+  .admin-root .admin-icon-btn {
+    min-width: 2.75rem;
     min-height: 2.75rem;
   }
 
