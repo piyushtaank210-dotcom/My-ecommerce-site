@@ -206,15 +206,15 @@ export function GeneralDetails({
           </div>
 
           <div className="admin-gallery-actions">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="admin-gallery-title">Add images</span>
               <span className="text-[11.5px] text-brand-dark">
                 JPEG, PNG, WebP, GIF or AVIF, up to 8 MB each.
               </span>
             </div>
-            <p className="mt-1.5 text-[11.5px] leading-relaxed text-brand-dark">
+            <p className="mt-1 text-[11.5px] leading-snug text-brand-dark">
               {saved
-                ? "The first photograph is the one the shop shows on its cards. Drag a photograph onto another to move it."
+                ? "The first photograph is the one the shop shows on its cards. Drag one onto another to move it."
                 : "They are uploaded as soon as the product has been saved."}
             </p>
           </div>

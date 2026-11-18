@@ -2038,7 +2038,7 @@ a.admin-stat:hover {
   align-items: center;
   justify-content: space-between;
   gap: 6px 12px;
-  padding: 11px 14px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--adm-line);
 }
 
@@ -2049,13 +2049,13 @@ a.admin-stat:hover {
 }
 
 .admin-gallery-body {
-  padding: 12px 14px 14px;
+  padding: 9px 12px 11px;
 }
 
 /* The light-blue strip at the foot of the gallery, where the photographs
    are added. */
 .admin-gallery-actions {
-  padding: 11px 14px;
+  padding: 9px 12px;
   background-color: var(--adm-info-soft);
   border-top: 1px solid var(--adm-info-line);
 }
@@ -2063,7 +2063,7 @@ a.admin-stat:hover {
 /* The photographs themselves. */
 .admin-gallery-grid {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
 
@@ -2094,12 +2094,17 @@ a.admin-stat:hover {
 }
 
 /* The photograph sits on the white, so that a picture with a white
-   background of its own is not drawn inside a grey box. */
+   background of its own is not drawn inside a grey box.
+
+   Its box is wider than it is tall: the gallery stands beside a form, and
+   a square preview for every photograph makes the panel taller than the
+   form it belongs to. A picture is shown whole either way — it is fitted
+   inside the box, not cropped. */
 .admin-gallery-thumb {
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 16 / 10;
   background-color: var(--adm-surface);
   border-bottom: 1px solid var(--adm-line);
   cursor: grab;
@@ -2145,11 +2150,11 @@ a.admin-stat:hover {
   display: flex;
   align-items: center;
   gap: 1px;
-  padding: 4px 5px 0;
+  padding: 3px 4px 0;
 }
 
 .admin-gallery-foot {
-  padding: 4px 5px 6px;
+  padding: 3px 4px 5px;
 }
 
 /* A short note inside a form — the informational panel. */

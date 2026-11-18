@@ -372,7 +372,7 @@ export const ProductImages = memo(function ProductImages({
                   <span
                     aria-hidden
                     title="Drag to reorder"
-                    className="grid h-[26px] w-[22px] place-items-center text-gray-300"
+                    className="grid h-[24px] w-[20px] place-items-center text-gray-300"
                   >
                     <GripVertical className="h-3.5 w-3.5" />
                   </span>
@@ -382,7 +382,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange || i === 0}
                     aria-label={`Move photograph ${i + 1} earlier`}
                     title="Move earlier"
-                    className="admin-icon-btn !h-[26px] !w-[26px]"
+                    className="admin-icon-btn !h-[24px] !w-[24px]"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
@@ -392,7 +392,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange || i === images.length - 1}
                     aria-label={`Move photograph ${i + 1} later`}
                     title="Move later"
-                    className="admin-icon-btn !h-[26px] !w-[26px]"
+                    className="admin-icon-btn !h-[24px] !w-[24px]"
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -405,7 +405,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange}
                     aria-label={`Replace photograph ${i + 1}`}
                     title="Replace"
-                    className="admin-icon-btn !h-[26px] !w-[26px]"
+                    className="admin-icon-btn !h-[24px] !w-[24px]"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                   </button>
@@ -415,7 +415,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange}
                     aria-label={`Remove photograph ${i + 1}`}
                     title="Remove"
-                    className="admin-icon-btn admin-icon-btn--bad !h-[26px] !w-[26px]"
+                    className="admin-icon-btn admin-icon-btn--bad !h-[24px] !w-[24px]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -433,7 +433,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange}
                     placeholder="What this photograph shows"
                     aria-label={`What photograph ${i + 1} shows`}
-                    className="input admin-input-sm !text-[11.5px]"
+                    className="input !h-[26px] !min-h-0 !px-2 !py-0 !text-[11.5px]"
                   />
                 </div>
               </li>
