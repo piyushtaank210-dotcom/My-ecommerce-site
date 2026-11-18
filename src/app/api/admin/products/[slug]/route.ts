@@ -16,6 +16,7 @@ import {
 import { fail, json, requireApiPermission } from "@/lib/api";
 import { parseProductStatus } from "@/lib/product-status";
 import { parseProductCondition } from "@/lib/types";
+import { parseTags } from "@/lib/tags";
 import { normalizeSku } from "@/lib/sku";
 
 type Params = { params: Promise<{ slug: string }> };
@@ -118,6 +119,9 @@ export async function PATCH(request: Request, { params }: Params) {
       }
       if (typeof body.specs === "object" && body.specs !== null) {
         patch.specs = body.specs as Record<string, string>;
+      }
+      if (Array.isArray(body.tags)) {
+        patch.tags = parseTags(body.tags);
       }
       if (typeof body.sku === "string") {
         const sku = normalizeSku(body.sku);

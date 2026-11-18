@@ -38,6 +38,23 @@ export const RETURN_WINDOW_MAX_DAYS = 5;
 export const RETURN_WINDOW_SETTING = "return_window_days";
 
 /**
+ * Whether a product may be sent back.
+ *
+ * A product carries a note about what the shop does if something goes
+ * wrong, and these two words in that note are a refusal: everything else
+ * — including a note that says nothing at all — is a product that may be
+ * sent back.
+ *
+ * The rule is here rather than in the code that reads the product, so that
+ * the back office's switch and the shop's own answer to a customer are
+ * the same rule.
+ */
+export function isReturnableNote(note: string | null | undefined): boolean {
+  const value = String(note ?? "").trim().toLowerCase();
+  return value !== "non-returnable" && value !== "no";
+}
+
+/**
  * The key that records the published window having been applied.
  *
  * It is what stops the migration from fighting the back office: once the

@@ -36,7 +36,8 @@ import {
   parseProductStatus,
   type ProductStatus,
 } from "./product-status";
-import { normalizeSku, skuFromSlug, uniqueSku } from "./sku";
+import { normalizeSku, skuFromSlug, slugify, uniqueSku } from "./sku";
+import { parseTags } from "./tags";
 import { getProducts } from "./queries";
 import type { CatalogueFilters } from "./types";
 
@@ -105,6 +106,8 @@ const productSchema = z
     }),
     shortDesc: z.string().trim().optional(),
     description: z.string().trim().optional(),
+    /** The words the product is found by, carried as one JSON list. */
+    tags: z.string().trim().optional(),
     price: money("selling price"),
     mrp: money("MRP"),
     salePrice: optionalMoney("sale price"),
@@ -219,6 +222,7 @@ export async function saveProductAction(
     condition: formData.get("condition") ?? "new",
     shortDesc: formData.get("shortDesc") ?? undefined,
     description: formData.get("description") ?? undefined,
+    tags: formData.get("tags") ?? undefined,
     price: formData.get("price"),
     mrp: formData.get("mrp"),
     salePrice: formData.get("salePrice") ?? undefined,
@@ -247,10 +251,7 @@ export async function saveProductAction(
   }
 
   const d = parsed.data;
-  const slug = d.slug
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const slug = slugify(d.slug);
 
   const db = getDb();
   const existing = (await db
@@ -264,6 +265,14 @@ export async function saveProductAction(
     | undefined;
 
   const specs = readSpecs(formData);
+
+  // The words the product is found by, tidied.
+  const tags = parseTags(d.tags);
+
+  // The long description may hold markup. It is filtered in the one place
+  // every product is written down — in `src/lib/admin.ts` — so that only
+  // what a description is allowed to hold ever reaches the row.
+  const description = d.description ?? null;
 
   // The subcategory and the brand are kept in lists the back office
   // manages. A name the administrator typed that is not in the list yet is
@@ -305,8 +314,9 @@ export async function saveProductAction(
       condition: d.condition,
       badge: d.badge || null,
       shortDesc: d.shortDesc || null,
-      description: d.description || null,
+      description,
       specs,
+      tags,
       sku,
       categorySlug: d.category,
       imageAlt: d.imageAlt || null,
@@ -358,8 +368,9 @@ export async function saveProductAction(
       userId: user.id,
       badge: d.badge || null,
       shortDesc: d.shortDesc || null,
-      description: d.description || null,
+      description,
       specs,
+      tags,
       sku: d.sku || null,
       imageAlt: d.imageAlt || null,
       seoTitle: d.seoTitle || null,

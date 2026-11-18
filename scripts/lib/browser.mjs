@@ -212,3 +212,35 @@ export async function waitFor(
   }
   return null;
 }
+
+/**
+ * Waits for the page to become a live one.
+ *
+ * The server sends a page that works without JavaScript, and React then
+ * takes it over. Until it has, a form control holds what the server put
+ * in it and nothing that is typed into it is noticed — so a script that
+ * types into a form too early types into a page that is about to be
+ * replaced.
+ *
+ * React marks the elements it has taken over, so that is what is waited
+ * for.
+ *
+ *   await waitForLive(cdp, "#name");
+ */
+export async function waitForLive(
+  cdp,
+  selector = "body",
+  { timeout = 30000, every = 250 } = {}
+) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const live = await cdp.evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return false;
+      return Object.keys(el).some((k) => k.startsWith('__reactProps'));
+    })()`);
+    if (live) return true;
+    await sleep(every);
+  }
+  return false;
+}

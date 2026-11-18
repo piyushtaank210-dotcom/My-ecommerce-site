@@ -8,6 +8,7 @@ import { sellingPrice } from "@/lib/pricing";
 import { PRODUCT_CONDITION_LABEL } from "@/lib/types";
 import { ProductGallery } from "./ProductGallery";
 import { ProductPurchase } from "./ProductPurchase";
+import { isPlainText, sanitizeRichText } from "@/lib/rich-text";
 import {
   attributeNames,
   backordersAllowed,
@@ -182,10 +183,35 @@ export function ProductDetails({
           )}
         </div>
 
+        {/* The words the back office filed this product under. */}
+        {product.tags.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {product.tags.map((tag) => (
+              <li key={tag} className="product-tag">
+                {tag}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {product.description && (
-          <p className="mt-4 text-[14.5px] leading-relaxed text-gray-500">
-            {product.description}
-          </p>
+          isPlainText(product.description) ? (
+            /* A description written before the editor existed holds plain
+               words, and is shown as they were typed. */
+            <p className="mt-4 text-[14.5px] leading-relaxed text-gray-500">
+              {product.description}
+            </p>
+          ) : (
+            /* A description written with the editor holds a little markup.
+               It is filtered again here, so that what a shopper is shown is
+               only what a description is allowed to hold. */
+            <div
+              className="product-richtext mt-4 text-[14.5px] leading-relaxed text-gray-500"
+              dangerouslySetInnerHTML={{
+                __html: sanitizeRichText(product.description),
+              }}
+            />
+          )
         )}
 
         <div className="mt-6 flex flex-wrap items-baseline gap-3">

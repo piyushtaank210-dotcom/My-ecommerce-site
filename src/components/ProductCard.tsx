@@ -65,6 +65,14 @@ export function ProductCard({ product }: { product: Product }) {
           </p>
         )}
 
+        {/* The mark the back office put on this product — "New", "Official
+            Store" — shown only when one has been given. */}
+        {product.badge && (
+          <p className="mb-1.5">
+            <span className="product-badge-mark">{product.badge}</span>
+          </p>
+        )}
+
         <h3 className="mb-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-ink sm:mb-2 sm:text-[14px]">
           <Link href={`/product/${product.slug}`}>{product.name}</Link>
         </h3>

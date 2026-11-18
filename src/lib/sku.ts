@@ -12,6 +12,24 @@
  */
 
 /**
+ * The address of a product, the way the shop writes them.
+ *
+ * Lower case, dashes between words, nothing else. `PlayStation 5 Slim`
+ * becomes `playstation-5-slim`.
+ *
+ * This is the one place the rule is written: the editor, the save action
+ * and the API all write addresses the same way, so that a product's
+ * address is the same whichever door it came through.
+ */
+export function slugify(raw: string): string {
+  return String(raw ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
  * Normalise any string into the SKU format: uppercase, dashes between
  * words, nothing else. `playstation 5 slim/1TB` becomes
  * `PLAYSTATION-5-SLIM-1TB`.

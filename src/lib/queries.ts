@@ -1,6 +1,7 @@
 ﻿import { getDb, parseJson } from "./db";
 import { parseProductStatus, type ProductStatus } from "./product-status";
 import { parseProductCondition } from "./types";
+import { parseTags } from "./tags";
 import type {
   Brand,
   Category,
@@ -59,6 +60,7 @@ export function mapProduct(r: Row): Product {
     short_desc: strOrNull(r.short_desc),
     description: strOrNull(r.description),
     specs: parseJson<Record<string, string>>(r.specs, {}),
+    tags: parseTags(r.tags),
     attributes: parseJson<Record<string, string[]>>(r.attributes, {}),
     image: strOrNull(r.image),
     image_alt: strOrNull(r.image_alt),

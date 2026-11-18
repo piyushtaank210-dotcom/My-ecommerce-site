@@ -10,6 +10,7 @@ import {
 } from "./admin";
 import { adjustStock } from "./inventory";
 import { cleanAttributes } from "./variations";
+import { normaliseTags } from "./tags";
 
 /**
  * Reading and writing the catalogue as a spreadsheet.
@@ -129,6 +130,11 @@ export const PRODUCT_COLUMNS: ColumnSpec[] = [
     help: 'A JSON object of name and value, e.g. {"Storage":"1TB NVMe SSD"}.',
   },
   {
+    key: "tags",
+    label: "Tags",
+    help: 'A JSON list of the words the product is found by, e.g. ["gift","new"].',
+  },
+  {
     key: "attributes",
     label: "Attributes",
     help: 'A JSON object of what the product varies by, e.g. {"Colour":["White"]}.',
@@ -201,6 +207,7 @@ type Values = {
   description: string | null;
   image: string | null;
   specs: Record<string, string> | null;
+  tags: string[] | null;
   attributes: Record<string, string[]> | null;
   variants: unknown[] | null;
 };
@@ -421,6 +428,20 @@ function validateRow(
     }
   }
 
+  // The tags the product is found by. A JSON list, or a plain
+  // comma-separated list of words.
+  let tags: string[] | null = null;
+  const parsedTags = jsonOrNull(raw.tags ?? "");
+  if (parsedTags) {
+    if ("error" in parsedTags) {
+      add("tags", parsedTags.error);
+    } else if (!Array.isArray(parsedTags.value)) {
+      add("tags", "The tags must be a JSON list of words.");
+    } else {
+      tags = normaliseTags(parsedTags.value.map(String));
+    }
+  }
+
   let attributes: Record<string, string[]> | null = null;
   const parsedAttributes = jsonOrNull(raw.attributes ?? "");
   if (parsedAttributes) {
@@ -494,6 +515,7 @@ function validateRow(
     description: (raw.description ?? "").trim() || null,
     image: (raw.image ?? "").trim() || null,
     specs,
+    tags,
     attributes,
     variants,
   };
@@ -542,6 +564,7 @@ function describeChanges(
     changes.push(`low-stock threshold: ${values.lowStockThreshold}`);
   }
   if (has("specs")) changes.push("specifications");
+  if (has("tags")) changes.push("tags");
   if (has("attributes")) changes.push("attributes");
   if (has("variants")) changes.push("variations");
   if (has("image")) changes.push(`image: ${values.image ?? "none"}`);
@@ -735,6 +758,7 @@ async function writeProduct(
       shortDesc: values.shortDesc,
       description: values.description,
       specs: values.specs ?? {},
+      tags: values.tags ?? [],
       sku: values.sku,
       imageAlt: null,
       seoTitle: null,
@@ -772,6 +796,7 @@ async function writeProduct(
   if (has("description")) patch.description = values.description;
   if (has("image")) patch.image = values.image;
   if (has("specs") && values.specs) patch.specs = values.specs;
+  if (has("tags") && values.tags) patch.tags = values.tags;
 
   if (Object.keys(patch).length) (await updateProduct(values.slug, patch));
 
@@ -963,6 +988,7 @@ export async function exportCatalogue(isAdmin: boolean): Promise<string> {
       description: p.description ?? "",
       image: p.image ?? "",
       specs: JSON.stringify(p.specs ?? {}),
+      tags: JSON.stringify(p.tags ?? []),
       attributes: JSON.stringify(p.attributes ?? {}),
       variants: JSON.stringify(
         p.variants.map((v) => ({

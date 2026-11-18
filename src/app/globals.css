@@ -762,3 +762,124 @@ label,
   single vertical rule between the lists, so it uses `lg:gap-0` plus a
   `lg:pl-16` gutter on the second column rather than a gap.
 */
+
+/*
+  A product description written with the back office's editor holds a
+  little markup: paragraphs, headings, lists, links and the occasional
+  bold word. The rules below give that markup the same shape as the rest
+  of the shop's writing, so a description does not look like a different
+  document dropped into the page.
+
+  They sit outside the layers above, so they win over the utility classes
+  the container carries.
+*/
+.product-richtext > *:first-child {
+  margin-top: 0;
+}
+
+.product-richtext > *:last-child {
+  margin-bottom: 0;
+}
+
+.product-richtext p {
+  margin: 0 0 0.75em;
+}
+
+.product-richtext h2,
+.product-richtext h3,
+.product-richtext h4 {
+  margin: 1.25em 0 0.5em;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.product-richtext h3 {
+  font-size: 1em;
+}
+
+.product-richtext h4 {
+  font-size: 0.95em;
+}
+
+.product-richtext ul,
+.product-richtext ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.35em;
+}
+
+.product-richtext ul {
+  list-style: disc;
+}
+
+.product-richtext ol {
+  list-style: decimal;
+}
+
+.product-richtext li {
+  margin-bottom: 0.3em;
+}
+
+.product-richtext li > ul,
+.product-richtext li > ol {
+  margin: 0.3em 0 0;
+}
+
+.product-richtext a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.product-richtext strong,
+.product-richtext b {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.product-richtext blockquote {
+  margin: 0 0 0.75em;
+  padding-left: 0.9em;
+  border-left: 3px solid var(--color-brand-tint);
+  color: var(--color-ink-soft);
+}
+
+.product-richtext code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: #f3f4f6;
+  font-size: 0.9em;
+}
+
+.product-richtext hr {
+  margin: 1.25em 0;
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* The tags a product carries, and the mark the back office puts on it.
+   Both are small and both sit on the white of the page. */
+.product-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f9fafb;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.product-badge-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--color-brand-tint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-brand-dark);
+}

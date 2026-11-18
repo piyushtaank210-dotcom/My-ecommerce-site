@@ -120,9 +120,16 @@ export type Product = {
   condition: ProductCondition;
   badge: string | null;
   short_desc: string | null;
-  /** The long description. */
+  /** The long description. May hold simple HTML. */
   description: string | null;
   specs: Record<string, string>;
+  /**
+   * The words the product is found by in the shop's own search.
+   *
+   * Short and plain — "gift", "new", "under-50000" — kept as a list so
+   * that the back office can add and remove them one at a time.
+   */
+  tags: string[];
   /**
    * What this product varies by.
    *

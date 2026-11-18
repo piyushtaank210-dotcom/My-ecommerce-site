@@ -31,6 +31,9 @@ const SUGGESTIONS = [
  *
  * Each row is a label and a value. A row with no label is not a
  * specification, so it is dropped when the form is saved.
+ *
+ * When there is nothing yet, the empty state says so and offers the way
+ * out of it, rather than showing an empty box.
  */
 export function ProductSpecs({
   specs,
@@ -60,70 +63,92 @@ export function ProductSpecs({
     });
   }
 
+  // A row with no name is not a specification yet.
+  const filled = rows.some((row) => row.label.trim());
+
   return (
     <div>
-      {rows.map((row, i) => (
-        <div key={i} className="mb-2 flex items-start gap-2">
-          <div className="admin-field-grid flex-1">
-            <input
-              type="text"
-              name="specLabel"
-              value={row.label}
-              onChange={(e) => setRow(i, { label: e.target.value })}
+      {filled ? (
+        <>
+          {rows.map((row, i) => (
+            <div key={i} className="mb-2 flex items-start gap-2">
+              <div className="admin-field-grid flex-1">
+                <input
+                  type="text"
+                  name="specLabel"
+                  value={row.label}
+                  onChange={(e) => setRow(i, { label: e.target.value })}
+                  disabled={disabled}
+                  placeholder="Storage"
+                  aria-label={`Specification ${i + 1} name`}
+                  className="input"
+                />
+                <input
+                  type="text"
+                  name="specValue"
+                  value={row.value}
+                  onChange={(e) => setRow(i, { value: e.target.value })}
+                  disabled={disabled}
+                  placeholder="1TB NVMe SSD"
+                  aria-label={`Specification ${i + 1} value`}
+                  className="input"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => removeRow(i)}
+                disabled={disabled}
+                aria-label={`Remove specification ${i + 1}`}
+                title={`Remove specification ${i + 1}`}
+                className="admin-icon-btn admin-icon-btn--bad mt-0.5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => addRow()}
               disabled={disabled}
-              placeholder="Storage"
-              aria-label={`Specification ${i + 1} name`}
-              className="input"
-            />
-            <input
-              type="text"
-              name="specValue"
-              value={row.value}
-              onChange={(e) => setRow(i, { value: e.target.value })}
-              disabled={disabled}
-              placeholder="1TB NVMe SSD"
-              aria-label={`Specification ${i + 1} value`}
-              className="input"
-            />
+              className="btn btn-outline btn-sm"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add a specification
+            </button>
+            <span className="text-[12px] text-gray-400">Or start from one of:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => addRow(s)}
+                  disabled={disabled}
+                  className="admin-chip"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
+        </>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
+          <p className="text-[13px] text-gray-600">
+            No product specifications have been added yet.
+          </p>
           <button
             type="button"
-            onClick={() => removeRow(i)}
+            onClick={() => addRow()}
             disabled={disabled}
-            aria-label={`Remove specification ${i + 1}`}
-            title={`Remove specification ${i + 1}`}
-            className="admin-icon-btn admin-icon-btn--bad mt-0.5"
+            className="btn btn-outline btn-sm mt-3"
           >
-            <X className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
+            New
           </button>
         </div>
-      ))}
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => addRow()}
-          disabled={disabled}
-          className="btn btn-outline btn-sm"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add a specification
-        </button>
-        <span className="text-[12px] text-gray-400">Or start from one of:</span>
-        <div className="flex flex-wrap gap-1.5">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => addRow(s)}
-              disabled={disabled}
-              className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-40"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

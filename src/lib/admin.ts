@@ -9,6 +9,8 @@ import {
 import { worstStockLevel, type StockLevel } from "./stock";
 import { deleteUploadIfUnreferenced } from "./uploads";
 import { normalizeSku, skuFromSlug, uniqueSku } from "./sku";
+import { parseTags, tagsToJson } from "./tags";
+import { prepareRichText } from "./rich-text";
 import {
   cleanAttributes,
   combinationKey,
@@ -492,6 +494,8 @@ export type NewProduct = {
   description: string | null;
   /** The specifications. */
   specs: Record<string, string>;
+  /** The words the product is found by. */
+  tags?: string[];
   /** What the product varies by. */
   attributes?: ProductAttributes;
   sku: string | null;
@@ -561,11 +565,11 @@ export async function createProduct(
     `INSERT INTO products
        (slug, sku, name, brand, category_slug, subcategory, model_number,
         price, mrp, sale_price, purchase_cost, rating, reviews, stock, condition,
-        badge, short_desc, description, specs, image, attributes, image_alt,
+        badge, short_desc, description, specs, tags, image, attributes, image_alt,
         seo_title, meta_description, weight_grams,
         package_length, package_width, package_height, warranty, returns,
         listed, status, position)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?)`
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?)`
   ).run(
     p.slug,
     sku,
@@ -581,8 +585,9 @@ export async function createProduct(
     p.condition,
     p.badge,
     p.shortDesc,
-    p.description,
+    prepareRichText(p.description),
     JSON.stringify(p.specs),
+    tagsToJson(p.tags ?? []),
     null,
     JSON.stringify(cleanAttributes(p.attributes ?? {})),
     p.imageAlt,
@@ -1280,11 +1285,11 @@ export async function duplicateProduct(
       `INSERT INTO products
          (slug, sku, name, brand, category_slug, subcategory, model_number,
           price, mrp, sale_price, purchase_cost, rating, reviews, stock, condition,
-          badge, short_desc, description, specs, image, image_alt,
+          badge, short_desc, description, specs, tags, image, image_alt,
           seo_title, meta_description, weight_grams,
           package_length, package_width, package_height, warranty, returns,
           listed, status, position)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?)`
     ).run(
       newSlug,
       newSku,
@@ -1304,6 +1309,7 @@ export async function duplicateProduct(
       strOrNull(source.short_desc),
       strOrNull(source.description),
       str(source.specs) || "{}",
+      tagsToJson(parseTags(source.tags)),
       strOrNull(source.image),
       strOrNull(source.image_alt),
       strOrNull(source.seo_title),
@@ -1534,6 +1540,8 @@ export type ProductPatch = {
   modelNumber?: string | null;
   condition?: ProductCondition;
   specs?: Record<string, string>;
+  /** The words the product is found by. */
+  tags?: string[];
   image?: string | null;
   imageAlt?: string | null;
   seoTitle?: string | null;
@@ -1587,7 +1595,10 @@ export async function updateProduct(slug: string, patch: ProductPatch): Promise<
   }
   if (patch.description !== undefined) {
     sets.push("description = ?");
-    params.push(patch.description?.trim() || null);
+    // The description may hold a little markup, and what a description is
+    // allowed to hold is filtered here — in the one place every writer
+    // goes through — rather than in each of them.
+    params.push(prepareRichText(patch.description));
   }
   if (patch.brand !== undefined) {
     sets.push("brand = ?");
@@ -1616,6 +1627,10 @@ export async function updateProduct(slug: string, patch: ProductPatch): Promise<
   if (patch.specs !== undefined) {
     sets.push("specs = ?");
     params.push(JSON.stringify(patch.specs));
+  }
+  if (patch.tags !== undefined) {
+    sets.push("tags = ?");
+    params.push(tagsToJson(patch.tags));
   }
   if (patch.image !== undefined) {
     sets.push("image = ?");

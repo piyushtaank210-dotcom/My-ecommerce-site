@@ -172,6 +172,10 @@ export async function applyMigrations(db: Db): Promise<void> {
   // a product that was delisted before the status field existed is still hidden.
   add("products", "status", "status TEXT NOT NULL DEFAULT 'published'");
 
+  // The words a product is found by. A list of short tags, kept as JSON so
+  // that a tag may hold a space or a hyphen.
+  add("products", "tags", "tags TEXT DEFAULT '[]'");
+
   // Enquiries get triaged rather than sitting in one list forever.
   add("contact_messages", "status", "status TEXT NOT NULL DEFAULT 'new'");
   add(

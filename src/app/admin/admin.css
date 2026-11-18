@@ -1413,28 +1413,9 @@ a.admin-stat:hover {
 }
 
 /* ==========================================================================
-   The editor layout — the section navigation beside the form
+   The product editor's own layout is further down this file, under
+   "The product editor — a full-screen sheet over the back office".
    ========================================================================== */
-
-.admin-editor {
-  display: grid;
-  gap: 24px;
-  align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 1100px) {
-  .admin-editor {
-    grid-template-columns: 224px minmax(0, 1fr);
-  }
-}
-
-.admin-editor-body {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
 
 /* A small dropdown, for a cell in a table. */
 .admin-select-sm {
@@ -1861,4 +1842,674 @@ a.admin-stat:hover {
   .admin-search {
     max-width: none;
   }
+}
+
+/* ==========================================================================
+   The product editor — a full-screen sheet over the back office
+   ========================================================================== */
+
+/* The sheet covers the whole window, the sidebar included: adding or
+   editing a product is a single job, and the back office's own chrome
+   only gets in the way of it. The sheet is its own screen — a header that
+   does not move, one area that scrolls, and a bar of actions that does
+   not move either. */
+.admin-editor-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--adm-canvas);
+}
+
+.admin-editor-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px clamp(0.875rem, 2vw, 1.75rem);
+  background-color: var(--adm-surface);
+  border-bottom: 1px solid var(--adm-line);
+}
+
+.admin-editor-head-text {
+  min-width: 0;
+}
+
+.admin-editor-title {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--adm-ink);
+}
+
+.admin-editor-sub {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--adm-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-editor-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--adm-r-sm);
+  color: var(--adm-ink-2);
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-editor-close:hover {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+/* The one area that scrolls. The sheet is exactly the height of the
+   window, so this is the only scrollbar on the page. */
+.admin-editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px clamp(0.875rem, 2vw, 1.75rem) 40px;
+}
+
+.admin-editor-inner {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1560px;
+  margin-inline: auto;
+}
+
+@media (min-width: 1180px) {
+  .admin-editor-inner {
+    grid-template-columns: 196px minmax(0, 1fr);
+  }
+}
+
+/* The section navigation rides inside the sheet, so it sticks to the top
+   of the scrolling area rather than to the top of the window. It is
+   aligned to the start of its row so that it may travel, rather than
+   being stretched to the height of the whole form. */
+.admin-editor-sheet .admin-sections {
+  top: 0;
+  align-self: start;
+}
+
+.admin-editor-content {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+}
+
+/* A section of the form. */
+.admin-editor-section {
+  padding-top: 24px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.admin-editor-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.admin-editor-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 16px;
+}
+
+.admin-editor-section-title {
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  color: var(--adm-ink);
+}
+
+.admin-editor-section-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--adm-ink-2);
+  max-width: 78ch;
+}
+
+/* A piece of a section — pricing, inventory, returns. */
+.admin-editor-subsection {
+  padding-top: 20px;
+  margin-top: 22px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.admin-editor-subsection-title {
+  margin-bottom: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--adm-ink);
+}
+
+/* The two columns of General details: the product's own information on
+   the left, its photographs on the right. */
+.admin-editor-split {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .admin-editor-split {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .admin-editor-split {
+    gap: 20px;
+  }
+}
+
+/* The gallery panel — a card of its own, on the white. */
+.admin-gallery {
+  background-color: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-lg);
+  box-shadow: var(--adm-shadow-1);
+  overflow: hidden;
+}
+
+.admin-gallery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--adm-line);
+}
+
+.admin-gallery-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--adm-ink);
+}
+
+.admin-gallery-body {
+  padding: 14px 16px 16px;
+}
+
+/* The light-blue strip at the foot of the gallery, where the photographs
+   are added. */
+.admin-gallery-actions {
+  padding: 13px 16px;
+  background-color: var(--adm-info-soft);
+  border-top: 1px solid var(--adm-info-line);
+}
+
+/* The photographs themselves. */
+.admin-gallery-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+}
+
+.admin-gallery-item {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface);
+  overflow: hidden;
+  transition:
+    border-color 0.13s ease,
+    box-shadow 0.13s ease;
+}
+
+.admin-gallery-item[data-main="true"] {
+  border-color: var(--adm-accent);
+  box-shadow: 0 0 0 1px var(--adm-accent);
+}
+
+.admin-gallery-item[data-dragging="true"] {
+  opacity: 0.45;
+}
+
+.admin-gallery-item[data-over="true"] {
+  border-color: var(--adm-accent);
+  box-shadow: 0 0 0 2px var(--adm-accent-soft);
+}
+
+.admin-gallery-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-color: var(--adm-surface-3);
+  cursor: grab;
+}
+
+.admin-gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px;
+}
+
+.admin-gallery-star {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.92);
+  border: 1px solid var(--adm-line-2);
+  color: var(--adm-ink-3);
+  box-shadow: var(--adm-shadow-1);
+  transition:
+    color 0.13s ease,
+    border-color 0.13s ease;
+}
+
+.admin-gallery-star:hover:not(:disabled) {
+  color: var(--adm-accent);
+  border-color: var(--adm-accent);
+}
+
+.admin-gallery-star[data-main="true"] {
+  background-color: var(--adm-accent);
+  border-color: var(--adm-accent);
+  color: #fff;
+}
+
+.admin-gallery-tools {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 6px 0;
+}
+
+.admin-gallery-foot {
+  padding: 6px 6px 8px;
+}
+
+/* A short note inside a form — the informational panel. */
+.admin-editor-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--adm-info-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-info-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--adm-info);
+}
+
+.admin-editor-note svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.admin-editor-note strong {
+  font-weight: 700;
+}
+
+/* The bar of actions at the foot of the sheet. It does not move, so the
+   product can always be saved without scrolling back to the top. */
+.admin-editor-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px clamp(0.875rem, 2vw, 1.75rem);
+  background-color: var(--adm-surface);
+  border-top: 1px solid var(--adm-line);
+  box-shadow: 0 -1px 2px rgb(12 21 36 / 0.04);
+}
+
+.admin-editor-foot-note {
+  font-size: 12px;
+  color: var(--adm-ink-3);
+}
+
+/* A pair of choices drawn as two cards rather than two radio dots. */
+.admin-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface);
+  text-align: left;
+  transition:
+    border-color 0.13s ease,
+    background-color 0.13s ease;
+}
+
+.admin-choice:hover {
+  border-color: var(--adm-accent);
+}
+
+.admin-choice[data-on="true"] {
+  border-color: var(--adm-accent);
+  background-color: var(--adm-accent-soft);
+}
+
+.admin-choice[data-on="true"] .admin-choice-mark {
+  border-color: var(--adm-accent);
+  background-color: var(--adm-accent);
+  color: #fff;
+}
+
+.admin-choice-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: 999px;
+  color: transparent;
+  transition:
+    background-color 0.13s ease,
+    border-color 0.13s ease;
+}
+
+.admin-choice-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--adm-ink);
+}
+
+.admin-choice-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--adm-ink-3);
+}
+
+/* A tag, and the box a new tag is typed into. */
+.admin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: 999px;
+  background-color: var(--adm-surface-3);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--adm-ink-2);
+}
+
+.admin-tag-remove {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  color: var(--adm-ink-3);
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-tag-remove:hover {
+  background-color: var(--adm-bad-soft);
+  color: var(--adm-bad);
+}
+
+/* The rich-text editor. */
+.admin-rte {
+  border: 1px solid var(--adm-line-2);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-rte:focus-within {
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+
+.admin-rte-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 1px solid var(--adm-line);
+  background-color: var(--adm-surface-2);
+}
+
+.admin-rte-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 4px;
+  border-right: 1px solid var(--adm-line);
+}
+
+.admin-rte-group:last-child {
+  border-right: 0;
+  padding-right: 0;
+  margin-right: 0;
+}
+
+.admin-rte-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--adm-r-xs);
+  color: var(--adm-ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition:
+    background-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-rte-btn:hover:not(:disabled) {
+  background-color: var(--adm-surface-3);
+  color: var(--adm-ink);
+}
+
+.admin-rte-btn[data-on="true"] {
+  background-color: var(--adm-accent-soft);
+  color: var(--adm-accent-2);
+}
+
+.admin-rte-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.admin-rte-area {
+  min-height: 220px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--adm-ink);
+}
+
+.admin-rte-area:focus {
+  outline: none;
+}
+
+.admin-rte-area > *:first-child {
+  margin-top: 0;
+}
+
+.admin-rte-area p {
+  margin: 0 0 0.7em;
+}
+
+.admin-rte-area ul,
+.admin-rte-area ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.4em;
+}
+
+.admin-rte-area ul {
+  list-style: disc;
+}
+
+.admin-rte-area ol {
+  list-style: decimal;
+}
+
+.admin-rte-area a {
+  color: var(--adm-accent);
+  text-decoration: underline;
+}
+
+/* The search-result preview. */
+.admin-serp {
+  padding: 16px 18px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r);
+  background-color: var(--adm-surface-2);
+}
+
+.admin-serp-url {
+  font-size: 12.5px;
+  color: var(--adm-ink-3);
+}
+
+.admin-serp-title {
+  margin-top: 3px;
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 500;
+  color: #1a0dab;
+}
+
+.admin-serp-text {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--adm-ink-2);
+  max-width: 68ch;
+}
+
+/* On a narrow screen the sheet's own header and foot get tighter. */
+@media (max-width: 599.98px) {
+  .admin-editor-title {
+    font-size: 18px;
+  }
+
+  .admin-editor-sub {
+    display: none;
+  }
+
+  .admin-editor-foot {
+    flex-wrap: wrap;
+  }
+
+  .admin-editor-foot-note {
+    display: none;
+  }
+}
+
+/* The editor shows what is expected in it until something is written. */
+.admin-rte-area:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa6b6;
+  pointer-events: none;
+}
+
+/* The radio inside a card is the card's own control: it covers the whole
+   of it, so anywhere on the card may be clicked, and the card shows the
+   focus when the radio has it. It is invisible, but it is still read out
+   and it is still what the arrow keys move between. */
+.admin-choice {
+  position: relative;
+}
+
+.admin-root input.admin-choice-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-choice:has(.admin-choice-input:focus-visible) {
+  outline: 2px solid var(--adm-accent);
+  outline-offset: 2px;
+}
+
+/* The editor's own fields are a little taller than the back office's
+   usual ones, because a long form is read slowly and a box that is easy
+   to hit is worth the extra two pixels. */
+.admin-editor-sheet .input {
+  min-height: 40px;
+}
+
+.admin-editor-sheet textarea.input {
+  min-height: 0;
+}
+
+/* A row that switches something on is a tap target in its own right. */
+.admin-editor-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* A small round button, for the suggestions beside a field. */
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--adm-line-2);
+  border-radius: 999px;
+  background-color: var(--adm-surface);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--adm-ink-2);
+  transition:
+    border-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.admin-chip:hover:not(:disabled) {
+  border-color: var(--adm-accent);
+  color: var(--adm-accent);
+}
+
+.admin-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

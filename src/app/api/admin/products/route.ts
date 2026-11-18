@@ -9,6 +9,8 @@ import {
 } from "@/lib/admin";
 import { fail, json, paged, pageParams, requireApiPermission } from "@/lib/api";
 import { parseProductCondition } from "@/lib/types";
+import { parseTags } from "@/lib/tags";
+import { slugify } from "@/lib/sku";
 import type { CatalogueFilters, SortKey } from "@/lib/types";
 
 const SORT_KEYS: SortKey[] = [
@@ -167,11 +169,7 @@ async function createProductFromApi(
   const name = String(body.name ?? "").trim();
   if (name.length < 2) return fail("Give the product a name.", 400);
 
-  const slug = String(body.slug ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const slug = slugify(String(body.slug ?? ""));
   if (slug.length < 2) return fail("Give the product an address.", 400);
 
   const price = Number(body.price);
@@ -201,10 +199,11 @@ async function createProductFromApi(
         : null,
     stock: Number(body.stock) || 0,
     userId,
-    badge: null,
+    badge: body.badge ? String(body.badge) : null,
     shortDesc: body.shortDesc ? String(body.shortDesc) : null,
     description: body.description ? String(body.description) : null,
     specs: (body.specs ?? {}) as Record<string, string>,
+    tags: parseTags(body.tags),
     attributes: (body.attributes ?? {}) as Record<string, string[]>,
     sku: body.sku ? String(body.sku) : null,
     imageAlt: body.imageAlt ? String(body.imageAlt) : null,

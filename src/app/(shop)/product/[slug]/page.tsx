@@ -18,6 +18,7 @@ import { money, discountPct } from "@/lib/format";
 import { getBackorderPolicy } from "@/lib/settings";
 import { getCurrentUser } from "@/lib/auth";
 import { orderSpecs } from "@/lib/taxonomy";
+import { richTextToPlain } from "@/lib/rich-text";
 
 export async function generateMetadata({
   params,
@@ -28,7 +29,9 @@ export async function generateMetadata({
   const product = (await getProduct(slug));
   if (!product) return { title: "Not found" };
   const description =
-    product.meta_description ?? product.short_desc ?? product.description ?? undefined;
+    product.meta_description ??
+    product.short_desc ??
+    (product.description ? richTextToPlain(product.description) : undefined);
   return {
     // The SEO title the back office wrote comes first; it is what the
     // owner wants shown in the results.

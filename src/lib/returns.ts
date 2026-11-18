@@ -37,6 +37,7 @@ import {
 } from "./return-status";
 import { getReturnWindowDays } from "./settings";
 import {
+  isReturnableNote,
   mandatoryEvidenceFor,
   policyForReason,
   returnWindowExpiredNotice,
@@ -204,8 +205,7 @@ export async function isProductReturnable(productSlug: string): Promise<boolean>
     .prepare("SELECT returns FROM products WHERE slug = ?")
     .get(productSlug)) as { returns?: string } | undefined;
   if (!row) return true;
-  if (row.returns === "non-returnable" || row.returns === "no") return false;
-  return true;
+  return isReturnableNote(row.returns);
 }
 
 /**

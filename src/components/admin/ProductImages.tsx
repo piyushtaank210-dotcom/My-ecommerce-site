@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  GripVertical,
   ImagePlus,
   Loader2,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
 import type { ProductImage } from "@/lib/types";
 import { toast } from "@/components/Toaster";
 import { uploadFiles } from "@/lib/upload-client";
+import { queuedFor, queueUploads, takeUploads } from "./product-editor/pending-uploads";
 
 /**
  * The photographs of a product.
@@ -23,22 +25,29 @@ import { uploadFiles } from "@/lib/upload-client";
  * order they should appear, and one of them is chosen as the main one —
  * the picture the cards, the search results and the catalogue table show.
  *
+ * The order may be set by dragging a photograph onto another, or with the
+ * two buttons beside it, which do the same thing for anyone who cannot
+ * drag or who would rather not.
+ *
  * A product that has not been saved yet has nowhere to put a photograph,
- * so the upload is offered only once there is something to attach it to.
+ * so the chosen files are held until it has been saved, and are uploaded
+ * the moment it is.
  */
-export function ProductImages({
+export const ProductImages = memo(function ProductImages({
   slug,
   images: initial,
   mainPath,
-  disabled = false,
+  saved = true,
 }: {
   slug: string;
   images: ProductImage[];
   /** The picture the catalogue is currently showing for this product. */
   mainPath: string | null;
-  disabled?: boolean;
+  /** Whether the product exists yet, and so can hold a photograph. */
+  saved?: boolean;
 }) {
   const [images, setImages] = useState<ProductImage[]>(initial);
+  const [main, setMain] = useState<string | null>(mainPath);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ name: string; percent: number }[]>(
@@ -46,16 +55,57 @@ export function ProductImages({
   );
   /** The photograph a new file is to take the place of, if any. */
   const [replacing, setReplacing] = useState<string | null>(null);
+  /** The photograph being dragged, and the one it is over. */
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  /**
+   * The photograph being dragged, kept in a box as well.
+   *
+   * A drag is over in a moment, and the page may not have redrawn in
+   * that time, so the state — which is what is drawn — cannot be what is
+   * read. The box is always current.
+   */
+  const dragged = useRef<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const canChange = Boolean(slug) && !disabled;
+  // The photographs the server sent are the truth.
+  useEffect(() => setImages(initial), [initial]);
+  useEffect(() => setMain(mainPath), [mainPath]);
 
+  // How many photographs are waiting for this product to be saved.
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    if (!slug) return;
+    setWaiting(queuedFor(slug));
+  }, [slug, images]);
+
+  /**
+   * The photographs that were chosen before the product was saved.
+   *
+   * They are uploaded as soon as there is a product to put them on.
+   */
+  useEffect(() => {
+    if (!saved || !slug) return;
+    const held = takeUploads(slug);
+    if (!held.length) return;
+    void upload(held);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, slug]);
+
+  /**
+   * Sends a change to the server.
+   *
+   * The server answers with the whole gallery, so the page does not have
+   * to be read again — except when the change was to the main
+   * photograph, which is the one thing the page carries itself.
+   */
   async function send(
     url: string,
     options: RequestInit,
-    failure: string
+    failure: string,
+    refresh = false
   ): Promise<ProductImage[] | null> {
     setBusy(true);
     setError(null);
@@ -68,7 +118,7 @@ export function ProductImages({
         return null;
       }
       setImages(data.images ?? []);
-      router.refresh();
+      if (refresh) router.refresh();
       return data.images ?? [];
     } catch {
       setError(failure);
@@ -79,13 +129,27 @@ export function ProductImages({
     }
   }
 
-  async function upload(files: FileList | null) {
-    if (!files?.length || !slug) return;
-    const picked = Array.from(files);
+  async function upload(files: FileList | File[] | null) {
+    const picked = Array.from(files ?? []);
+    if (!picked.length || !slug) return;
     const replaceId = replacing;
     if (fileInput.current) fileInput.current.value = "";
     if (replaceInput.current) replaceInput.current.value = "";
     setReplacing(null);
+
+    // There is no product to hold a photograph yet, so the files are held
+    // until the product has been saved.
+    if (!saved) {
+      queueUploads(slug, picked);
+      setWaiting(queuedFor(slug));
+      toast(
+        picked.length === 1
+          ? "The photograph will be uploaded once the product is saved."
+          : `${picked.length} photographs will be uploaded once the product is saved.`,
+        "success"
+      );
+      return;
+    }
 
     setBusy(true);
     setError(null);
@@ -147,7 +211,39 @@ export function ProductImages({
     );
   }
 
-  function setMain(id: string) {
+  /**
+   * Puts a dragged photograph where it was dropped.
+   *
+   * The photograph that was dragged takes the place of the one it was
+   * dropped on, and the rest keep their order.
+   */
+  function dropOn(targetId: string) {
+    setOver(null);
+    // The photograph being dragged is kept in a box as well as in the
+    // state: the state is what is drawn, and the box is what is read,
+    // because a drag is over before the page has had a chance to redraw.
+    const from = dragged.current;
+    setDragging(null);
+    if (!from || from === targetId) return;
+    const ids = images.map((i) => i.id);
+    const at = ids.indexOf(from);
+    const to = ids.indexOf(targetId);
+    if (at < 0 || to < 0) return;
+    ids.splice(at, 1);
+    ids.splice(to, 0, from);
+    send(
+      `/api/admin/products/${slug}/images`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "reorder", ids }),
+      },
+      "The photographs could not be reordered."
+    );
+  }
+
+  function setMainImage(id: string, path: string) {
+    setMain(path);
     send(
       `/api/admin/products/${slug}/images`,
       {
@@ -155,7 +251,10 @@ export function ProductImages({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "main", id }),
       },
-      "The main photograph could not be changed."
+      "The main photograph could not be changed.",
+      // The main photograph is the one the page carries itself, so the
+      // page has to be read again.
+      true
     );
   }
 
@@ -179,9 +278,24 @@ export function ProductImages({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "remove", id }),
       },
-      "The photograph could not be removed."
+      "The photograph could not be removed.",
+      // Removing the main photograph changes the one the page carries.
+      true
     );
   }
+
+  const canChange = Boolean(slug) && saved && !busy;
+
+  /**
+   * Which photograph is the main one.
+   *
+   * The catalogue names it, and normally that is one of these photographs.
+   * A product whose card picture was set before its gallery was filled in
+   * names one that is not here — and then the first photograph is the one
+   * the shop shows first, so that is what is marked.
+   */
+  const namedMain = images.findIndex((i) => i.path === main);
+  const mainAt = namedMain >= 0 ? namedMain : 0;
 
   return (
     <div>
@@ -194,76 +308,81 @@ export function ProductImages({
           </span>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="admin-gallery-grid">
           {images.map((img, i) => {
-            const isMain = img.path === mainPath;
+            const isMain = i === mainAt;
             return (
               <li
                 key={img.id}
-                className={`admin-panel p-3 ${
-                  isMain ? "border-brand shadow-[0_0_0_1px_var(--adm-accent)]" : ""
-                }`}
+                className="admin-gallery-item"
+                data-main={isMain ? "true" : "false"}
+                data-dragging={dragging === img.id ? "true" : "false"}
+                data-over={over === img.id ? "true" : "false"}
+                onDragOver={(e) => {
+                  if (!dragging) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setOver(img.id);
+                }}
+                onDragLeave={() => setOver((o) => (o === img.id ? null : o))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  dropOn(img.id);
+                }}
               >
-                <div className="flex gap-3">
-                  <span
-                    className="admin-thumb !h-20 !w-20"
-                    style={{ aspectRatio: "1 / 1" }}
+                <div
+                  className="admin-gallery-thumb"
+                  draggable
+                  onDragStart={(e) => {
+                    dragged.current = img.id;
+                    setDragging(img.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", img.id);
+                  }}
+                  onDragEnd={() => {
+                    dragged.current = null;
+                    setDragging(null);
+                    setOver(null);
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.path} alt={img.alt ?? ""} />
+                  <button
+                    type="button"
+                    onClick={() => setMainImage(img.id, img.path)}
+                    disabled={busy || !canChange}
+                    data-main={isMain ? "true" : "false"}
+                    aria-label={
+                      isMain
+                        ? "This is the main photograph"
+                        : "Make this the main photograph"
+                    }
+                    title={
+                      isMain
+                        ? "This is the main photograph"
+                        : "Make this the main photograph"
+                    }
+                    className="admin-gallery-star"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.path}
-                      alt={img.alt ?? ""}
-                      className="h-full w-full object-contain p-1"
-                    />
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    {isMain ? (
-                      <span className="admin-badge admin-badge--accent mb-1.5">
-                        <Star className="h-3 w-3" />
-                        Main photograph
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setMain(img.id)}
-                        disabled={busy || !canChange}
-                        className="mb-1.5 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-50"
-                      >
-                        <Star className="h-3 w-3" />
-                        Make this the main one
-                      </button>
-                    )}
-
-                    <label
-                      htmlFor={`alt-${img.id}`}
-                      className="mb-1 block text-[11.5px] font-medium text-gray-500"
-                    >
-                      What this photograph shows
-                    </label>
-                    <input
-                      id={`alt-${img.id}`}
-                      type="text"
-                      defaultValue={img.alt ?? ""}
-                      onBlur={(e) => {
-                        if (e.target.value !== (img.alt ?? "")) {
-                          setAlt(img.id, e.target.value);
-                        }
-                      }}
-                      disabled={busy || !canChange}
-                      placeholder="A console seen from the front"
-                      className="input h-8 text-[12.5px]"
-                    />
-                  </div>
+                    <Star className="h-3.5 w-3.5" />
+                  </button>
                 </div>
 
-                <div className="mt-3 flex items-center gap-1.5 border-t border-gray-100 pt-2.5">
+                <div className="admin-gallery-tools">
+                  <span
+                    aria-hidden
+                    title="Drag to reorder"
+                    className="grid h-[26px] w-[22px] place-items-center text-gray-300"
+                  >
+                    <GripVertical className="h-3.5 w-3.5" />
+                  </span>
                   <button
                     type="button"
                     onClick={() => move(img.id, -1)}
                     disabled={busy || !canChange || i === 0}
-                    aria-label={`Move ${img.alt ?? "photograph"} earlier`}
-                    className="admin-icon-btn"
+                    aria-label={`Move photograph ${i + 1} earlier`}
+                    title="Move earlier"
+                    className="admin-icon-btn !h-[26px] !w-[26px]"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
@@ -271,14 +390,12 @@ export function ProductImages({
                     type="button"
                     onClick={() => move(img.id, 1)}
                     disabled={busy || !canChange || i === images.length - 1}
-                    aria-label={`Move ${img.alt ?? "photograph"} later`}
-                    className="admin-icon-btn"
+                    aria-label={`Move photograph ${i + 1} later`}
+                    title="Move later"
+                    className="admin-icon-btn !h-[26px] !w-[26px]"
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
-                  <span className="ml-1 text-[11.5px] text-gray-400">
-                    {i === 0 ? "First" : `Position ${i + 1}`}
-                  </span>
                   <button
                     type="button"
                     onClick={() => {
@@ -286,9 +403,9 @@ export function ProductImages({
                       replaceInput.current?.click();
                     }}
                     disabled={busy || !canChange}
-                    aria-label={`Replace ${img.alt ?? "photograph"}`}
-                    title={`Replace ${img.alt ?? "photograph"}`}
-                    className="admin-icon-btn ml-auto"
+                    aria-label={`Replace photograph ${i + 1}`}
+                    title="Replace"
+                    className="admin-icon-btn !h-[26px] !w-[26px]"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                   </button>
@@ -296,12 +413,28 @@ export function ProductImages({
                     type="button"
                     onClick={() => remove(img.id)}
                     disabled={busy || !canChange}
-                    aria-label={`Remove ${img.alt ?? "photograph"}`}
-                    title={`Remove ${img.alt ?? "photograph"}`}
-                    className="admin-icon-btn admin-icon-btn--bad"
+                    aria-label={`Remove photograph ${i + 1}`}
+                    title="Remove"
+                    className="admin-icon-btn admin-icon-btn--bad !h-[26px] !w-[26px]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                </div>
+
+                <div className="admin-gallery-foot">
+                  <input
+                    type="text"
+                    defaultValue={img.alt ?? ""}
+                    onBlur={(e) => {
+                      if (e.target.value !== (img.alt ?? "")) {
+                        setAlt(img.id, e.target.value);
+                      }
+                    }}
+                    disabled={busy || !canChange}
+                    placeholder="What this photograph shows"
+                    aria-label={`What photograph ${i + 1} shows`}
+                    className="input !h-7 !text-[11.5px]"
+                  />
                 </div>
               </li>
             );
@@ -335,43 +468,34 @@ export function ProductImages({
         </ul>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-          multiple
-          onChange={(e) => upload(e.target.files)}
-          disabled={!canChange || busy}
-          className="hidden"
-          id="product-images"
-        />
-        <input
-          ref={replaceInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-          onChange={(e) => upload(e.target.files)}
-          disabled={!canChange || busy}
-          className="hidden"
-          id="product-image-replace"
-        />
-        <label
-          htmlFor="product-images"
-          className={`btn btn-outline btn-sm ${!canChange || busy ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
-        >
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4" />
-          )}
-          Upload photographs
-        </label>
-        <p className="text-[12px] text-gray-500">
-          {canChange
-            ? "JPEG, PNG, WebP, GIF or AVIF, up to 8 MB each."
-            : "Save the product first, then add its photographs."}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+        multiple
+        onChange={(e) => upload(e.target.files)}
+        disabled={!canChange || busy}
+        className="hidden"
+        id="product-images"
+      />
+      <input
+        ref={replaceInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+        onChange={(e) => upload(e.target.files)}
+        disabled={!canChange || busy}
+        className="hidden"
+        id="product-image-replace"
+      />
+
+      {waiting > 0 && (
+        <p className="mt-3 flex items-center gap-2 text-[12.5px] text-brand-dark">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {waiting === 1
+            ? "One photograph is waiting. It will be uploaded as soon as the product is saved."
+            : `${waiting} photographs are waiting. They will be uploaded as soon as the product is saved.`}
         </p>
-      </div>
+      )}
     </div>
   );
-}
+});

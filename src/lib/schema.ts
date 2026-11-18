@@ -430,6 +430,7 @@ CREATE TABLE IF NOT EXISTS products (
   short_desc       TEXT,
   description      TEXT,
   specs            TEXT DEFAULT '{}',
+  tags             TEXT DEFAULT '[]',
   image            TEXT,
   image_alt        TEXT,
   attributes       TEXT DEFAULT '{}',
