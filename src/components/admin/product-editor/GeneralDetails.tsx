@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { Info, Upload } from "lucide-react";
 import { Field } from "@/components/admin/ui/Field";
 import { ProductImages } from "@/components/admin/ProductImages";
 import { ProductListingToggle } from "@/components/admin/ProductListingToggle";
@@ -119,12 +118,7 @@ export function GeneralDetails({
           </Field>
 
           <div className="admin-field-grid">
-            <Field
-              label="Category"
-              htmlFor="category"
-              error={editor.err("category")}
-              hint="What kind of thing this is."
-            >
+            <Field label="Category" htmlFor="category" error={editor.err("category")}>
               <SearchableSelect
                 id="category"
                 name="category"
@@ -142,7 +136,7 @@ export function GeneralDetails({
             <Field
               label="Subcategory"
               htmlFor="subcategory"
-              hint="A short label under the category, such as PS5."
+              hint="Such as PS5."
             >
               <SearchableSelect
                 id="subcategory"
@@ -160,11 +154,7 @@ export function GeneralDetails({
             </Field>
           </div>
 
-          <Field
-            label="Brand"
-            htmlFor="brand"
-            hint="Pick one the store already sells, or type a new one."
-          >
+          <Field label="Brand" htmlFor="brand">
             <SearchableSelect
               id="brand"
               name="brand"
@@ -182,7 +172,7 @@ export function GeneralDetails({
 
           <Field
             label="Show in online store"
-            hint="A product that is not listed stays out of every listing, but keeps its page, its history and its stock."
+            hint="A product that is not listed stays out of the shop, but keeps its page and its stock."
           >
             <ProductListingToggle
               slug={editor.slug}
@@ -216,31 +206,17 @@ export function GeneralDetails({
           </div>
 
           <div className="admin-gallery-actions">
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <span className="admin-gallery-title">Add images</span>
-              <span className="text-[12px] text-brand-dark">
+              <span className="text-[11.5px] text-brand-dark">
                 JPEG, PNG, WebP, GIF or AVIF, up to 8 MB each.
               </span>
             </div>
-            {saved ? (
-              <p className="mt-2 flex items-start gap-2 text-[12px] leading-relaxed text-brand-dark">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  The first photograph is the one the shop shows on its cards.
-                  Drag a photograph onto another to put it in a different
-                  place, or use the arrows beside it.
-                </span>
-              </p>
-            ) : (
-              <p className="mt-2 flex items-start gap-2 text-[12px] leading-relaxed text-brand-dark">
-                <Upload className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  You may choose the photographs now. They are uploaded as
-                  soon as the product has been saved — so do not reload the
-                  page before you do.
-                </span>
-              </p>
-            )}
+            <p className="mt-1.5 text-[11.5px] leading-relaxed text-brand-dark">
+              {saved
+                ? "The first photograph is the one the shop shows on its cards. Drag a photograph onto another to move it."
+                : "They are uploaded as soon as the product has been saved."}
+            </p>
           </div>
         </div>
       </div>

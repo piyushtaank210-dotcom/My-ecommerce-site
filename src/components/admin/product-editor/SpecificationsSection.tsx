@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, ListChecks } from "lucide-react";
+import { Info } from "lucide-react";
 import { ProductSpecs, type SpecRow } from "@/components/admin/ProductSpecs";
 import { EditorNote } from "./fields";
 
@@ -39,7 +39,7 @@ export function SpecificationsSection({
           the category, so their names are carried through the form rather
           than typed. */}
       {categoryFields.length > 0 && (
-        <div className="mb-5 rounded-lg border border-brand/30 bg-brand-tint/30 p-4">
+        <div className="admin-editor-narrow mb-5 rounded-lg border border-brand/30 bg-brand-tint/30 p-4">
           <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-brand">
             {categoryName} specifications
           </p>
@@ -51,7 +51,7 @@ export function SpecificationsSection({
               return (
                 <div
                   key={field}
-                  className="grid items-center gap-2 sm:grid-cols-[190px_1fr]"
+                  className="grid items-center gap-2 sm:grid-cols-[180px_1fr]"
                 >
                   <input
                     type="hidden"
@@ -78,17 +78,14 @@ export function SpecificationsSection({
         </div>
       )}
 
-      <ProductSpecs key={categoryName} specs={specs} />
+      <div className="admin-editor-narrow">
+        <ProductSpecs key={categoryName} specs={specs} />
+      </div>
 
-      <div className="mt-5">
+      <div className="admin-editor-narrow mt-5">
         <EditorNote icon={<Info className="h-4 w-4" />}>
-          <span className="flex items-start gap-2">
-            <ListChecks className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              These are shown on the product page as a table of name and
-              value, in the order they are written here.
-            </span>
-          </span>
+          These are shown on the product page as a table of name and value, in
+          the order they are written here.
         </EditorNote>
       </div>
     </section>

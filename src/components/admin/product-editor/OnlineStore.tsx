@@ -37,6 +37,7 @@ export function OnlineStore({ editor }: { editor: EditorApi }) {
         <Field
           label="Tags"
           htmlFor="tags"
+          className="admin-editor-narrow"
           hint="Short and plain — the words a customer would type to find this. Press Enter after each one."
         >
           <TagInput
@@ -77,7 +78,12 @@ export function OnlineStore({ editor }: { editor: EditorApi }) {
           </p>
 
           {showBadge ? (
-            <Field label="The mark" htmlFor="badge" hint="A few words at most.">
+            <Field
+              label="The mark"
+              htmlFor="badge"
+              className="admin-editor-narrow-sm"
+              hint="A few words at most."
+            >
               <input
                 id="badge"
                 name="badge"

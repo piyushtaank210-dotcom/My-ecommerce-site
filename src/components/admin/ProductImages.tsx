@@ -433,7 +433,7 @@ export const ProductImages = memo(function ProductImages({
                     disabled={busy || !canChange}
                     placeholder="What this photograph shows"
                     aria-label={`What photograph ${i + 1} shows`}
-                    className="input !h-7 !text-[11.5px]"
+                    className="input admin-input-sm !text-[11.5px]"
                   />
                 </div>
               </li>

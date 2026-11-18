@@ -160,30 +160,32 @@ export function FulfilmentDetails({
 
       <div className="admin-editor-split">
         {/* Dimensions */}
-        <div className="space-y-4">
-          {(
-            [
-              ["packageLength", "Length", length, setLength],
-              ["packageWidth", "Width", width, setWidth],
-              ["packageHeight", "Height", height, setHeight],
-            ] as const
-          ).map(([name, label, value, setValue]) => (
-            <Measurement
-              key={name}
-              id={name}
-              name={name}
-              label={label}
-              base={value}
-              units={LENGTH_UNITS}
-              unit={dimUnit}
-              onUnit={(u) => setDimUnit(u as LengthUnit)}
-              onBase={(v) => {
-                setValue(v);
-                onDirty();
-              }}
-              step="0.01"
-            />
-          ))}
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["packageLength", "Length", length, setLength],
+                ["packageWidth", "Width", width, setWidth],
+                ["packageHeight", "Height", height, setHeight],
+              ] as const
+            ).map(([name, label, value, setValue]) => (
+              <Measurement
+                key={name}
+                id={name}
+                name={name}
+                label={label}
+                base={value}
+                units={LENGTH_UNITS}
+                unit={dimUnit}
+                onUnit={(u) => setDimUnit(u as LengthUnit)}
+                onBase={(v) => {
+                  setValue(v);
+                  onDirty();
+                }}
+                step="0.01"
+              />
+            ))}
+          </div>
 
           <p className="admin-hint">
             Length × Width × Height
@@ -204,20 +206,22 @@ export function FulfilmentDetails({
 
         {/* Weight */}
         <div className="space-y-4">
-          <Measurement
-            id="weightGrams"
-            name="weightGrams"
-            label="Weight"
-            base={weight}
-            units={WEIGHT_UNITS}
-            unit={weightUnit}
-            onUnit={(u) => setWeightUnit(u as WeightUnit)}
-            onBase={(v) => {
-              setWeight(v);
-              onDirty();
-            }}
-            step="0.01"
-          />
+          <div className="max-w-[300px]">
+            <Measurement
+              id="weightGrams"
+              name="weightGrams"
+              label="Weight"
+              base={weight}
+              units={WEIGHT_UNITS}
+              unit={weightUnit}
+              onUnit={(u) => setWeightUnit(u as WeightUnit)}
+              onBase={(v) => {
+                setWeight(v);
+                onDirty();
+              }}
+              step="0.01"
+            />
+          </div>
 
           <EditorNote icon={<Ruler className="h-4 w-4" />}>
             Sizes are kept in centimetres and weights in grams, whatever unit

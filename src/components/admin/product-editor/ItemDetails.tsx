@@ -152,7 +152,7 @@ export function ItemDetails({
           label="What the item is"
           htmlFor="condition"
           error={editor.err("condition")}
-          hint="A console that has been opened, or one that has been put right, is not the same thing as a new one — and it is not sold as one."
+          hint="A console that has been opened or put right is not sold as a new one."
         >
           <div className="flex flex-wrap gap-2">
             {PRODUCT_CONDITIONS.map((c) => (
@@ -364,9 +364,8 @@ export function ItemDetails({
             )}
 
             <EditorNote icon={<Info className="h-4 w-4" />}>
-              Every price the shop shows already includes tax, so there is no
-              tax rate to set here. What the customer pays is what they are
-              charged.
+              Every price already includes tax, so there is no rate to set
+              here.
             </EditorNote>
           </div>
         </div>
@@ -466,8 +465,7 @@ export function ItemDetails({
 
               <EditorNote icon={<Package className="h-4 w-4" />}>
                 Every change to the count is written into the inventory
-                history, with who made it and why. The count itself is never
-                changed by anything else.
+                history, with who made it and why.
               </EditorNote>
             </div>
           </div>
@@ -500,11 +498,10 @@ export function ItemDetails({
         <div className="admin-field-grid">
           <Field
             label="Select layout"
-            hint="The fields a product in this category is asked about. They are set once for the whole category."
           >
-            <div className="flex h-[38px] items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-[13px] text-gray-600">
+            <div className="flex min-h-[38px] items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-600">
               <Settings2 className="mr-2 h-4 w-4 shrink-0 text-gray-400" />
-              <span className="truncate">
+              <span className="min-w-0">
                 {categoryName}
                 {specFields.length > 0
                   ? ` — ${specFields.join(", ")}`
@@ -543,10 +540,7 @@ export function ItemDetails({
             />
           </Field>
 
-          <Field
-            label="Returnable"
-            hint="A product that cannot be sent back is not eligible for a return or a replacement."
-          >
+          <Field label="Returnable">
             <ChoiceGroup
               name="returnable"
               value={returnable ? "yes" : "no"}

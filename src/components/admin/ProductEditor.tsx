@@ -459,9 +459,13 @@ export function ProductEditor({
       </div>
 
       {/* The bar of actions. It does not move either, so the product can
-          always be saved without scrolling back to the top. */}
+          always be saved without scrolling back to the top.
+
+          There are two groups, told apart by a line: what may be done to
+          the product — published, kept as a draft, looked at in the shop —
+          and what is done with it, which is to save it or to leave. */}
       <footer className="admin-editor-foot">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="admin-editor-foot-group">
           {isNew ? (
             <span className="admin-editor-foot-note">
               A new product is saved as a draft until it is published.
@@ -473,9 +477,10 @@ export function ProductEditor({
                 name="intent"
                 value="publish"
                 disabled={pending}
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline"
+                title="Save the product and put it on sale"
               >
-                <Upload className="h-3.5 w-3.5" />
+                <Upload className="h-4 w-4" />
                 Publish
               </button>
               <button
@@ -483,7 +488,8 @@ export function ProductEditor({
                 name="intent"
                 value="draft"
                 disabled={pending}
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline"
+                title="Save the product and take it off sale"
               >
                 Save as draft
               </button>
@@ -491,16 +497,18 @@ export function ProductEditor({
                 href={`/product/${slug}`}
                 target="_blank"
                 rel="noreferrer"
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost"
+                title="Open the product in the shop in a new tab"
               >
-                <Eye className="h-3.5 w-3.5" />
+                <Eye className="h-4 w-4" />
                 Preview
               </Link>
             </>
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="admin-editor-foot-group ml-auto">
+          <span className="admin-editor-foot-divider" aria-hidden />
           <button
             type="button"
             onClick={leave}
@@ -515,6 +523,7 @@ export function ProductEditor({
             value="keep"
             disabled={pending}
             className="btn btn-primary"
+            title="Save the product and leave it as it is"
           >
             {pending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

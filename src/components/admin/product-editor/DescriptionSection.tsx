@@ -40,7 +40,8 @@ export function DescriptionSection({
         <Field
           label="Short description"
           htmlFor="shortDesc"
-          hint="One or two lines for the product card. Plain words — this one is not formatted."
+          className="admin-editor-narrow"
+          hint="Plain words — this one is not formatted."
         >
           <textarea
             id="shortDesc"
