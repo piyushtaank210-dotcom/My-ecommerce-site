@@ -15,8 +15,13 @@ import type { LucideIcon } from "lucide-react";
 import { money } from "@/lib/format";
 import { STATES } from "@/lib/states";
 import type { Address } from "@/lib/types";
+import {
+  CHECKOUT_FIELDS,
+  checkCheckoutField,
+  type CheckoutFieldName,
+  type FieldProblem,
+} from "@/lib/checkout-fields";
 import { toast } from "./Toaster";
-
 /**
  * Razorpay's own checkout.
  *
@@ -95,6 +100,9 @@ export function CheckoutForm({
   const [busy, setBusy] = useState(false);
   const [method, setMethod] = useState<"online" | "cod">("online");
   const formRef = useRef<HTMLFormElement>(null);
+  // The field the shop has just pointed at. It is marked so that the
+  // customer can see which one the message is about.
+  const [flagged, setFlagged] = useState<CheckoutFieldName | null>(null);
   // Whether the money has been taken. It stops a closed payment window
   // from putting away an order that has in fact been paid for.
   const paid = useRef(false);
@@ -136,6 +144,15 @@ export function CheckoutForm({
     set("city", saved.city);
     set("state", saved.state);
     set("pincode", saved.pincode);
+
+    // A saved address was checked when it was saved, so the fields it
+    // has just filled are right — any mark on them goes.
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const name of CHECKOUT_FIELDS) delete next[name];
+      return next;
+    });
+    setFlagged(null);
   }
 
   /** What the customer has typed into a field. */
@@ -147,7 +164,225 @@ export function CheckoutForm({
   }
 
   /**
+   * What the customer has typed into a field, of any kind.
+   *
+   * A field may be a box, a list or a larger box, and all three are
+   * read the same way.
+   */
+  function valueOf(name: string): string {
+    const form = formRef.current;
+    if (!form) return "";
+    const el = form.elements.namedItem(name);
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLTextAreaElement
+    ) {
+      return el.value;
+    }
+    return "";
+  }
+
+  /**
+   * Scrolls to a field and puts the caret in it.
+   *
+   * The page is moved so that the field is on the screen — on a phone
+   * the form is longer than the window, and a field the customer
+   * cannot see is a field they cannot correct — and the caret is put
+   * in it, so that the correction can be made at once.
+   */
+  function pointAt(name: CheckoutFieldName) {
+    const form = formRef.current;
+    if (!form) return;
+    const el = form.elements.namedItem(name);
+    if (!(el instanceof HTMLElement)) return;
+
+    // The caret goes in first, without the browser's own jump to it, so
+    // that the scroll below is the one the customer sees.
+    el.focus({ preventScroll: true });
+    scrollToField(el);
+
+    // On a phone the keyboard covers the foot of the screen, and the
+    // page is scrolled again once it has opened — otherwise the field
+    // can end up behind it.
+    const view = typeof window === "undefined" ? null : window.visualViewport;
+    if (view) {
+      const onResize = () => scrollToField(el);
+      view.addEventListener("resize", onResize, { once: true });
+      window.setTimeout(
+        () => view.removeEventListener("resize", onResize),
+        700
+      );
+    }
+  }
+
+  /**
+   * Brings a field into the middle of what the customer can see.
+   *
+   * The middle of the screen rather than the top of it, because the
+   * shop's header is fixed to the top of the page and would otherwise
+   * sit over the field.
+   */
+  function scrollToField(el: HTMLElement) {
+    if (typeof window === "undefined") return;
+    const rect = el.getBoundingClientRect();
+    const view = window.visualViewport;
+    const seen = view ? view.height : window.innerHeight;
+    const top = view ? view.offsetTop : 0;
+    const centre = top + (seen - rect.height) / 2;
+    window.scrollTo({
+      top: window.scrollY + rect.top - centre,
+      behavior: wantsLessMovement() ? "auto" : "smooth",
+    });
+  }
+
+  /**
+   * Checks one field and, if it is wrong, says so.
+   *
+   * The shop's own rule is used, so that the form cannot disagree with
+   * the shop about what is acceptable. The message goes under the
+   * field, where the customer is looking, and is said again in a
+   * pop-up that stands away from the field and so has to name the
+   * detail it is about all by itself.
+   */
+  function checkField(name: CheckoutFieldName): FieldProblem | null {
+    return checkCheckoutField(name, valueOf(name));
+  }
+
+  /**
+   * Marks a field that is wrong, or unmarks one that has been put
+   * right.
+   *
+   * The record is left alone when nothing has changed, so that the
+   * page is not drawn again for nothing while the customer is typing.
+   */
+  function markField(name: CheckoutFieldName, problem: FieldProblem | null) {
+    setErrors((prev) => {
+      const had = prev[name];
+      const now = problem?.message;
+      if (had === now) return prev;
+      const next = { ...prev };
+      if (now) next[name] = now;
+      else delete next[name];
+      return next;
+    });
+    setFlagged((prev) => (problem ? name : prev === name ? null : prev));
+  }
+
+  /**
+   * Brings a field into view, if it is not already there.
+   *
+   * A field the customer has just left is normally on the screen, but
+   * it need not be — the form is taller than a phone, and the field
+   * can be above the fold. This is used when a mistake is found while
+   * the customer is filling the form in, so that the message is about
+   * something they can see.
+   */
+  function revealIfOffScreen(name: CheckoutFieldName) {
+    const form = formRef.current;
+    if (!form) return;
+    const el = form.elements.namedItem(name);
+    if (!(el instanceof HTMLElement)) return;
+
+    const rect = el.getBoundingClientRect();
+    const view = window.visualViewport;
+    const seen = view ? view.height : window.innerHeight;
+    const top = view ? view.offsetTop : 0;
+    if (rect.top >= top && rect.bottom <= top + seen) return;
+
+    scrollToField(el);
+  }
+
+  /**
+   * What happens when the customer leaves a field.
+   *
+   * The field is checked the moment they are done with it, so that a
+   * mistake is found while it is still in front of them. The message
+   * goes under the field, and is said again in a pop-up, which stands
+   * away from the field and so has to name the detail it is about.
+   *
+   * The field is brought back into view and, where the customer has
+   * walked away from the form altogether, the caret is put back into
+   * it — so that the mistake can be put right at once. It is not taken
+   * back from a customer who has moved on to another field, because
+   * that would trap them in one they have finished with.
+   */
+  function handleBlur(name: CheckoutFieldName, event?: React.FocusEvent) {
+    const problem = checkField(name);
+    markField(name, problem);
+    if (!problem) return;
+
+    revealIfOffScreen(name);
+    refocusIfAbandoned(name, event);
+    toast(problem.notice, "error", {
+      duration: 6000,
+      placement: "top",
+      key: "checkout-field",
+    });
+  }
+
+  /**
+   * Puts the caret back into a field the customer has walked away from.
+   *
+   * It is only put back when the customer has walked away into nothing
+   * — the browser says which field the caret went to, and there being
+   * none of them means they have left the form altogether. Where the
+   * caret has gone to another field, they are on their way there and
+   * the caret is left where they put it.
+   */
+  function refocusIfAbandoned(
+    name: CheckoutFieldName,
+    event?: React.FocusEvent
+  ) {
+    // The field the caret went to, if it went to one.
+    const movedTo = (event as React.FocusEvent | undefined)?.relatedTarget;
+    if (movedTo) return;
+
+    const form = formRef.current;
+    if (!form) return;
+    const el = form.elements.namedItem(name);
+    if (!(el instanceof HTMLElement)) return;
+
+    el.focus({ preventScroll: true });
+  }
+
+  /**
+   * What happens when the customer types in a field that was wrong.
+   *
+   * It is checked again as they type, so that the message under it
+   * goes as soon as it has been put right. A field that was not wrong
+   * is left alone, so that nobody is told off mid-sentence.
+   */
+  function handleChange(name: CheckoutFieldName) {
+    if (!errors[name]) return;
+    markField(name, checkField(name));
+  }
+
+  /**
+   * What happens when the customer picks a state.
+   *
+   * A state is either right or it is not one, so the field is checked
+   * the moment it is chosen rather than when it is left.
+   */
+  function handleState() {
+    const problem = checkField("state");
+    markField("state", problem);
+    if (problem) {
+      toast(problem.notice, "error", {
+        duration: 6000,
+        placement: "top",
+        key: "checkout-field",
+      });
+    }
+  }
+
+  /**
    * Starts the order.
+   *
+   * The details are checked here first, so that a mistake is found
+   * while the customer is still looking at the form and the field that
+   * is wrong can be taken to. The shop checks them again anyway — the
+   * browser is the customer's side of the conversation.
    *
    * The shop is asked for an order to pay against, and it answers with
    * the gateway's order, the amount and the currency. Money taken at the
@@ -160,9 +395,33 @@ export function CheckoutForm({
     const form = formRef.current;
     if (!form) return;
 
+    // Every field is checked, and the first one that is wrong — in the
+    // order they appear on the page — is the one that is pointed at.
+    const wrong: { name: CheckoutFieldName; problem: FieldProblem }[] = [];
+    for (const name of CHECKOUT_FIELDS) {
+      const problem = checkField(name);
+      if (problem) wrong.push({ name, problem });
+    }
+
+    if (wrong.length > 0) {
+      const found: Record<string, string> = {};
+      for (const { name, problem } of wrong) found[name] = problem.message;
+      setErrors(found);
+      setMessage("Check the highlighted fields.");
+      setFlagged(wrong[0].name);
+      pointAt(wrong[0].name);
+      toast(wrong[0].problem.notice, "error", {
+        duration: 6000,
+        placement: "top",
+        key: "checkout-field",
+      });
+      return;
+    }
+
     setBusy(true);
     setMessage(null);
     setErrors({});
+    setFlagged(null);
 
     const details = Object.fromEntries(new FormData(form).entries());
 
@@ -206,6 +465,20 @@ export function CheckoutForm({
       setBusy(false);
       setErrors(body.errors ?? {});
       setMessage(body.error ?? "We could not start the order. Please try again.");
+
+      // The shop named the fields that are wrong, so the customer is
+      // taken to the first of them, in the order they appear.
+      const named = CHECKOUT_FIELDS.find((name) => body.errors?.[name]);
+      if (named) {
+        setFlagged(named);
+        pointAt(named);
+        const problem = checkField(named);
+        toast(problem?.notice ?? body.errors?.[named] ?? body.error ?? "", "error", {
+          duration: 6000,
+          placement: "top",
+          key: "checkout-field",
+        });
+      }
       return;
     }
 
@@ -378,6 +651,9 @@ export function CheckoutForm({
             name="name"
             placeholder="Write your name"
             error={errors.name}
+            flagged={flagged === "name"}
+            onBlur={(e) => handleBlur("name", e)}
+            onChange={() => handleChange("name")}
             autoComplete="name"
             defaultValue={account?.name ?? preferred?.name ?? ""}
           />
@@ -387,6 +663,9 @@ export function CheckoutForm({
             type="email"
             placeholder="you@example.com"
             error={errors.email}
+            flagged={flagged === "email"}
+            onBlur={(e) => handleBlur("email", e)}
+            onChange={() => handleChange("email")}
             autoComplete="email"
             defaultValue={account?.email ?? ""}
           />
@@ -396,6 +675,9 @@ export function CheckoutForm({
             type="tel"
             placeholder="98765 43210"
             error={errors.phone}
+            flagged={flagged === "phone"}
+            onBlur={(e) => handleBlur("phone", e)}
+            onChange={() => handleChange("phone")}
             autoComplete="tel"
             className="sm:col-span-2"
             defaultValue={account?.phone ?? preferred?.phone ?? ""}
@@ -432,6 +714,9 @@ export function CheckoutForm({
             name="address1"
             placeholder="Flat / House no., Street"
             error={errors.address1}
+            flagged={flagged === "address1"}
+            onBlur={(e) => handleBlur("address1", e)}
+            onChange={() => handleChange("address1")}
             autoComplete="address-line1"
             className="sm:col-span-2"
             defaultValue={preferred?.address1 ?? ""}
@@ -450,6 +735,9 @@ export function CheckoutForm({
             name="city"
             placeholder="Pune"
             error={errors.city}
+            flagged={flagged === "city"}
+            onBlur={(e) => handleBlur("city", e)}
+            onChange={() => handleChange("city")}
             autoComplete="address-level2"
             defaultValue={preferred?.city ?? ""}
           />
@@ -461,7 +749,13 @@ export function CheckoutForm({
               id="state"
               name="state"
               defaultValue={preferred?.state ?? ""}
-              className={`input h-[42px] cursor-pointer ${errors.state ? "input-error" : ""}`}
+              onBlur={(e) => handleBlur("state", e)}
+              onChange={() => handleState()}
+              aria-invalid={Boolean(errors.state)}
+              aria-describedby={errors.state ? "state-error" : undefined}
+              className={`input h-[42px] cursor-pointer ${errors.state ? "input-error" : ""} ${
+                flagged === "state" ? "input-flagged" : ""
+              }`}
             >
               <option value="" disabled>
                 Select state
@@ -473,7 +767,9 @@ export function CheckoutForm({
               ))}
             </select>
             {errors.state && (
-              <p className="mt-1 text-[12.5px] text-red-600">{errors.state}</p>
+              <p id="state-error" className="mt-1 text-[12.5px] text-red-600">
+                {errors.state}
+              </p>
             )}
           </div>
           <Field
@@ -481,6 +777,9 @@ export function CheckoutForm({
             name="pincode"
             placeholder="411001"
             error={errors.pincode}
+            flagged={flagged === "pincode"}
+            onBlur={(e) => handleBlur("pincode", e)}
+            onChange={() => handleChange("pincode")}
             autoComplete="postal-code"
             defaultValue={preferred?.pincode ?? ""}
           />
@@ -562,6 +861,17 @@ export function CheckoutForm({
       </p>
     </form>
   );
+}
+
+/**
+ * Whether the visitor has asked their system for less movement.
+ *
+ * A customer who has asked for that does not want the page sliding
+ * about; the field is put in front of them at once instead.
+ */
+function wantsLessMovement(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /**
@@ -687,6 +997,9 @@ function Field({
   label,
   name,
   error,
+  flagged = false,
+  onBlur,
+  onChange,
   type = "text",
   placeholder,
   autoComplete,
@@ -696,6 +1009,12 @@ function Field({
   label: string;
   name: string;
   error?: string;
+  /** Whether this is the field the shop has just pointed at. */
+  flagged?: boolean;
+  /** Called when the customer leaves the field. */
+  onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
+  /** Called when the customer types in the field. */
+  onChange?: () => void;
   type?: string;
   placeholder?: string;
   autoComplete?: string;
@@ -715,9 +1034,18 @@ function Field({
         autoComplete={autoComplete}
         defaultValue={defaultValue}
         aria-invalid={Boolean(error)}
-        className={`input h-[42px] ${error ? "input-error" : ""}`}
+        aria-describedby={error ? `${name}-error` : undefined}
+        onBlur={onBlur}
+        onChange={onChange}
+        className={`input h-[42px] ${error ? "input-error" : ""} ${
+          flagged ? "input-flagged" : ""
+        }`}
       />
-      {error && <p className="mt-1 text-[12.5px] text-red-600">{error}</p>}
+      {error && (
+        <p id={`${name}-error`} className="mt-1 text-[12.5px] text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

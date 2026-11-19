@@ -320,6 +320,21 @@
     box-shadow: 0 0 0 3px rgb(220 38 38 / 0.12);
   }
 
+  /* The field the shop has just pointed at.
+
+     It already has a mistake in it, so it already has a red edge; this
+     adds a soft halo around it, so that when more than one field is
+     wrong the one the message is about can be found at a glance. The
+     halo is faint on purpose — it should point, not shout. */
+  .input-flagged {
+    box-shadow: 0 0 0 3px rgb(220 38 38 / 0.16);
+  }
+
+  .input-flagged:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgb(220 38 38 / 0.22);
+  }
+
   .label {
     display: block;
     font-size: 0.8125rem;

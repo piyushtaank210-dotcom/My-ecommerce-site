@@ -185,6 +185,86 @@ export const setCheckbox = (name) => `(() => {
 })()`;
 
 /**
+ * Puts the caret in a field, the way a person clicking on it would.
+ *
+ * A headless browser has no window of its own, so the page is not the
+ * focused one — and a field cannot be focused properly until it is.
+ * This says so before the field is touched.
+ */
+export async function focusField(cdp, name) {
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await cdp.evaluate(`(() => {
+    const el = document.querySelector('[name="${name}"]');
+    if (!el) return 'NOT_FOUND';
+    el.focus();
+    return 'FOCUSED';
+  })()`);
+}
+
+/**
+ * Types into whatever has the caret, the way a person would.
+ */
+export async function typeText(cdp, text) {
+  await cdp.send("Input.insertText", { text });
+}
+
+/**
+ * Clicks on the page, away from any field.
+ *
+ * This is a real click, sent through the browser's own input pipeline,
+ * so the page behaves exactly as it does for a person: whatever had
+ * the caret loses it, and the click lands where it was aimed.
+ *
+ * A click made inside the page would not do — the browser does not
+ * take the caret away from a field when the page is asked to click on
+ * its own.
+ */
+export async function clickAway(cdp, selector = "h1") {
+  const box = await cdp.evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + 4), y: Math.round(r.top + 4) };
+  })()`);
+  if (!box) return false;
+
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: box.x,
+    y: box.y,
+    button: "left",
+    clickCount: 1,
+  });
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: box.x,
+    y: box.y,
+    button: "left",
+    clickCount: 1,
+  });
+  return true;
+}
+
+/**
+ * Presses the tab key, moving the caret to the next field.
+ *
+ * This is how a field is left in the test. Asking the page to blur the
+ * field itself does not work — the browser only fires the event when
+ * the caret really moves — and the whole point of the check is that the
+ * form behaves as it does for a person.
+ */
+export async function pressTab(cdp) {
+  const tab = {
+    key: "Tab",
+    code: "Tab",
+    windowsVirtualKeyCode: 9,
+    nativeVirtualKeyCode: 9,
+  };
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...tab });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...tab });
+}
+
+/**
  * Waits for the page to become something.
  *
  * The shop's database is a long way off, so a change can take a moment to

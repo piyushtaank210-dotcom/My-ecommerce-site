@@ -21,36 +21,65 @@ import {
   findIntent,
   type PurchaseLine,
 } from "./purchase";
+import {
+  CHECKOUT_FIELD_RULES,
+  checkCheckoutField,
+  type CheckoutFieldName,
+} from "./checkout-fields";
 
-/** The gateway the shop takes payment through. */
-export const GATEWAY_NAME = "razorpay";
+/**
+ * One of the fields the customer fills in, held to the shop's own rule.
+ *
+ * The rule itself lives in `checkout-fields`, apart from the rest of
+ * the checkout, so that the form in the browser can hold exactly the
+ * same one. A customer is told what is wrong with a field by the form,
+ * and the shop has to agree with the form about it — otherwise the
+ * form would let a customer type something the shop would refuse.
+ */
+function checkoutField(name: CheckoutFieldName) {
+  const rule = CHECKOUT_FIELD_RULES[name];
+  return z
+    .string({ error: rule.required })
+    .trim()
+    .superRefine((value, ctx) => {
+      const problem = checkCheckoutField(name, value);
+      if (problem) {
+        ctx.addIssue({ code: "custom", message: problem.message });
+      }
+    });
+}
 
 /**
  * What the customer fills in.
  *
- * The payment method is either money taken now through the gateway, or
- * money taken when the goods arrive. Which way the money goes is not
- * decided here — the customer chooses that on the gateway's own
- * checkout, and the shop records what the gateway says it was.
+ * The rules themselves live apart, in `checkout-fields.ts`, because the
+ * form in the browser has to hold the same ones — a customer is told
+ * what is wrong with a field by the form, and the shop has to agree
+ * with the form about it.
+ *
+ * The form checks first, so that the customer is told straight away;
+ * the shop checks again anyway, because the browser is the customer's
+ * side of the conversation and cannot be trusted with anything that
+ * decides what is owed.
  */
 export const checkoutSchema = z.object({
-  name: z.string().trim().min(2, "Enter your full name."),
-  email: z.string().trim().email("Enter a valid email address."),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^[0-9+\-\s]{10,15}$/, "Enter a valid phone number."),
-  address1: z.string().trim().min(5, "Enter your street address."),
+  name: checkoutField("name"),
+  email: checkoutField("email"),
+  phone: checkoutField("phone"),
+  address1: checkoutField("address1"),
   address2: z.string().trim().optional(),
-  city: z.string().trim().min(2, "Enter your city."),
-  state: z.string().trim().min(2, "Select your state."),
-  pincode: z.string().trim().regex(/^[0-9]{6}$/, "PIN code must be 6 digits."),
+  city: checkoutField("city"),
+  state: checkoutField("state"),
+  pincode: checkoutField("pincode"),
   notes: z.string().trim().optional(),
   paymentMethod: z.enum(["online", "cod"]),
   saveAddress: z.string().trim().optional(),
 });
 
 export type CheckoutDetails = z.infer<typeof checkoutSchema>;
+
+/** The gateway the shop takes payment through. */
+export const GATEWAY_NAME = "razorpay";
 
 /** The basket, as the order will be written. */
 export type CheckoutBasket = {

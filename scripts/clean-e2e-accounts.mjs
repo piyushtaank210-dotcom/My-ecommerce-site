@@ -17,14 +17,24 @@ import { shopDb, tokenForRole } from "./lib/session.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-/** The shape of an account the end-to-end suite registers. */
-const FIXTURE = /^e2e\d+@example\.com$/;
+/**
+ * The shape of an account a test registers.
+ *
+ * The end-to-end suite's own accounts, and the ones the checkout's
+ * error check registers. Only accounts shaped like a test's own fixture
+ * are ever touched — a real customer's account can never be caught by
+ * this.
+ */
+const FIXTURES = [
+  /^e2e\d+@example\.com$/,
+  /^checkout-errors-\d+@example\.com$/,
+];
 
 const pool = shopDb();
 const admin = await tokenForRole("admin");
 
 const { rows: fixtures } = await pool.query(
-  "SELECT id, email FROM users WHERE email LIKE 'e2e%@example.com'"
+  "SELECT id, email FROM users WHERE email LIKE 'e2e%@example.com' OR email LIKE 'checkout-errors-%@example.com'"
 );
 await pool.end();
 
@@ -37,7 +47,7 @@ let removed = 0;
 let refused = 0;
 
 for (const f of fixtures) {
-  if (!FIXTURE.test(f.email)) {
+  if (!FIXTURES.some((shape) => shape.test(f.email))) {
     console.log(`· ${f.email} is not a suite fixture — left alone`);
     refused++;
     continue;
