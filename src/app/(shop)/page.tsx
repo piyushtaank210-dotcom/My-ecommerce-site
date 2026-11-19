@@ -111,7 +111,12 @@ export default async function HomePage() {
             <h2 className="text-[20px] font-bold text-ink sm:text-[24px]">
               Shop by Category
             </h2>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-gray-500 sm:text-[13.5px]">
+            {/* The line under the heading is for the tablet and the
+                desktop. A phone shows the heading and the link, and the
+                promise it makes is made again, in full, a little further
+                down the page — so the phone is not asked to read it
+                twice. */}
+            <p className="mt-1.5 hidden max-w-xl text-[13px] leading-relaxed text-gray-500 sm:block sm:text-[13.5px]">
               Everything we sell, by what it is — genuine stock, warranted,
               and dispatched the same working day.
             </p>
@@ -160,9 +165,10 @@ export default async function HomePage() {
                         out over the copy below.
 
                         On a phone the strip is shorter and the supporting
-                        photographs sit side by side underneath the hero one,
-                        rather than in a narrow column beside it — a column
-                        that narrow crops the controllers in half.
+                        photograph sits underneath the hero one, across the
+                        full width of the card, rather than in a narrow
+                        column beside it — a column that narrow crops the
+                        controllers in half.
 
                         The height of the strip is not written down on a
                         phone: each tile is given the shape it needs by its
@@ -192,23 +198,25 @@ export default async function HomePage() {
                         )}
                       </div>
 
-                      {/* The supporting products. A category whose second
-                          photograph is missing would otherwise leave half
-                          the row empty, so the row is split by the number
-                          of pictures there actually are — and a lone
-                          picture is given the width of the pair it would
-                          have been part of. */}
-                      <div
-                        className={`grid gap-1.5 sm:grid-cols-1 sm:grid-rows-2 sm:gap-4 ${
-                          support.length > 1 ? "grid-cols-2" : "grid-cols-1"
-                        }`}
-                      >
-                        {support.map((p) => (
+                      {/* The supporting products.
+
+                          A phone shows one of these, under the picture
+                          that leads the category: two photographs in the
+                          card, and no more. The rest of the strip belongs
+                          to the tablet and the desktop, which have the
+                          width to carry it — so the pictures after the
+                          first are hidden there, and are never fetched. */}
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-1 sm:grid-rows-2 sm:gap-4">
+                        {support.map((p, i) => (
                           <div
                             key={p.slug}
-                            className={`flex items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-card sm:aspect-auto sm:p-3 ${
-                              support.length > 1 ? "aspect-square" : "aspect-[2/1]"
-                            }`}
+                            /* The first photograph is the one the phone
+                               shows. The rest of the strip is kept for
+                               the wider screens, so it is hidden there
+                               and never painted — nor fetched. */
+                            className={`${
+                              i === 0 ? "flex" : "hidden sm:flex"
+                            } aspect-[2/1] items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-card sm:aspect-auto sm:p-3`}
                           >
                             {/*
                               Served at the size it is shown at — see the
@@ -243,7 +251,12 @@ export default async function HomePage() {
                       {copy?.blurb ?? cat.blurb}
                     </p>
 
-                    <ul className="mt-3 grid gap-x-4 gap-y-1.5 sm:mt-5 sm:gap-x-6 sm:gap-y-2.5 lg:grid-cols-2">
+                    {/* The selling points. A phone leaves them out: four
+                        lines in a card this narrow take the room the
+                        photographs need, and every promise on this list is
+                        made again, in full, in the trust panel further
+                        down the page. */}
+                    <ul className="mt-3 hidden gap-x-4 gap-y-1.5 sm:mt-5 sm:grid sm:gap-x-6 sm:gap-y-2.5 lg:grid-cols-2">
                       {(copy?.points ?? []).map((point) => (
                         <li
                           key={point}

@@ -625,8 +625,15 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   </h1>
 
                   {s.body && (
+                    /* The line under the headline is for the tablet and
+                       the desktop. A phone carries the eyebrow, the
+                       headline and the buttons, and nothing else — the
+                       photograph is the point of the hero, and the copy
+                       was sitting on top of it. The promise the line
+                       makes is made again, in full, in the trust panel
+                       below the hero. */
                     <p
-                      className={`mt-4 max-w-[48ch] text-[14.5px] leading-relaxed text-white/85 sm:mt-5 sm:text-[16.5px] ${
+                      className={`mt-4 hidden max-w-[48ch] text-[14.5px] leading-relaxed text-white/85 sm:mt-5 sm:block sm:text-[16.5px] ${
                         on ? "hero-rise" : ""
                       }`}
                       style={on ? { animationDelay: "180ms" } : undefined}
