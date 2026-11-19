@@ -62,6 +62,20 @@ Vercel's *Production* environment is not enough for a preview build.
 
 The SQLite file in `data/` is what the shop kept its data in before. It is now only the seed — the file the migration reads from — and the scripts that check the catalogue read it directly.
 
+#### The schema is applied by hand, before the new code goes out
+
+The app never changes the shape of the database on its own. When a change
+adds a table or a column, the database is brought up to date first:
+
+```bash
+npm run db:schema
+```
+
+It is safe to run as often as you like — every statement is written so that
+running it twice changes nothing the second time — and it never drops,
+empties or rewrites anything. Run it against the same database the shop is
+using, before the new code is deployed.
+
 To check the database is there and holds together:
 
 ```bash
@@ -547,7 +561,7 @@ account.
 | `/admin/inventory/history` | Every change to a stock level, and why it was made |
 | `/admin/categories` | The categories, their subcategories and specification fields — and the brands, on a tab of their own |
 | `/admin/import` | The catalogue in and out as a spreadsheet — export, template, and a preview before anything is imported |
-| `/admin/messages` | Enquiries from the contact page, triaged new → open → answered → closed |
+| `/admin/messages` | Enquiries from the contact page, triaged new → open → answered → closed. Each one can be answered by email from the **Reply** button — the reply goes to the customer, is kept with the enquiry, and the enquiry is marked as answered once it has actually gone out |
 | `/admin/users` | Every account, with its role, order count and spend; roles changed and accounts removed |
 | `/admin/products` | The whole catalogue — listed, delisted, draft and archived — with a SKU column, brand / stock / status / listing filters, sorting, counts beside every filter, bulk selection, and per-row archive, duplicate and delete actions |
 | `/admin/products/[slug]` | One product: the editor, its photographs, and its **Variations** — the attributes it varies by and the options that come out of them |
@@ -1206,6 +1220,7 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `POST` | `/api/admin/inventory/orders/[id]/resolve` | Settle a return: `{"action":"restock\|write_off","reason":"…"}` |
 | `GET` | `/api/admin/messages` | The enquiries; `?q=`, `?status=`, `?subject=`, `?page=`, `?limit=` |
 | `GET` `PATCH` | `/api/admin/messages/[id]` | Read an enquiry, or move it along with `{"status": "answered"}` |
+| `POST` | `/api/admin/messages/[id]/reply` | Answer the customer by email — `{"body": "…", "replyKey": "…"}`. The reply is written down before it is sent, and the same `replyKey` is never sent twice |
 | `GET` `PATCH` | `/api/account/profile` | The signed-in customer's own details |
 | `GET` | `/api/account/orders` | The signed-in customer's own orders |
 | `GET` `POST` | `/api/account/addresses` | The address book |
@@ -1706,6 +1721,25 @@ the main one, describes one and removes one, and checks that a file that is
 not a photograph is turned away. Everything it creates is removed again
 through the back office's own endpoints.
 
+The enquiries have one too:
+
+```bash
+npm run check:enquiry-replies
+```
+
+It answers an enquiry and checks that the reply reached the customer, that
+what was written is kept with the enquiry, and that the enquiry is marked as
+answered because the reply actually went out. It checks the other way round
+too: a reply the mail service refuses is recorded as one that did not go
+out, with the reason against it, and the enquiry is left exactly where it
+was. It checks that the same reply sent twice is one email and one row, that
+an empty reply is refused and writes nothing, that a stranger and a customer
+are both turned away from the endpoint while support may send one, and that
+the conversation is on the Enquiries page afterwards.
+
+The dev server must be running on port 3000 — the checks talk to the
+endpoint and the page over HTTP.
+
 To grab a single screenshot of any page:
 
 ```bash
@@ -1813,6 +1847,7 @@ src/
     admin-order-actions.ts ← confirming, cancelling and refunding an order
     account-actions.ts  ← customer-panel server actions
     contact.ts          ← contact-page enquiries
+    enquiry-replies.ts  ← the shop's replies to an enquiry, and the mail they go out with
     order-status.ts     ← the order statuses, the payment statuses and the rules of a move (no database)
     order-dispatch.ts   ← the dispatch of an order, and the money that goes back
     order-dispatch-options.ts ← the choices and the couriers' tracking pages (no database)
@@ -1883,6 +1918,16 @@ This is a **demonstration store**. The commerce flows are complete, but:
   go out can be sent again from the Enquiries section. The shop's
   address for them is `ENQUIRY_NOTIFICATION_EMAIL`, and it defaults to
   `NEXT_PUBLIC_STORE_EMAIL`.
+- **An enquiry is answered by email from the back office.** The Reply
+  button writes the reply down first and sends it to the address on the
+  enquiry afterwards, through the same Resend module every other message
+  uses. Three things it keeps: a reply that did not go out is never
+  recorded as one that did — the row says `sent` only when Resend said
+  so, and it says why when it did not; the enquiry is only marked as
+  answered when the reply actually went out; and a reply is only ever
+  sent once, because the key it was written under is unique and is
+  claimed before the message goes out. The whole conversation is kept
+  with the enquiry and shown on the Enquiries page.
 - **"Forgot password?" is a placeholder** — there is no password-reset flow.
 - **No saved payment methods.** Addresses are saved on the account; cards are
   not.

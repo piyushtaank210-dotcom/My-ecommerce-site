@@ -32,3 +32,26 @@ export function formatDate(iso: string): string {
     year: "numeric",
   }).format(d);
 }
+
+/**
+ * A date with the time on it, in the shop's own time zone.
+ *
+ * The back office reads when a thing happened, and "yesterday" is not
+ * enough when a customer is waiting for an answer — so the hour and the
+ * minute are on it too, in IST, which is the clock the shop works to.
+ */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
+  if (Number.isNaN(d.getTime())) return iso;
+  return (
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d) + " IST"
+  );
+}

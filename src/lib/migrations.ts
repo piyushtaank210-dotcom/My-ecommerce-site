@@ -10,7 +10,7 @@ import {
   RETURN_WINDOW_REVISION_SETTING,
   RETURN_WINDOW_SETTING,
 } from "./return-policy.ts";
-import { returnsSchemaSql, orderDispatchSchemaSql } from "./schema.ts";
+import { returnsSchemaSql, orderDispatchSchemaSql, enquiryRepliesSchemaSql } from "./schema.ts";
 import type { Db } from "./db.ts";
 
 /**
@@ -145,6 +145,10 @@ export async function applyMigrations(db: Db): Promise<void> {
   // if it is not already there, so this is safe to run on every database
   // open.
   await db.exec(orderDispatchSchemaSql(identity, now));
+  // The table the shop's replies to an enquiry are kept in. It is
+  // created only if it is not already there, so this is safe to run on
+  // every database open.
+  await db.exec(enquiryRepliesSchemaSql(identity, now));
 
   const add = (table: string, column: string, ddl: string): void => {
     // PostgreSQL can add a column without being told whether it is

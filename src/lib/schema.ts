@@ -340,6 +340,59 @@ CREATE TABLE IF NOT EXISTS order_refunds (
 }
 
 /**
+ * The table the shop's replies to an enquiry are kept in.
+ *
+ * It is kept apart from the main schema so that a migration can create
+ * it on a database written before it existed, without running the whole
+ * schema over again. Every statement in here is written so that running
+ * it twice changes nothing.
+ */
+export function enquiryRepliesSchemaSql(identity: string, now: string): string {
+  return `
+-- A reply the shop wrote to a customer.
+--
+-- Every attempt is kept: what was written, where it was sent, what
+-- became of it, and who wrote it. A reply that did not go out is never
+-- recorded as one that did — the status says which of the two it was.
+CREATE TABLE IF NOT EXISTS enquiry_replies (
+  id           ${identity},
+  -- The enquiry it answers. Removing the enquiry removes its replies.
+  message_id   INTEGER NOT NULL REFERENCES contact_messages(id) ON DELETE CASCADE,
+  -- What the shop wrote.
+  body         TEXT NOT NULL,
+  -- Where it went, and under what name.
+  to_email     TEXT NOT NULL,
+  to_name      TEXT,
+  subject      TEXT NOT NULL,
+  -- sent | failed | pending
+  --
+  -- A reply that is still being sent is 'pending'. It becomes 'sent'
+  -- when the mail service says it went out, and 'failed' when it did
+  -- not — a reply that failed is never recorded as one that was sent.
+  status       TEXT NOT NULL DEFAULT 'pending',
+  -- The mail service's own reference for the message.
+  email_id     TEXT,
+  -- Why it did not go out, when it did not.
+  error        TEXT,
+  -- The key the reply was written under.
+  --
+  -- It is unique, and it is what makes a second click a second click
+  -- rather than a second email: the same key is never written twice,
+  -- so a reply that has already been sent is not sent again.
+  reply_key    TEXT NOT NULL UNIQUE,
+  -- Who wrote it.
+  sent_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  sent_by_name TEXT,
+  created_at   TEXT NOT NULL ${now},
+  -- When it actually went out.
+  sent_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_enquiry_replies_message ON enquiry_replies(message_id);
+`;
+}
+
+/**
  * The schema, built for one database or the other.
  */
 export function schemaSql(dialect: Dialect = "postgres"): string {
@@ -782,6 +835,8 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   email_sent_at TEXT,
   created_at TEXT NOT NULL ${now}
 );
+
+${enquiryRepliesSchemaSql(identity, now)}
 
 CREATE TABLE IF NOT EXISTS addresses (
   id         ${identity},

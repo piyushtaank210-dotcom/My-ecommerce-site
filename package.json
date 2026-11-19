@@ -85,6 +85,7 @@
     "cleanup:razorpay": "node scripts/cleanup-razorpay-orders.mjs",
     "check:return-settings": "node scripts/check-return-settings.mjs",
     "check:enquiries": "node scripts/check-enquiries.mjs",
+    "check:enquiry-replies": "node scripts/check-enquiry-replies.mjs",
     "check:return-notifications": "node scripts/check-return-notifications.mjs",
     "check:resend": "node scripts/check-resend.mjs",
     "check:resend:delivery": "node scripts/check-resend-delivery.mjs"
