@@ -89,6 +89,23 @@ export const PRODUCT_STATUS_TONE: Record<string, AdminTone> = {
 };
 
 /**
+ * Where a parcel is.
+ *
+ * It is a different thing from where the order is, and it is coloured by
+ * what it means: waiting on the courier, moving, finished, or refused.
+ */
+export const SHIPMENT_STATUS_TONE: Record<string, AdminTone> = {
+  pending: "warn",
+  picked_up: "info",
+  in_transit: "info",
+  out_for_delivery: "accent",
+  delivered: "good",
+  exception: "bad",
+  cancelled: "neutral",
+  unknown: "neutral",
+};
+
+/**
  * What kind of stock movement it was.
  *
  * A sale and an order reopened are the shop's own doing; a restock and a

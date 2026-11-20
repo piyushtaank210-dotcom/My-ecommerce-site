@@ -22,8 +22,13 @@ import { STOCK_STATE_LABEL } from "@/lib/stock";
 import { getUserById } from "@/lib/auth";
 import { getCancellationForOrder } from "@/lib/cancellations";
 import { getOrderRefund, courierTrackingUrl } from "@/lib/order-dispatch";
+import {
+  getShipmentForOrder,
+  getTrackingEvents,
+} from "@/lib/shipment-tracking";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import { OrderActionBar } from "@/components/admin/OrderActionBar";
+import { ShipmentTrackingPanel } from "@/components/admin/ShipmentTrackingPanel";
 import { OrderStatusSteps } from "@/components/admin/OrderStatusSteps";
 import { OrderCancellationPanel } from "@/components/admin/OrderCancellationPanel";
 import { PageHeader } from "@/components/admin/ui/PageHeader";
@@ -48,6 +53,8 @@ export default async function AdminOrderDetailPage({
   const returns = await getReturnRequestsForOrder(order.id);
   const cancellation = await getCancellationForOrder(order.id);
   const refund = await getOrderRefund(order.id);
+  const shipment = await getShipmentForOrder(order.id);
+  const trackingEvents = await getTrackingEvents(order.id);
 
   const canUpdate = can(user.role, "orders.update");
   const cancelled = order.status === "cancelled";
@@ -249,6 +256,19 @@ export default async function AdminOrderDetailPage({
                 </div>
               )}
             </Panel>
+          )}
+
+          {/* Where the parcel is, as the courier says. */}
+          {hasShipping && (
+            <ShipmentTrackingPanel
+              orderId={order.id}
+              shipment={shipment}
+              events={trackingEvents}
+              courierName={order.courier_partner}
+              awb={order.tracking_id}
+              canUpdate={canUpdate}
+              trackingUrl={order.tracking_url ?? shipment?.trackingUrl ?? null}
+            />
           )}
 
           {/* The cancellation. */}

@@ -70,6 +70,7 @@
     "db:schema": "node scripts/apply-schema.mjs",
     "check:refunds": "node scripts/check-refunds.mjs",
     "check:order-dispatch": "node scripts/check-order-dispatch.mjs",
+    "check:shiprocket": "node scripts/check-shiprocket.mjs",
     "check:order-actions": "node scripts/check-order-actions.mjs",
     "check:pending-orders": "node scripts/check-pending-orders.mjs",
     "check:razorpay": "node scripts/check-razorpay.mjs",

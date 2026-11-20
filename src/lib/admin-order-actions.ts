@@ -9,6 +9,7 @@ import {
   refreshRefundStatus,
   refundCancelledOrder,
 } from "./order-dispatch";
+import { refreshShipmentTracking } from "./shipment-tracking";
 import type { OrderActionState } from "./order-action-state";
 
 /**
@@ -127,6 +128,38 @@ export async function refundOrderAction(
 
   revalidateOrder(orderId);
   return { ok: true, message: result.message, done: "refund" };
+}
+
+/**
+ * Asks the courier where the parcel is.
+ *
+ * The courier's own word is what is shown — the parcel's status, its
+ * journey and when it is expected — and the answer is written down, so
+ * that the same event is never written down twice.
+ */
+export async function refreshTrackingAction(
+  _prev: OrderActionState,
+  formData: FormData
+): Promise<OrderActionState> {
+  const user = await requirePermission("orders.update");
+  if (!can(user.role, "orders.update")) {
+    return { ok: false, message: "You cannot change orders." };
+  }
+
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  if (!orderId) return { ok: false, message: "The order is missing." };
+
+  const result = await refreshShipmentTracking({
+    orderId,
+    userId: user.id,
+  });
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+
+  revalidateOrder(orderId);
+  return { ok: true, message: result.message, done: "tracking" };
 }
 
 /**

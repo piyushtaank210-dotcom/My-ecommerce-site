@@ -36,6 +36,7 @@ import {
   refundThroughGateway,
 } from "./refund-gateway";
 import { GATEWAY } from "./gateway-records";
+import { normaliseAwb } from "./shipment-status";
 import {
   CANCELLATION_REASON_CODES,
   CANCELLATION_REASON_LABEL,
@@ -308,6 +309,7 @@ export async function confirmOrderWithShipping(input: {
                 shipping_method = ?,
                 custom_shipping_method = ?,
                 tracking_id = ?,
+                awb_key = ?,
                 shipping_confirmed_at = COALESCE(shipping_confirmed_at, ?),
                 status = ?
           WHERE id = ?`
@@ -317,6 +319,10 @@ export async function confirmOrderWithShipping(input: {
         checked.value.shippingMethod,
         checked.value.customShippingMethod,
         checked.value.trackingId,
+        // The tracking number in the one form the shop matches on, so
+        // that the courier's webhook finds this order even when it
+        // writes the number a different way.
+        normaliseAwb(checked.value.trackingId),
         new Date().toISOString(),
         nextStatus,
         input.orderId

@@ -340,6 +340,121 @@ CREATE TABLE IF NOT EXISTS order_refunds (
 }
 
 /**
+ * The tables the shipment tracking added.
+ *
+ * They are kept apart from the main schema so that a migration can create
+ * them on a database written before they existed, without running the
+ * whole schema over again. Every statement is written so that running it
+ * twice changes nothing.
+ *
+ * There are three tables, and they answer three different questions:
+ *
+ *   order_shipments            — what is known about the parcel right now
+ *   shipment_tracking_events   — everything the courier has said, in order
+ *   courier_webhook_events     — what the courier's webhook has sent, once
+ *
+ * The middle one is the history. The first is the summary of it, and the
+ * last one is the courier's own deliveries, kept so that the same
+ * delivery is never acted on twice.
+ */
+export function shipmentTrackingSchemaSql(identity: string, now: string): string {
+  return `
+-- The parcel.
+--
+-- One row for each consignment the shop knows about. An order usually
+-- has one, but the key is on the order and the tracking number together,
+-- so an order that had a second consignment written against it keeps
+-- both.
+--
+-- The tracking number is kept twice: once as it was given, so that what
+-- the courier called it is what the shop shows, and once in the one form
+-- the shop matches on, so that a webhook which says the same number a
+-- different way still finds the parcel.
+CREATE TABLE IF NOT EXISTS order_shipments (
+  id             TEXT PRIMARY KEY,
+  order_id       TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  awb            TEXT NOT NULL,
+  awb_key        TEXT NOT NULL,
+  -- The courier carrying it, as the courier calls itself.
+  courier_name   TEXT,
+  -- Shiprocket's own reference for the shipment.
+  shipment_id    TEXT,
+  -- Where the parcel is, in the shop's own states.
+  status         TEXT NOT NULL DEFAULT 'pending',
+  -- The courier's own words for that.
+  status_code    TEXT,
+  status_label   TEXT,
+  status_text    TEXT,
+  -- Where the parcel is.
+  location       TEXT,
+  -- When the parcel is expected, when the courier says.
+  estimated_delivery TEXT,
+  -- When the courier collected it, and when it arrived.
+  picked_up_at   TEXT,
+  delivered_at   TEXT,
+  -- When the parcel went out.
+  shipment_date  TEXT,
+  -- Where the customer can follow it.
+  tracking_url   TEXT,
+  -- Where the last thing we heard about it came from: api or webhook.
+  source         TEXT NOT NULL DEFAULT 'api',
+  -- When the courier last said anything.
+  last_event_at  TEXT,
+  created_at     TEXT NOT NULL ${now},
+  updated_at     TEXT NOT NULL ${now},
+  UNIQUE (order_id, awb_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_shipments_order ON order_shipments(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_shipments_awb   ON order_shipments(awb_key);
+
+-- Everything the courier has said about the parcel.
+--
+-- One row per event, and the same event is only ever written once: the
+-- key is what the event is made of, so an event that arrives twice — once
+-- through the courier's webhook and once when somebody asks for the
+-- tracking again — is still one event.
+CREATE TABLE IF NOT EXISTS shipment_tracking_events (
+  id            ${identity},
+  shipment_id   TEXT NOT NULL REFERENCES order_shipments(id) ON DELETE CASCADE,
+  order_id      TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  awb           TEXT NOT NULL,
+  status        TEXT,
+  status_code   TEXT,
+  status_label  TEXT,
+  activity      TEXT,
+  location      TEXT,
+  -- When the courier says it happened.
+  occurred_at   TEXT,
+  -- Where it came from: api or webhook.
+  source        TEXT NOT NULL DEFAULT 'api',
+  -- What makes this event this event. It is unique, and that is what
+  -- makes the same event land once.
+  event_key     TEXT NOT NULL UNIQUE,
+  -- What the courier actually sent, kept so that a puzzling event can be
+  -- read afterwards.
+  payload       TEXT,
+  created_at    TEXT NOT NULL ${now}
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_events_order    ON shipment_tracking_events(order_id);
+CREATE INDEX IF NOT EXISTS idx_tracking_events_shipment ON shipment_tracking_events(shipment_id);
+
+-- The courier's webhook, and what it sent.
+--
+-- The key is the delivery's own. A webhook that is delivered twice — the
+-- courier does that when it does not hear back — is acted on once.
+CREATE TABLE IF NOT EXISTS courier_webhook_events (
+  event_id     TEXT PRIMARY KEY,
+  awb          TEXT,
+  outcome      TEXT NOT NULL,
+  payload      TEXT,
+  received_at  TEXT NOT NULL ${now}
+);
+`;
+}
+
+/**
  * The table the shop's replies to an enquiry are kept in.
  *
  * It is kept apart from the main schema so that a migration can create

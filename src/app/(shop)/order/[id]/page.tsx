@@ -10,7 +10,6 @@ import {
   Truck,
   RotateCcw,
   Clock,
-  ExternalLink,
 } from "lucide-react";
 import {
   getReturnRequestsForOrder,
@@ -23,10 +22,15 @@ import { getOrder } from "@/lib/orders";
 import { ORDER_STATUS_LABEL, ORDER_TIMELINE, type OrderStatus } from "@/lib/orders";
 import { getProduct } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/auth";
-import { isStaff } from "@/lib/roles";
+import { maySeeOrder } from "@/lib/order-access";
 import { money, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { courierTrackingUrl } from "@/lib/order-dispatch-options";
+import {
+  getShipmentForOrder,
+  getTrackingEvents,
+} from "@/lib/shipment-tracking";
+import { ShipmentTracking } from "@/components/orders/ShipmentTracking";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/OrderStatusBadge";
 import {
   cancellationEligibility,
@@ -59,12 +63,7 @@ export default async function OrderPage({
   // A signed-in customer only sees their own orders. Guests can still open
   // the order they just placed — the id is the only receipt they get.
   const viewer = await getCurrentUser();
-  if (
-    viewer &&
-    order.user_id !== null &&
-    order.user_id !== viewer.id &&
-    !isStaff(viewer.role)
-  ) {
+  if (!maySeeOrder(viewer, order)) {
     notFound();
   }
 
@@ -86,13 +85,19 @@ export default async function OrderPage({
   // The dispatch, once the shop has written it down. The customer sees
   // the same courier, method and tracking number the back office does.
   const hasShipping = Boolean(order.courier_partner && order.tracking_id);
-  const trackingUrl = courierTrackingUrl(order.courier_partner);
+  const courierUrl = courierTrackingUrl(order.courier_partner);
   const shippingMethod =
     order.shipping_method === "other"
       ? order.custom_shipping_method
       : order.shipping_method
         ? order.shipping_method.charAt(0).toUpperCase() + order.shipping_method.slice(1)
         : null;
+
+  // Where the parcel is, as the courier has said. It is read from what
+  // the shop has already written down, so the page never asks the
+  // courier for anything itself.
+  const shipment = hasShipping ? await getShipmentForOrder(order.id) : null;
+  const trackingEvents = hasShipping ? await getTrackingEvents(order.id) : [];
 
   return (
     <div className="container-x py-10">
@@ -205,55 +210,17 @@ export default async function OrderPage({
 
         {/* The dispatch. The customer can follow their parcel from here,
             with the same courier and tracking number the back office
-            has. */}
+            has, and the journey the courier has reported. */}
         {hasShipping && (
-          <section className="mt-8 rounded-xl border border-brand/20 bg-brand-tint/30 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-[14px] font-bold text-ink">
-                <Truck className="h-4 w-4 text-brand" />
-                Your parcel is on its way
-              </h2>
-              <OrderStatusBadge status={order.status} size="sm" />
-            </div>
-
-            <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div>
-                <dt className="text-[12px] text-gray-500">Courier partner</dt>
-                <dd className="mt-0.5 text-[13.5px] font-semibold text-ink">
-                  {order.courier_partner}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[12px] text-gray-500">Shipping method</dt>
-                <dd className="mt-0.5 text-[13.5px] font-semibold text-ink">
-                  {shippingMethod || "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[12px] text-gray-500">Tracking / AWB number</dt>
-                <dd className="tnum mt-0.5 break-all text-[13.5px] font-semibold text-ink">
-                  {order.tracking_id}
-                </dd>
-              </div>
-            </dl>
-
-            {trackingUrl ? (
-              <a
-                href={trackingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-outline btn-sm mt-4"
-              >
-                Track your order
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            ) : (
-              <p className="mt-4 text-[12.5px] text-gray-600">
-                You can follow your parcel on {order.courier_partner}&apos;s own
-                tracking page with the number above.
-              </p>
-            )}
-          </section>
+          <ShipmentTracking
+            shipment={shipment}
+            events={trackingEvents}
+            courierName={shipment?.courierName ?? order.courier_partner}
+            awb={order.tracking_id}
+            shippingMethod={shippingMethod}
+            trackingUrl={order.tracking_url ?? shipment?.trackingUrl ?? null}
+            courierUrl={courierUrl}
+          />
         )}
 
         {/* Items */}

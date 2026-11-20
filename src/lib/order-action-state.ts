@@ -16,7 +16,7 @@ export type OrderActionState = {
   /** The field that is wrong, when one of them is. */
   field?: string;
   /** Which action finished. */
-  done?: "shipping" | "cancel" | "refund" | "refund-status";
+  done?: "shipping" | "cancel" | "refund" | "refund-status" | "tracking";
 };
 
 /** The state every action starts from. */

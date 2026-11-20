@@ -46,6 +46,8 @@ export const NOTIFICATION_KINDS = [
   "order_received",
   "order_confirmed",
   "order_tracking",
+  // The courier saying where the parcel is.
+  "order_tracking_update",
   "order_packed",
   "order_shipped",
   "order_delivered",

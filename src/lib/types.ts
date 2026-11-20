@@ -276,6 +276,23 @@ export type Order = {
   custom_shipping_method: string | null;
   tracking_id: string | null;
   shipping_confirmed_at: string | null;
+  /**
+   * Where the parcel is, as against where the order is.
+   *
+   * It is the courier's word, reduced to the shop's own states: pending,
+   * picked_up, in_transit, out_for_delivery, delivered, exception,
+   * cancelled or unknown. Nothing is set here until the courier has said
+   * something.
+   */
+  shipment_status: string | null;
+  /** When the parcel went out, as the courier says. */
+  shipment_date: string | null;
+  /** When the courier last said anything about the parcel. */
+  shipment_updated_at: string | null;
+  /** When the parcel is expected, when the courier says. */
+  estimated_delivery: string | null;
+  /** Where the customer can follow the parcel. */
+  tracking_url: string | null;
   /** Why the order was cancelled, in the words the back office wrote. */
   cancellation_reason: string | null;
   /** The same reason as one of the back office's own codes. */

@@ -686,6 +686,67 @@ and `POST /api/admin/orders/[id]/refund/status`. The older
 `PATCH /api/admin/orders/[id]` can no longer cancel an order without a
 reason either, and it refuses any move the journey does not allow.
 
+### Courier tracking — Shiprocket
+
+The shop books its shipments **by hand**, in Shiprocket's own panel. Nothing
+in the shop creates a shipment, assigns a courier or books a pickup — the
+booking is a person's work, and the shop only ever *reads* what the courier
+knows afterwards.
+
+**Reading the tracking.** `src/lib/shiprocket.ts` is the courier's API, and it
+is server-only: it refuses to load in a browser, so the credentials cannot
+reach a client bundle. It signs in with the API user's email and password,
+and holds the token in memory — never on disk, never in the browser, never
+in a log. Shiprocket's tokens are good for ten days, and the shop does not
+have to know when one runs out: a token that is refused is thrown away, a
+new one is fetched, and the request that was refused is tried once more.
+
+The tracking is fetched by the AWB — the tracking number the back office
+wrote down when it confirmed the order — and is read in the shape
+Shiprocket answers in. Both of Shiprocke's families of address are read, so
+the shop does not have to know which one its account talks to.
+
+**What is kept.** Three tables:
+
+| | |
+|---|---|
+| `order_shipments` | The parcel as it stands: where it is, in the courier's own words |
+| `shipment_tracking_events` | Every event the courier has reported, in order |
+| `courier_webhook_events` | What the courier's webhook sent, and what became of it |
+
+The order keeps a summary of all of it — `shipment_status`, `shipment_date`,
+`shipment_updated_at`, `estimated_delivery` and `tracking_url` — so that the
+order's page can be drawn without a second question.
+
+An event is written **once**. Its key is what the event is made of — the
+parcel, the courier's code for it, when it happened and what the courier
+said — and that key is unique. So the same event arriving twice, once
+through the webhook and once when somebody asks for the tracking again, is
+still one event.
+
+**The webhook** is `POST /api/courier-events`. The address carries no
+keyword of the courier's own name, because the courier refuses to send to
+an address that does. It checks the `x-api-key` header against
+`COURIER_WEBHOOK_SECRET` in constant time, and a delivery that does not
+carry it is not even looked at. The delivery is then claimed by a row
+whose key is the delivery's own — the courier sends the same delivery
+again when it does not hear back, and the second one does nothing. The
+answer is 200 once the delivery has been dealt with, including when it
+carries nothing the shop can act on: there is nothing to retry, and
+retrying for ever would be worse than saying so.
+
+**Where the customer sees it.** Their order page shows the courier, the
+tracking number, where the parcel is, the last thing the courier said, when
+it is expected, and the whole journey as a timeline.
+
+**Checking it:** `npm run check:shiprocket`. It stands up a mock of the
+courier's API — answering in exactly the shape Shiprocket answers in — and
+walks the whole way a parcel's news travels: signing in, a token being
+refused, the tracking being fetched and written down, the webhook refusing
+a delivery with no key and one with the wrong key, a delivery arriving
+twice, a customer seeing their own parcel and nobody else's, and a courier
+that cannot answer being handled without harm.
+
 ### SKUs, status and archiving
 
 Every product carries a **SKU**: its own short code, generated from the slug
@@ -1197,6 +1258,8 @@ Everything the panel does is also available as JSON. Admin endpoints answer
 | `POST` | `/api/admin/products/[slug]/duplicate` | Copy a product and its variants; the copy is a draft |
 | `GET` | `/api/admin/orders` | Every order; `?q=`, `?status=`, `?page=`, `?limit=` |
 | `GET` `PATCH` | `/api/admin/orders/[id]` | Read an order, or move it along with `{"status": "shipped"}` |
+| `POST` | `/api/admin/orders/[id]/tracking` | Ask the courier where the parcel is, by the tracking number on the order, and write down the answer |
+| `POST` | `/api/courier-events` | The courier's webhook. `POST` only, and the `x-api-key` header must carry `COURIER_WEBHOOK_SECRET`; a delivery without it is refused |
 | `GET` | `/api/admin/users` | Every account; `?q=`, `?role=`, `?page=`, `?limit=` |
 | `GET` `PATCH` `DELETE` | `/api/admin/users/[id]` | Read, change a role, reset a password, or remove an account |
 | `GET` `POST` | `/api/admin/products/[slug]/variants` | The product's options; `POST` adds one (`{"attributes":{"Colour":"White"},"price":3499,"mrp":4499,"stock":7}`) |
@@ -1570,6 +1633,25 @@ before anything is sent. It also calls the endpoints directly — an
 incomplete shipment, a cancellation without a reason and a refund for an
 order with no gateway payment are all refused — and checks that nothing
 runs off the side of the page at 320, 375, 768 or 1024 pixels.
+
+The courier's tracking has its own check, and it stands on its own — it
+needs no dev server and no browser:
+
+```bash
+npm run check:shiprocket
+```
+
+It stands up a mock of Shiprocket's API, answering in exactly the shape
+Shiprocket's own published collection answers in, and walks the whole way a
+parcel's news travels: the shop signs in and holds the token; a token the
+courier refuses is thrown away and a new one fetched; the tracking is
+fetched by the AWB and written down; the journey is written down once,
+however many times it is asked for; a delivery to the webhook with no key
+is refused, and one with the wrong key too; a delivery that arrives twice
+is acted on once, and the same event under another delivery id is still
+one event; a customer sees their own parcel and nobody else's; and a
+courier that cannot answer, or that does not know the tracking number, is
+handled without harm. The shop's LIVE credentials are never used.
 
 The browser half of the order checks needs the dev server on port 3000; the
 dispatch and pending checks stand on their own.

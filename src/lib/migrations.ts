@@ -10,7 +10,13 @@ import {
   RETURN_WINDOW_REVISION_SETTING,
   RETURN_WINDOW_SETTING,
 } from "./return-policy.ts";
-import { returnsSchemaSql, orderDispatchSchemaSql, enquiryRepliesSchemaSql } from "./schema.ts";
+import {
+  returnsSchemaSql,
+  orderDispatchSchemaSql,
+  enquiryRepliesSchemaSql,
+  shipmentTrackingSchemaSql,
+} from "./schema.ts";
+import { normaliseAwb } from "./shipment-status.ts";
 import type { Db } from "./db.ts";
 
 /**
@@ -145,6 +151,10 @@ export async function applyMigrations(db: Db): Promise<void> {
   // if it is not already there, so this is safe to run on every database
   // open.
   await db.exec(orderDispatchSchemaSql(identity, now));
+  // The tables the shipment tracking added: the parcel, its journey and
+  // the courier's webhook deliveries. Each is created only if it is not
+  // already there, so this is safe to run on every database open.
+  await db.exec(shipmentTrackingSchemaSql(identity, now));
   // The table the shop's replies to an enquiry are kept in. It is
   // created only if it is not already there, so this is safe to run on
   // every database open.
@@ -394,6 +404,22 @@ export async function applyMigrations(db: Db): Promise<void> {
   add("orders", "refunded_at", "refunded_at TEXT");
   add("orders", "refund_error", "refund_error TEXT");
 
+  // Where the parcel is, as against where the order is.
+  //
+  // The order's own status says where the order has got to. These say
+  // where the parcel has got to, in the courier's words — and the order
+  // keeps a summary of them so that the order's page can be drawn
+  // without a second question.
+  add("orders", "shipment_status", "shipment_status TEXT");
+  add("orders", "shipment_date", "shipment_date TEXT");
+  add("orders", "shipment_updated_at", "shipment_updated_at TEXT");
+  add("orders", "estimated_delivery", "estimated_delivery TEXT");
+  add("orders", "tracking_url", "tracking_url TEXT");
+  // The tracking number in the one form the shop matches on, so that a
+  // webhook which says the same number a different way still finds the
+  // order it belongs to.
+  add("orders", "awb_key", "awb_key TEXT");
+
   // The statements are run together, one after the other.
   for (const statement of statements) {
     if (db.dialect === "postgres") {
@@ -415,6 +441,7 @@ export async function applyMigrations(db: Db): Promise<void> {
   await backfillAdminActions(db);
   await sweepReturnUploads(db);
   await backfillOrderVariantIds(db);
+  await backfillAwbKeys(db);
   await backfillVariantSkus(db);
   await backfillProductSkus(db);
   await backfillBrands(db);
@@ -845,6 +872,34 @@ async function backfillOrderVariantIds(db: Db): Promise<void> {
           AND v.name = order_items.variant_name
       )
   `);
+}
+
+/**
+ * The form of the tracking number the shop matches on.
+ *
+ * An order that was dispatched before this column arrived carries a
+ * tracking number but no key, and the key is what the courier's webhook
+ * looks the order up by. So the key is worked out for those orders.
+ *
+ * It runs on every database open, so it only ever does this once: an
+ * order that already has a key is left alone, and an order with no
+ * tracking number at all is not given one.
+ */
+async function backfillAwbKeys(db: Db): Promise<void> {
+  if (!(await tableExists(db, "orders"))) return;
+  if (!(await hasColumn(db, "orders", "awb_key"))) return;
+
+  const rows = (await db
+    .prepare(
+      "SELECT id, tracking_id FROM orders WHERE tracking_id IS NOT NULL AND tracking_id <> '' AND awb_key IS NULL"
+    )
+    .all()) as { id?: string; tracking_id?: string }[];
+
+  for (const row of rows) {
+    const key = normaliseAwb(row.tracking_id);
+    if (!key) continue;
+    await db.prepare("UPDATE orders SET awb_key = ? WHERE id = ?").run(key, row.id);
+  }
 }
 
 /**
