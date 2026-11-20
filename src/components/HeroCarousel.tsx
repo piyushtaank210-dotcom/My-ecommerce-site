@@ -643,21 +643,33 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   )}
 
                   <div
-                    className={`mt-6 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-4 ${
+                    /* The buttons sit in one row on every slide and never
+                       wrap: a slide with two of them and a slide with one
+                       have to be the same height, or the copy on one slide
+                       sits higher than the copy on the next. The type is
+                       sized so the longest label still fits two to a row
+                       on the narrowest phone the shop is checked on. */
+                    className={`mt-6 flex flex-wrap items-center gap-2.5 max-sm:flex-nowrap sm:mt-8 sm:gap-4 ${
                       on ? "hero-rise" : ""
                     }`}
                     style={on ? { animationDelay: "260ms" } : undefined}
                   >
                     {s.primary && (
-                      <Link href={s.primary.href} className="btn-invert flex-1 sm:flex-none">
+                      <Link
+                        href={s.primary.href}
+                        className="hero-cta btn-invert flex-1 sm:flex-none"
+                      >
                         {s.primary.label}
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-[15px] w-[15px] sm:h-4 sm:w-4" />
                       </Link>
                     )}
                     {s.secondary && (
-                      <Link href={s.secondary.href} className="btn-outline-invert group flex-1 sm:flex-none">
+                      <Link
+                        href={s.secondary.href}
+                        className="hero-cta btn-outline-invert group flex-1 sm:flex-none"
+                      >
                         {s.secondary.label}
-                        <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                        <ChevronRight className="h-[15px] w-[15px] transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" />
                       </Link>
                     )}
                   </div>
